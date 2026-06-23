@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "outputDirectory": "public",
+  "functions": {
+    "api/data.js": {
+      "runtime": "nodejs20.x",
+      "maxDuration": 10
+    }
+  }
+}
