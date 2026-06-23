@@ -1,0 +1,2207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MRP — Forward Planning (Revised DOH M1/M2 &amp; Order Qty)</title>
+<style>
+  :root {
+    --bg:#f4f6f9; --card:#fff; --border:#d9dee6; --accent:#2563eb;
+    --text:#1e293b; --muted:#64748b; --good:#16a34a; --good-bg:#dcfce7;
+    --warn:#b45309; --warn-bg:#fef3c7; --warn-bd:#fcd34d;
+    --info:#1e40af; --info-bg:#dbeafe; --info-bd:#93c5fd;
+    --row-hover:#f8fafc; --detail-bg:#f1f5f9;
+  }
+  * { box-sizing:border-box; }
+  body { font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    margin:0; background:var(--bg); color:var(--text); font-size:14px; }
+  .wrap { max-width:1180px; margin:0 auto; padding:22px 20px 70px; }
+
+  header.app { background:var(--card); border:1px solid var(--border); border-radius:10px;
+    padding:16px 20px; margin-bottom:14px; display:flex; justify-content:space-between;
+    align-items:center; flex-wrap:wrap; gap:12px; }
+  header.app h1 { margin:0; font-size:19px; }
+  header.app .sub { color:var(--muted); font-size:12.5px; margin-top:3px; }
+  .data-ctl { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+
+  .banner { margin:0 0 14px; padding:11px 14px; border-radius:8px; font-size:13px; line-height:1.5; }
+  .banner.warn { background:var(--warn-bg); color:var(--warn); border:1px solid var(--warn-bd); }
+  .banner.ok   { background:var(--good-bg); color:var(--good); border:1px solid #86efac; }
+  .banner.info { background:var(--info-bg); color:var(--info); border:1px solid var(--info-bd); }
+  .banner b { font-weight:700; }
+
+  .tabs { display:flex; gap:4px; margin-bottom:16px; flex-wrap:wrap; }
+  .tab { padding:9px 16px; border-radius:8px 8px 0 0; border:1px solid var(--border);
+    border-bottom:none; background:#eef2f7; cursor:pointer; font-weight:600; color:var(--muted); font-size:13.5px; }
+  .tab.active { background:var(--card); color:var(--accent); box-shadow:0 -2px 0 var(--accent) inset; }
+
+  .panel { display:none; }
+  .panel.active { display:block; }
+
+  table { width:100%; border-collapse:collapse; background:var(--card);
+    border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+  th, td { padding:9px 12px; border-bottom:1px solid var(--border); vertical-align:middle; }
+  thead th { background:#f1f5f9; text-align:left; font-size:11.5px; text-transform:uppercase;
+    letter-spacing:.4px; color:var(--muted); cursor:default; }
+  th.num, td.num { text-align:right; font-variant-numeric:tabular-nums; }
+  tbody tr:last-child td { border-bottom:none; }
+  tfoot td { background:#f8fafc; font-weight:700; }
+
+  input.cell { padding:6px 8px; border:1px solid var(--border); border-radius:6px;
+    font-size:14px; text-align:right; width:110px; }
+  input.cell:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(37,99,235,.15); }
+  input.search { width:280px; padding:9px 11px; border:1px solid var(--border); border-radius:8px; font-size:14px; }
+  input.search:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(37,99,235,.15); }
+  select.sku { padding:9px 11px; border:1px solid var(--border); border-radius:8px; font-size:14px; min-width:420px; max-width:100%; }
+
+  .req { font-weight:600; font-variant-numeric:tabular-nums; }
+  .muted { color:var(--muted); }
+  .sku-code { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12px; color:var(--muted); }
+  .pill { display:inline-block; padding:2px 8px; border-radius:999px; background:#eef2f7; color:var(--muted);
+    font-size:12px; font-weight:600; }
+  .pct-ok { color:var(--good); font-weight:700; }
+  .pct-bad { color:var(--warn); font-weight:700; }
+  .doh-ok { color:var(--good); font-weight:700; }
+  .doh-warn { color:var(--warn); font-weight:700; }
+  .doh-bad { color:#dc2626; font-weight:700; }
+  .diff-flag { color:#dc2626; font-weight:700; }
+  th.grp { text-align:center; border-left:2px solid var(--border); color:var(--accent); }
+  td.grpL { border-left:2px solid var(--border); }
+  .tag { display:inline-block; padding:1px 7px; border-radius:999px; font-size:11px; font-weight:700; white-space:nowrap; }
+  .tag.none { background:#eef2f7; color:var(--muted); }
+  .tag.ok   { background:var(--good-bg); color:var(--good); }
+  .tag.moq  { background:var(--info-bg); color:var(--info); }
+  .tag.buf  { background:var(--warn-bg); color:var(--warn); }
+
+  button.btn { padding:8px 14px; border-radius:7px; border:1px solid var(--border);
+    background:var(--card); cursor:pointer; font-size:13.5px; font-weight:600; color:var(--text); }
+  button.btn:hover { border-color:var(--accent); color:var(--accent); }
+  button.btn.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  button.btn.primary:hover { background:#1d4ed8; }
+  button.btn.sm { padding:5px 10px; font-size:12.5px; }
+
+  .toolbar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:14px; }
+  .toolbar .spacer { flex:1; }
+  .grand { background:var(--card); border:1px solid var(--border); border-radius:10px;
+    padding:12px 16px; margin-bottom:14px; display:flex; gap:28px; flex-wrap:wrap; }
+  .grand .kpi b { font-size:20px; display:block; }
+  .grand .kpi span { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.4px; }
+
+  .expand-btn { background:none; border:none; cursor:pointer; color:var(--accent); font-weight:700;
+    font-size:13px; padding:0 6px 0 0; }
+  tr.drill td { background:var(--detail-bg); padding:0; }
+  .drill-inner { padding:8px 12px 12px 28px; }
+  .drill-inner table { border:1px solid var(--border); border-radius:8px; }
+  .drill-inner thead th { background:#e7edf4; }
+  tr.clickable:hover td { background:var(--row-hover); }
+
+  .hint { color:var(--muted); font-size:12px; margin-top:10px; line-height:1.55; }
+  .field { display:flex; flex-direction:column; gap:5px; }
+  .field label { font-size:11.5px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.4px; }
+  textarea.paste { width:100%; min-height:120px; border:1px solid var(--border); border-radius:8px;
+    padding:10px; font-family:ui-monospace,Consolas,monospace; font-size:13px; }
+  table.mini { font-size:12.5px; margin-top:6px; }
+  table.mini th, table.mini td { padding:5px 8px; }
+  .ok-badge { color:var(--good); font-weight:700; }
+  .miss-badge { color:var(--warn); font-weight:700; }
+  select.col { padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:13.5px; min-width:210px; }
+  .modal-bg { position:fixed; inset:0; background:rgba(15,23,42,.45); display:none;
+    align-items:center; justify-content:center; z-index:50; }
+  .modal-bg.show { display:flex; }
+  .modal { background:var(--card); border-radius:12px; padding:22px; width:min(640px,92vw); max-height:88vh; overflow:auto; }
+  .modal h3 { margin:0 0 6px; }
+  .row-flex { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .count-tag { font-size:12px; color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="app">
+    <div>
+      <h1>MRP — Forward Planning</h1>
+      <div class="sub" id="dataStatus">Loading dataset…</div>
+    </div>
+    <div class="data-ctl">
+<label class="row-flex" style="gap:6px;font-size:12px;color:var(--muted)">Plan horizon (days)
+        <input class="cell" id="planDays" type="number" min="1" step="1" value="30" style="width:64px" /></label>
+      <button class="btn sm" id="btnUpload">Upload CSVs</button>
+      <button class="btn sm" id="btnReset">Reset demand</button>
+    </div>
+  </header>
+
+  <div id="banners"></div>
+
+  <div class="tabs" id="tabs">
+    <div class="tab active" data-tab="demand">1 · Demand Entry</div>
+    <div class="tab" data-tab="rm">2 · Consolidated RM</div>
+    <div class="tab" data-tab="pm">3 · Consolidated PM</div>
+    <div class="tab" data-tab="sku">4 · Per-SKU Breakdown</div>
+    <div class="tab" data-tab="master">5 · Material Master</div>
+    <div class="tab" data-tab="inv">6 · Live Inventory</div>
+  </div>
+
+  <!-- ============ TAB 1: DEMAND ENTRY ============ -->
+  <section class="panel active" id="panel-demand">
+    <div class="toolbar">
+      <input class="search" id="demandSearch" placeholder="Type to filter by SKU code or product name…" />
+      <span class="count-tag" id="demandCount"></span>
+      <div class="spacer"></div>
+      <button class="btn sm primary" id="btnDemandFile">Import demand file</button>
+      <button class="btn sm" id="btnPaste">Bulk paste demand</button>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:34%">Finished Good (SKU)</th>
+          <th class="num" style="width:12%">Pack size (g)</th>
+          <th class="num" style="width:12%">DRR (units/day)</th>
+          <th class="num" style="width:14%">Supply M1 (units)</th>
+          <th class="num" style="width:14%">Supply M2 (units)</th>
+          <th class="num" style="width:14%">Batch weight 2M (kg)</th>
+        </tr>
+      </thead>
+      <tbody id="demandRows"></tbody>
+      <tfoot>
+        <tr>
+          <td>Total · <span id="demandSkuTotal">0</span> SKUs with demand</td>
+          <td class="num muted">—</td>
+          <td class="num req" id="demandDrrTotal">0.0</td>
+          <td class="num req" id="demandUnitsTotal">0</td>
+          <td class="num req" id="demandUnitsTotalM2">0</td>
+          <td class="num req" id="demandKgTotal">0.000</td>
+        </tr>
+      </tfoot>
+    </table>
+    <div class="hint">The recipe (RM % &amp; PM quantities) is built in — feed <b>one</b> file of SKU → <b>Month-1</b> and <b>Month-2</b> demand via
+      <b>Import demand file</b> and the consolidated RM/PM tabs compute the order quantity for each month automatically.
+      Demand &amp; pack size recalculate every other tab live — there is no submit button.
+      Batch weight 2M (kg) = pack size (g) × (M1 + M2 demand) ÷ 1000. Empty / non-numeric entries are treated as 0.
+      <b>DRR</b> (daily run rate, units/day) is the <b>Product DRR</b> read from the Stock Matrix Base
+      <code>Main</code> sheet (column AR), matched per SKU — read-only reference.</div>
+  </section>
+
+  <!-- ============ TAB 2: CONSOLIDATED RM ============ -->
+  <section class="panel" id="panel-rm">
+    <div class="grand">
+      <div class="kpi"><b id="rmDistinct">0</b><span>Distinct raw materials</span></div>
+      <div class="kpi"><b id="rmStockTot">0.000</b><span>Current stock (kg)</span></div>
+      <div class="kpi"><b id="rmSupplyTot">0.000</b><span>Expected supply (kg)</span></div>
+      <div class="kpi"><b id="rmOrderM1">0.0</b><span>Order — M1 (kg)</span></div>
+      <div class="kpi"><b id="rmOrderM2">0.0</b><span>Order — M2 (kg)</span></div>
+      <div class="kpi"><b id="rmAtRisk">0</b><span>At-risk (Revised DOH M1 &lt; safety)</span></div>
+      <div class="spacer"></div>
+      <div class="field" style="justify-content:flex-end"><button class="btn primary" id="exportRm">Export RM CSV</button></div>
+    </div>
+    <div id="rmCfg" class="hint" style="margin-bottom:10px"></div>
+    <div style="overflow-x:auto">
+    <table>
+      <thead>
+        <tr>
+          <th rowspan="2">RM Code</th>
+          <th rowspan="2">RM Name</th>
+          <th rowspan="2" class="num">MOQ (kg)</th>
+          <th rowspan="2" class="num">Current stock (kg)</th>
+          <th rowspan="2" class="num">Exp. supply<br>M1 (kg)</th>
+          <th rowspan="2" class="num">Exp. supply<br>M2 (kg)</th>
+          <th rowspan="2" class="num">Used/day (kg)</th>
+          <th rowspan="2" class="num">Current DOH</th>
+          <th colspan="6" class="grp">Month 1 (0–30 d)</th>
+          <th colspan="6" class="grp">Month 2 (31–60 d)</th>
+          <th rowspan="2" style="width:80px"></th>
+        </tr>
+        <tr>
+          <th class="num grp">Revised DOH</th><th class="num">Required qty</th><th class="num">Desired quantity</th><th class="num">Actual Quantity</th><th class="num">Diff</th><th>Status</th>
+          <th class="num grp">Revised DOH</th><th class="num">Required qty</th><th class="num">Desired quantity</th><th class="num">Actual Quantity</th><th class="num">Diff</th><th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="rmRows"></tbody>
+      <tfoot><tr>
+        <td colspan="3">Grand total · <span id="rmDistinct2">0</span> RM</td>
+        <td class="num req" id="rmFootStock">0.000</td>
+        <td class="num req" id="rmFootSupplyM1">0.000</td>
+        <td class="num req" id="rmFootSupplyM2">0.000</td>
+        <td class="num req" id="rmFootUsage">0.000</td>
+        <td></td>
+        <td class="grpL"></td><td class="num req" id="rmFootReqM1">0.0</td><td class="num req" id="rmFootM1">0.0</td><td class="num req" id="rmFootAdjM1">0.0</td><td></td><td></td>
+        <td class="grpL"></td><td class="num req" id="rmFootReqM2">0.0</td><td class="num req" id="rmFootM2">0.0</td><td class="num req" id="rmFootAdjM2">0.0</td><td></td><td></td>
+        <td></td>
+      </tr></tfoot>
+    </table>
+    </div>
+    <div class="hint"><b>Forward planning</b>: order quantity is driven by the <b>imported 2-month SKU demand</b> (Tab 1); Revised DOH by the <b>DRR run-rate</b>.
+      <b>Desired quantity</b> (per month) = max(0, <b>REQ − (Exp. supply + Current stock)</b>), floored at 0; <b>REQ</b> = that month's SKU demand exploded through the recipe = Σ(rm_pct ÷ 100 × pack_size_g × month demand ÷ 1000) kg, shown in the <b>Required qty</b> column. M1 consumes REQ M1; its closing stock + supply M2 carries into M2's order quantity.
+      <b>Actual Quantity</b> floors the order at the MOQ: OQ ≥ MOQ (or no MOQ on file) → OQ unchanged; 0 &lt; OQ &lt; MOQ → MOQ; no order needed → 0.
+      <b>Diff</b> = (Desired − Actual) ÷ Desired, positive values only — shows MOQ over-buy as a % of the desired quantity; 0 when no MOQ uplift.
+      <b>Status</b>: <b>Order desired</b> when Diff = 0 (no MOQ uplift); <b>Order excess</b> (red) when Diff &gt; 0 (MOQ forces a larger order).
+      <b>Used/day</b> = <b>DRR run-rate</b> kg/day = Σ(rm_pct ÷ 100 × pack_size_g × Product DRR ÷ 1000). <b>Current DOH</b> = current stock ÷ used/day.
+      <b>Revised DOH</b> rolls forward on used/day: available M1 = stock + supply M1, revised DOH = available ÷ used/day; closing M1 = available M1 − used/day × 30, + supply M2 → available M2 ÷ used/day. RAG-coloured vs the safety cover.
+      <b>Exp. supply M1 / M2</b> split the total Sapiens expected supply per <code>SUPPLY_SPLIT</code> (<code>all_m1</code> → all in M1; <code>50_50</code> → half each).
+      <b>RM Code / Current stock / Exp. supply</b> are the Sapiens “PM-RM Planing” feed; unmatched materials show <b>NA</b>. <b>MOQ</b> is from <b>RM PM Req</b> Sheet2 (blank = none on file; editable).
+      Click a row to drill into per-SKU contributions. Edit current stock on the <b>Live Inventory</b> tab. <b>Verify against the source sheets before raising any PO.</b></div>
+  </section>
+
+  <!-- ============ TAB 3: CONSOLIDATED PM ============ -->
+  <section class="panel" id="panel-pm">
+    <div class="grand">
+      <div class="kpi"><b id="pmDistinct">0</b><span>Distinct packaging materials</span></div>
+      <div class="kpi"><b id="pmStockTot">0</b><span>Stock in hand (units)</span></div>
+      <div class="kpi"><b id="pmOrderM1">0</b><span>Order — M1 (units)</span></div>
+      <div class="kpi"><b id="pmOrderM2">0</b><span>Order — M2 (units)</span></div>
+      <div class="kpi"><b id="pmAtRisk">0</b><span>At-risk (Revised DOH M1 &lt; safety)</span></div>
+      <div class="spacer"></div>
+      <div class="field" style="justify-content:flex-end"><button class="btn primary" id="exportPm">Export PM CSV</button></div>
+    </div>
+    <div id="pmCfg" class="hint" style="margin-bottom:10px"></div>
+    <div style="overflow-x:auto">
+    <table>
+      <thead>
+        <tr>
+          <th rowspan="2">Packaging Material</th>
+          <th rowspan="2" class="num">MOQ (units)</th>
+          <th rowspan="2" class="num">Stock in hand (units)</th>
+          <th rowspan="2" class="num">Used/day (units)</th>
+          <th rowspan="2" class="num">Current DOH</th>
+          <th colspan="6" class="grp">Month 1 (0–30 d)</th>
+          <th colspan="6" class="grp">Month 2 (31–60 d)</th>
+          <th rowspan="2" style="width:90px"></th>
+        </tr>
+        <tr>
+          <th class="num grp">Revised DOH</th><th class="num">Required qty</th><th class="num">Desired quantity</th><th class="num">Actual Quantity</th><th class="num">Diff</th><th>Status</th>
+          <th class="num grp">Revised DOH</th><th class="num">Required qty</th><th class="num">Desired quantity</th><th class="num">Actual Quantity</th><th class="num">Diff</th><th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="pmRows"></tbody>
+      <tfoot><tr>
+        <td colspan="2">Grand total · <span id="pmDistinct2">0</span> PM</td>
+        <td class="num req" id="pmFootStock">0</td>
+        <td class="num req" id="pmFootUsage">0.000</td>
+        <td></td>
+        <td class="grpL"></td><td class="num req" id="pmFootReqM1">0</td><td class="num req" id="pmFootM1">0</td><td class="num req" id="pmFootAdjM1">0</td><td></td><td></td>
+        <td class="grpL"></td><td class="num req" id="pmFootReqM2">0</td><td class="num req" id="pmFootM2">0</td><td class="num req" id="pmFootAdjM2">0</td><td></td><td></td>
+        <td></td>
+      </tr></tfoot>
+    </table>
+    </div>
+    <div class="hint"><b>Forward planning</b>: order quantity is driven by the <b>imported 2-month SKU demand</b> (Tab 1); Revised DOH by the <b>DRR run-rate</b>.
+      <b>Desired quantity</b> (per month) = max(0, <b>REQ − Current stock</b>), floored at 0 — PM has <b>no expected-supply feed</b>; <b>REQ</b> = Σ(pm_qty_per_unit × month demand) units, shown in the <b>Required qty</b> column. M1 consumes REQ M1; its closing stock carries into M2's order quantity.
+      <b>Actual Quantity</b> floors the order at the MOQ: OQ ≥ MOQ → OQ unchanged; 0 &lt; OQ &lt; MOQ → MOQ; no order needed → 0.
+      <b>Diff</b> = (Desired − Actual) ÷ Desired, positive values only — shows MOQ over-buy as a % of the desired quantity; 0 when no MOQ uplift.
+      <b>Status</b>: <b>Order desired</b> when Diff = 0 (no MOQ uplift); <b>Order excess</b> (red) when Diff &gt; 0 (MOQ forces a larger order).
+      <b>Used/day</b> = <b>DRR run-rate</b> units/day = Σ(pm_qty_per_unit × Product DRR). <b>Current DOH</b> = stock ÷ used/day. <b>Revised DOH</b> rolls forward on used/day: available M1 = stock, revised DOH = available ÷ used/day; closing M1 = available M1 − used/day × 30 carries into M2 (no M2 supply).
+      <b>Stock is DUMMY</b> (edit on the Live Inventory tab) and <b>MOQ is DUMMY &amp; editable</b> (units). Click a row to drill into per-SKU contributions. <b>Verify before raising any PO.</b></div>
+  </section>
+
+  <!-- ============ TAB 4: PER-SKU BREAKDOWN ============ -->
+  <section class="panel" id="panel-sku">
+    <div class="toolbar">
+      <div class="field">
+        <label>Choose a SKU</label>
+        <select class="sku" id="skuPicker"></select>
+      </div>
+      <div class="field">
+        <label>Demand M1 (units)</label>
+        <input class="cell" id="skuDemand" type="number" min="0" step="1" />
+      </div>
+      <div class="field">
+        <label>Demand M2 (units)</label>
+        <input class="cell" id="skuDemand2" type="number" min="0" step="1" />
+      </div>
+      <div class="field">
+        <label>Pack size (g)</label>
+        <input class="cell" id="skuPack" type="number" min="0" step="1" />
+      </div>
+      <div class="spacer"></div>
+      <div class="field" style="justify-content:flex-end"><button class="btn primary" id="exportSku">Export this SKU</button></div>
+    </div>
+    <div id="skuBanner"></div>
+
+    <h2 style="font-size:15px;margin:18px 0 8px;">Raw Materials</h2>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:48%">Raw Material</th>
+          <th class="num">RM % in FG</th>
+          <th class="num">g / unit</th>
+          <th class="num">Required (kg)</th>
+        </tr>
+      </thead>
+      <tbody id="skuRmRows"></tbody>
+      <tfoot><tr>
+        <td>Total</td>
+        <td class="num" id="skuPctTotal">0</td>
+        <td class="num muted" id="skuGramsTotal">0</td>
+        <td class="num req" id="skuKgTotal">0.000</td>
+      </tr></tfoot>
+    </table>
+
+    <h2 style="font-size:15px;margin:22px 0 8px;">Packaging Materials</h2>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:60%">Packaging Material</th>
+          <th class="num">Qty / unit</th>
+          <th class="num">Required (units)</th>
+        </tr>
+      </thead>
+      <tbody id="skuPmRows"></tbody>
+      <tfoot><tr><td>Total</td><td class="num" id="skuPmQtyTotal">0</td><td class="num req" id="skuPmUnitsTotal">0</td></tr></tfoot>
+    </table>
+    <div class="hint">RM % and qty per unit are editable here and feed straight into the consolidated tabs.
+      A per-SKU RM % that does not sum to 100% is flagged but never blocks calculation.</div>
+  </section>
+
+  <!-- ============ TAB 5: MATERIAL MASTER ============ -->
+  <section class="panel" id="panel-master">
+    <div class="grand">
+      <div class="kpi"><b id="mmRm">0</b><span>Raw materials</span></div>
+      <div class="kpi"><b id="mmPm">0</b><span>Packaging materials</span></div>
+      <div class="kpi"><b id="mmFactories">0</b><span>Co-packers</span></div>
+      <div class="spacer"></div>
+      <div class="field" style="justify-content:flex-end"><button class="btn primary" id="exportMaster">Export master CSV</button></div>
+    </div>
+    <div class="toolbar">
+      <input class="search" id="masterSearch" placeholder="Filter by code, material or category…" />
+      <span class="count-tag" id="masterCount"></span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:110px">Mosaic code</th>
+          <th style="width:34%">Material</th>
+          <th>Type</th>
+          <th>UOM</th>
+          <th>Category</th>
+          <th class="num"># SKUs</th>
+          <th style="width:90px"></th>
+        </tr>
+      </thead>
+      <tbody id="masterRows"></tbody>
+    </table>
+    <div class="hint">The normalisation layer: one <b>Mosaic material code</b> per distinct RM/PM, mapped to each co-packer's
+      internal code and a UOM. <b>Codes, UOM, category and co-packer codes are DUMMY</b> (deterministically seeded from the
+      material name) — edit UOM/category inline; replace with the real material master when available. Click a row to see the
+      per-co-packer code mapping.</div>
+  </section>
+
+  <!-- ============ TAB 6: LIVE INVENTORY ============ -->
+  <section class="panel" id="panel-inv">
+    <div class="grand">
+      <div class="kpi"><b id="invTotalRm">0.000</b><span>Total RM stock (kg)</span></div>
+      <div class="kpi"><b id="invTotalPm">0</b><span>Total PM stock (units)</span></div>
+      <div class="kpi"><b id="invMaterials">0</b><span>Materials tracked</span></div>
+      <div class="spacer"></div>
+      <div class="field" style="justify-content:flex-end"><button class="btn primary" id="exportInv">Export inventory CSV</button></div>
+    </div>
+    <div id="invFactoryStatus" class="grand" style="gap:18px"></div>
+    <div class="toolbar">
+      <input class="search" id="invSearch" placeholder="Filter by material or code…" />
+      <select class="col" id="invFactoryFilter"></select>
+      <select class="col" id="invKindFilter">
+        <option value="all">All materials</option>
+        <option value="rm">Raw materials</option>
+        <option value="pm">Packaging materials</option>
+      </select>
+      <div class="spacer"></div>
+      <button class="btn sm primary" id="btnInvFile">Import Sapiens inventory</button>
+    </div>
+    <div class="row-flex" style="margin:-6px 0 12px"><span class="count-tag" id="invCount"></span><span class="count-tag" id="invImportMsg"></span></div>
+    <table>
+      <thead><tr id="invHead"></tr></thead>
+      <tbody id="invRows"></tbody>
+    </table>
+    <div class="hint">Live stock position per material for <b>Sapiens</b>. Values are <b>DUMMY</b>
+      (deterministically seeded) until you load real data. <b>To add the real feed:</b> click
+      <b>Import Sapiens inventory</b> and upload a <code>.csv</code>/<code>.xlsx</code> with two columns —
+      a material identifier (<b>Mosaic code</b> e.g. <code>RM-0001</code>, or the material name) and a <b>stock quantity</b>.
+      Matched materials have their Sapiens stock replaced; the columns are auto-detected. This stock is what the
+      Consolidated RM/PM tabs consume as “stock in hand”. Edit any cell inline to simulate.
+      <b>Plan / day</b> = total required ÷ plan horizon (the plan-implied daily draw per material); enter a demand plan (Tab 1) for it to be meaningful.</div>
+  </section>
+
+</div>
+
+<!-- hidden file inputs -->
+<input type="file" id="fileSku" accept=".csv" style="display:none" />
+<input type="file" id="fileRm"  accept=".csv" style="display:none" />
+<input type="file" id="filePm"  accept=".csv" style="display:none" />
+<input type="file" id="fileDemand" accept=".xlsx,.csv" style="display:none" />
+<input type="file" id="invFile" accept=".xlsx,.csv" style="display:none" />
+
+<!-- Upload modal -->
+<div class="modal-bg" id="uploadModal">
+  <div class="modal">
+    <h3>Upload BOM data</h3>
+    <p class="muted" style="margin-top:4px">Replace the loaded dataset with your own CSVs. Headers expected:
+      <br><code>sku_master.csv</code> → sku_code, fg_name, pack_size_g
+      <br><code>bom_rm.csv</code> → sku_code, rm_name, rm_pct
+      <br><code>bom_pm.csv</code> → sku_code, pm_name, pm_qty_per_unit</p>
+    <div class="row-flex" style="margin:14px 0 6px"><button class="btn" id="pickSku">SKU master…</button> <span id="nameSku" class="muted">no file</span></div>
+    <div class="row-flex" style="margin:6px 0"><button class="btn" id="pickRm">RM BOM…</button> <span id="nameRm" class="muted">no file</span></div>
+    <div class="row-flex" style="margin:6px 0"><button class="btn" id="pickPm">PM BOM…</button> <span id="namePm" class="muted">no file</span></div>
+    <div class="row-flex" style="margin-top:18px"><button class="btn primary" id="applyUpload">Apply</button><button class="btn" id="closeUpload">Cancel</button></div>
+  </div>
+</div>
+
+<!-- Bulk paste modal -->
+<div class="modal-bg" id="pasteModal">
+  <div class="modal">
+    <h3>Bulk paste demand</h3>
+    <p class="muted" style="margin-top:4px">Paste three columns: <b>sku_code</b>, <b>Month-1 units</b>, <b>Month-2 units</b> (tab, comma, or space separated — one SKU per line).
+      Two columns (sku, M1) also work and leave M2 unchanged. Matching is case-insensitive on the SKU code; existing demand for matched SKUs is overwritten.</p>
+    <textarea class="paste" id="pasteArea" placeholder="MWLJNTP.0003.B0_N	1000	1200&#10;MWMMNTP.6356.AAAABO_N, 500, 600"></textarea>
+    <div id="pasteResult" class="hint"></div>
+    <div class="row-flex" style="margin-top:14px"><button class="btn primary" id="applyPaste">Apply</button><button class="btn" id="closePaste">Cancel</button></div>
+  </div>
+</div>
+
+<!-- Import demand file modal -->
+<div class="modal-bg" id="demandFileModal">
+  <div class="modal">
+    <h3>Import demand from a file</h3>
+    <p class="muted" style="margin-top:4px">Upload <b>one</b> spreadsheet listing each SKU and its <b>Month-1</b> and <b>Month-2</b> demand.
+      The recipe (RM % &amp; PM quantities per unit) is already built in — only the demand columns are read from this file.
+      Accepted: <code>.xlsx</code> or <code>.csv</code> (not the older <code>.xls</code>). SKU codes are matched case-insensitively.</p>
+    <div class="row-flex" style="margin:12px 0 6px">
+      <button class="btn" id="pickDemandFile">Choose file…</button>
+      <span id="nameDemandFile" class="muted">no file</span>
+    </div>
+    <div id="demandFileErr" class="banner warn" style="display:none"></div>
+    <div id="demandFileSetup" style="display:none">
+      <div class="row-flex" style="margin:12px 0 4px; align-items:flex-end">
+        <div class="field"><label>SKU column</label><select class="col" id="colSku"></select></div>
+        <div class="field"><label>M1 demand column</label><select class="col" id="colDemand"></select></div>
+        <div class="field"><label>M2 demand column</label><select class="col" id="colDemand2"></select></div>
+        <label class="row-flex" style="gap:6px; font-size:13px; padding-bottom:8px">
+          <input type="checkbox" id="hasHeader" /> First row is a header</label>
+      </div>
+      <div id="demandPreview" style="overflow:auto"></div>
+      <div id="demandMatch" class="hint"></div>
+      <label class="row-flex" style="gap:6px; margin-top:8px; font-size:13px">
+        <input type="checkbox" id="zeroOthers" checked /> Set demand of every SKU not in the file to 0 (treat this file as the full plan)</label>
+    </div>
+    <div class="row-flex" style="margin-top:16px">
+      <button class="btn primary" id="applyDemandFile" disabled>Apply demand</button>
+      <button class="btn" id="closeDemandFile">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ==================================================================
+ *  MRP CALCULATOR — Material Requirements Planning
+ *  Single-file, zero-dependency. Computes per-SKU and CONSOLIDATED
+ *  raw-material (kg) and packaging-material (units) requirements from
+ *  a demand vector across all SKUs.
+ * ================================================================== */
+
+/* ---------- tiny helpers ---------- */
+const $ = (id) => document.getElementById(id);
+
+/* Safe numeric parse. Empty / non-numeric -> 0. nonNeg clamps negatives. */
+function num(v, nonNeg) {
+  const n = parseFloat(v);
+  if (!isFinite(n)) return 0;
+  return (nonNeg && n < 0) ? 0 : n;
+}
+/* Format with fixed decimals + thousands separators. */
+function fmt(n, dp) {
+  return num(n).toLocaleString("en-US", { minimumFractionDigits: dp, maximumFractionDigits: dp });
+}
+/* Aggregation key: trim, collapse inner whitespace, lower-case.
+ * Material NAMES are the join key, so "Cocoa Powder" from 23 SKUs sums to one line. */
+function normKey(s) { return String(s == null ? "" : s).replace(/\s+/g, " ").trim().toLowerCase(); }
+
+/* ---------- CSV utilities ---------- */
+function csvField(s) {
+  s = String(s == null ? "" : s);
+  return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+/* Minimal RFC-4180-ish CSV parser (handles quotes, commas, CRLF). */
+function parseCSV(text) {
+  const rows = []; let row = [], field = "", i = 0, q = false;
+  text = text.replace(/^﻿/, "");                  // strip BOM
+  while (i < text.length) {
+    const c = text[i];
+    if (q) {
+      if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else q = false; }
+      else field += c;
+    } else {
+      if (c === '"') q = true;
+      else if (c === ",") { row.push(field); field = ""; }
+      else if (c === "\n") { row.push(field); rows.push(row); row = []; field = ""; }
+      else if (c === "\r") { /* ignore, handled by \n */ }
+      else field += c;
+    }
+    i++;
+  }
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+  return rows.filter(r => r.length && !(r.length === 1 && r[0].trim() === ""));
+}
+/* Parse a CSV into objects keyed by lowercased header. */
+function csvToObjects(text) {
+  const rows = parseCSV(text);
+  if (!rows.length) return [];
+  const head = rows[0].map(h => h.trim().toLowerCase());
+  return rows.slice(1).map(r => {
+    const o = {}; head.forEach((h, j) => o[h] = (r[j] == null ? "" : r[j].trim())); return o;
+  });
+}
+function downloadCSV(filename, text) {
+  const blob = new Blob([text], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ==================================================================
+ *  MINIMAL XLSX READER  (offline, zero dependencies)
+ *  Reads the first worksheet of an .xlsx into a 2-D array of strings.
+ *  ZIP entries are inflated with the browser's built-in
+ *  DecompressionStream('deflate-raw') — no libraries, and the file
+ *  never leaves the browser.
+ * ================================================================== */
+async function readXlsx(arrayBuffer) {
+  const files = await unzip(new Uint8Array(arrayBuffer));   // Map<name, Uint8Array>
+  const dec = new TextDecoder("utf-8");
+  const xml = name => files.has(name) ? dec.decode(files.get(name)) : "";
+  const shared = parseSharedStrings(xml("xl/sharedStrings.xml"));
+  const path = firstSheetPath(xml("xl/workbook.xml"), xml("xl/_rels/workbook.xml.rels"), files);
+  return parseSheet(xml(path), shared);
+}
+
+/* Extract ZIP entries via the central directory (reliable even when
+ * local headers omit sizes behind a data-descriptor flag). */
+async function unzip(u8) {
+  const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  let eocd = -1;
+  const minStart = Math.max(0, u8.length - 22 - 65536);
+  for (let i = u8.length - 22; i >= minStart; i--) {
+    if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error("Not a valid .xlsx file (no ZIP end-of-directory record).");
+  const cdCount = dv.getUint16(eocd + 10, true);
+  let p = dv.getUint32(eocd + 16, true);                     // central directory offset
+  const out = new Map();
+  for (let n = 0; n < cdCount; n++) {
+    if (dv.getUint32(p, true) !== 0x02014b50) break;          // central dir header sig
+    const method   = dv.getUint16(p + 10, true);
+    const compSize = dv.getUint32(p + 20, true);
+    const nameLen  = dv.getUint16(p + 28, true);
+    const extraLen = dv.getUint16(p + 30, true);
+    const commLen  = dv.getUint16(p + 32, true);
+    const localOff = dv.getUint32(p + 42, true);
+    const name = new TextDecoder().decode(u8.subarray(p + 46, p + 46 + nameLen));
+    const lNameLen  = dv.getUint16(localOff + 26, true);
+    const lExtraLen = dv.getUint16(localOff + 28, true);
+    const dataStart = localOff + 30 + lNameLen + lExtraLen;
+    const comp = u8.subarray(dataStart, dataStart + compSize);
+    if (method === 0)      out.set(name, comp.slice());        // stored
+    else if (method === 8) out.set(name, await inflateRaw(comp)); // deflate
+    p += 46 + nameLen + extraLen + commLen;
+  }
+  return out;
+}
+async function inflateRaw(bytes) {
+  if (typeof DecompressionStream === "undefined")
+    throw new Error("This browser can't unzip .xlsx — please save the sheet as .csv and try again.");
+  const stream = new Response(bytes).body.pipeThrough(new DecompressionStream("deflate-raw"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+function xmlDecode(s) {
+  return String(s).replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(parseInt(d, 10)))
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'").replace(/&amp;/g, "&");
+}
+function parseSharedStrings(xml) {
+  const out = [];
+  if (!xml) return out;
+  const siRe = /<si>([\s\S]*?)<\/si>/g, tRe = /<t[^>]*>([\s\S]*?)<\/t>/g;
+  let m;
+  while ((m = siRe.exec(xml))) {
+    let text = "", tm; tRe.lastIndex = 0;
+    while ((tm = tRe.exec(m[1]))) text += xmlDecode(tm[1]);
+    out.push(text);
+  }
+  return out;
+}
+/* Resolve the first worksheet's path from workbook.xml + its rels,
+ * falling back to the lowest-numbered xl/worksheets/sheetN.xml. */
+function firstSheetPath(workbookXml, relsXml, files) {
+  const rid = (workbookXml.match(/<sheet\b[^>]*\br:id="([^"]+)"/) || [])[1];
+  if (rid && relsXml) {
+    const re = new RegExp('<Relationship\\b[^>]*\\bId="' + rid + '"[^>]*\\bTarget="([^"]+)"');
+    const tgt = (relsXml.match(re) || [])[1];
+    if (tgt) {
+      const clean = tgt.replace(/^\//, "").replace(/^xl\//, "");
+      if (files.has("xl/" + clean)) return "xl/" + clean;
+      if (files.has(tgt.replace(/^\//, ""))) return tgt.replace(/^\//, "");
+    }
+  }
+  const sheets = [...files.keys()].filter(k => /^xl\/worksheets\/sheet\d+\.xml$/.test(k))
+    .sort((a, b) => (parseInt(a.match(/(\d+)/)[1], 10) - parseInt(b.match(/(\d+)/)[1], 10)));
+  return sheets[0] || "xl/worksheets/sheet1.xml";
+}
+function colToIndex(ref) {            // "A"->0, "B"->1, "AA"->26
+  const letters = ref.replace(/[^A-Z]/g, "");
+  let n = 0;
+  for (let i = 0; i < letters.length; i++) n = n * 26 + (letters.charCodeAt(i) - 64);
+  return n - 1;
+}
+function indexToCol(idx) {            // 0->"A", 26->"AA"
+  let s = ""; idx++;
+  while (idx > 0) { const r = (idx - 1) % 26; s = String.fromCharCode(65 + r) + s; idx = (idx - r - 1) / 26; }
+  return s;
+}
+function parseSheet(xml, shared) {
+  const rows = [];
+  if (!xml) return rows;
+  const rowRe = /<row\b[^>]*>([\s\S]*?)<\/row>/g;
+  const cellRe = /<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g;
+  let rm;
+  while ((rm = rowRe.exec(xml))) {
+    const cells = []; let cm; cellRe.lastIndex = 0;
+    while ((cm = cellRe.exec(rm[1]))) {
+      const attrs = cm[1], body = cm[2] || "";
+      const ref = (attrs.match(/r="([A-Z]+)\d+"/) || [])[1];
+      const t = (attrs.match(/t="([^"]+)"/) || [])[1];
+      let val = "";
+      if (t === "inlineStr") {
+        const im = body.match(/<t[^>]*>([\s\S]*?)<\/t>/);
+        val = im ? xmlDecode(im[1]) : "";
+      } else {
+        const vm = body.match(/<v[^>]*>([\s\S]*?)<\/v>/);
+        const raw = vm ? vm[1] : "";
+        val = (t === "s") ? (shared[parseInt(raw, 10)] || "") : xmlDecode(raw);
+      }
+      const ci = ref ? colToIndex(ref) : cells.length;
+      cells[ci] = val;
+    }
+    for (let i = 0; i < cells.length; i++) if (cells[i] == null) cells[i] = "";
+    rows.push(cells);
+  }
+  return rows;
+}
+
+/* ==================================================================
+ *  STATE
+ * ================================================================== */
+let SKU = [];     // [{sku_code, fg_name, pack_size_g}]
+let RM  = [];     // [{sku_code, rm_name, rm_pct}]
+let PM  = [];     // [{sku_code, pm_name, pm_code, pm_qty_per_unit}]
+let demand   = {};  // sku_code -> Month-1 demand string (units), default "0"
+let demandM2 = {};  // sku_code -> Month-2 demand string (units), default "0"
+let skuIndex = {};// sku_code -> SKU object
+let rmLead = {};  // normKey(rm_name) -> string (lead time, days) — DUMMY values, editable
+let pmLead = {};  // normKey(pm_name) -> string (lead time, days) — DUMMY values, editable
+let drrBySku   = {}; // sku_code -> Product DRR (Stock Matrix Base 'Main' col AR) — read-only feed
+let rmFirm     = {}; // normKey(rm_name) -> {code, stock, supply} from Sapiens "PM-RM Planing"
+let rmSupply   = {}; // normKey(rm_name) -> expected supply (kg), Firm sheet col P (matched only)
+let rmCodeReal = {}; // normKey(rm_name) -> real RM code, Firm sheet col F (matched only)
+let rmMoq      = {}; // normKey(rm_name) -> MOQ (kg) string, user-entered (no source feed yet)
+let pmMoq      = {}; // normKey(pm_name) -> MOQ (units) string — DUMMY seed, editable (no source feed yet)
+let curTab = "demand";
+let demandFilter = "";
+let planDays = "30";   // demand-plan horizon (days); converts total requirement -> daily rate for DOH
+
+/* ---------- factory / co-packer dimension ----------
+ * Currently a SINGLE co-packer (Sapiens). The structure is kept as a list so
+ * more co-packers can be added later by appending entries here — the master,
+ * inventory matrix, consolidated tabs and exports all iterate FACTORIES and
+ * adapt automatically. "lastUpdated" is the daily-report freshness signal;
+ * it is a placeholder until real stock is imported (Live Inventory tab). */
+const FACTORIES = [
+  { code: "SAP", name: "Sapiens", lastUpdated: "dummy stock (no real feed yet)" }
+];
+
+/* ---------- material-code master + per-factory inventory (DUMMY) ---------- */
+let matMaster = {};   // normKey(name) -> {key, name, kind:'rm'|'pm', code, uom, category}
+let MATLIST   = [];   // ordered master entries (rm then pm), each with .skuCount
+let cpCode    = {};   // factoryCode -> { normKey -> co-packer internal code } (dummy)
+let rmStockF  = {};   // factoryCode -> { normKey(rm_name) -> stock string (kg) } — DUMMY, editable
+let pmStockF  = {};   // factoryCode -> { normKey(pm_name) -> stock string (units) } — DUMMY, editable
+
+/* The single fallback SKU (used only if no dataset can be loaded at all). */
+const FALLBACK = {
+  sku_master: [{ sku_code: "MWLJNTP.0003.B0_N", fg_name: "LJ NutriMix 2+ 350 gm Chocolate Jar", pack_size_g: 350 }],
+  bom_rm: [
+    ["FOS (Fructooligosaccharide)",2],["SMP (Skimmed Milk Protein)",12],["Cocoa Powder (EU201)",6],
+    ["Jaggery Powder",15.5],["Double Chocolate Flv",1.5],["Pea Protein Isolate",10],["Almonds Powder",4],
+    ["Brown Rice Protein",5],["Walnut Powder",2.5],["Dates Powder",3],["Moong Dal Protein",3.5],
+    ["DHA (Docosahexaenoic Acid)",0.5],["Premix 2+ 7+",1],["Digezyme",0.5],["Oats fiber",7],["Chia Seeds",2],
+    ["Flax Seeds",2],["Ragi Powder",8],["Bajra Powder",6],["MPC 85 (Milk Protein Concentrate)",5],["Lactose",3]
+  ].map(([rm_name, rm_pct]) => ({ sku_code: "MWLJNTP.0003.B0_N", rm_name, rm_pct })),
+  bom_pm: ["CO_White HDPE Jar_350 g","CO_White PP Cap","CO_Plastic Scoop_30 g","LJ_Induction Wad",
+    "LJ_NutriMix 2+ 350 gm Chocolate Jar_Body Label","LJ_NutriMix 2+ 350 g_Green_Top Label"]
+    .map(pm_name => ({ sku_code: "MWLJNTP.0003.B0_N", pm_name, pm_qty_per_unit: 1 }))
+};
+
+/* ------------------------------------------------------------------
+ *  Load a dataset object {sku_master, bom_rm, bom_pm} into state.
+ *  Normalises: pack size -> number, rm_pct -> string ("" when blank),
+ *  pm_qty default 1. Preserves first-seen SKU order.
+ * ------------------------------------------------------------------ */
+function loadDataset(d) {
+  SKU = (d.sku_master || []).map(r => ({
+    sku_code: String(r.sku_code).trim(),
+    fg_name: String(r.fg_name || "").trim(),
+    pack_size_g: (r.pack_size_g === "" || r.pack_size_g == null) ? "" : String(r.pack_size_g)
+  }));
+  RM = (d.bom_rm || []).map(r => ({
+    sku_code: String(r.sku_code).trim(),
+    rm_name: String(r.rm_name).trim(),
+    // rm_pct: keep as editable string. Missing -> "" (treated as 0 in math).
+    rm_pct: (r.rm_pct === "" || r.rm_pct == null) ? "" : String(r.rm_pct)
+  }));
+  PM = (d.bom_pm || []).map(r => ({
+    sku_code: String(r.sku_code).trim(),
+    pm_name: String(r.pm_name).trim(),
+    pm_code: String(r.pm_code || "").trim(),
+    // pm_qty_per_unit default 1 when blank.
+    pm_qty_per_unit: (r.pm_qty_per_unit === "" || r.pm_qty_per_unit == null) ? "1" : String(r.pm_qty_per_unit)
+  }));
+  skuIndex = {}; SKU.forEach(s => skuIndex[s.sku_code] = s);
+  demand = {}; demandM2 = {}; SKU.forEach(s => { demand[s.sku_code] = "0"; demandM2[s.sku_code] = "0"; });
+
+  // Build the material-code master + DUMMY per-factory stock (keyed like aggregation).
+  // Deterministic from the name (and factory) so values stay stable across re-renders.
+  // Placeholder only — replace with real material master + inventory before procurement.
+  buildMaster();
+
+  // Seed DUMMY lead times (days) per distinct material name (keyed like aggregation).
+  // Deterministic from the name so values stay stable across re-renders.
+  // Placeholder only — replace with real supplier lead times before procurement.
+  rmLead = {};
+  RM.forEach(r => { const k = normKey(r.rm_name); if (!(k in rmLead)) rmLead[k] = String(dummyLead(r.rm_name, "rm")); });
+  pmLead = {};
+  PM.forEach(r => { const k = normKey(r.pm_name); if (!(k in pmLead)) pmLead[k] = String(dummyLead(r.pm_name, "pm")); });
+
+  // ---- REAL FEEDS (swapped in over the dummy foundation) ----
+  // DRR: Product DRR per SKU from Stock Matrix Base 'Main' col AR (read-only).
+  drrBySku = {};
+  if (d.drr && typeof d.drr === "object") Object.keys(d.drr).forEach(k => drrBySku[String(k).trim()] = d.drr[k]);
+
+  // Sapiens "PM-RM Planing" lookup, keyed by material name so it re-matches if
+  // RM names are reconciled later: RM code (col F), CURRENT STOCK (col N),
+  // EXPECTED SUPPLY (col P). For each RM material the app knows, a matched feed
+  // row replaces the DUMMY Sapiens stock and supplies the real code + expected supply.
+  rmFirm = {}; rmSupply = {}; rmCodeReal = {}; rmMoq = {};
+  (d.rm_firm || []).forEach(x => {
+    rmFirm[normKey(x.name)] = { code: String(x.code || "").trim(), stock: num(x.stock, true), supply: num(x.supply, true) };
+  });
+  // Real RM MOQ (kg) from "RM PM Req.xlsx" Sheet2, MOQ column — matched by RM name.
+  const rmMoqReal = {};
+  (d.rm_moq || []).forEach(x => { rmMoqReal[normKey(x.name)] = String(x.moq); });
+  const SAP = FACTORIES[0].code;
+  Object.keys(matMaster).forEach(k => {
+    if (matMaster[k].kind !== "rm") return;
+    // Real MOQ where the sheet has one; blank (no MOQ on file) otherwise — editable. Not invented.
+    rmMoq[k] = (rmMoqReal[k] != null) ? rmMoqReal[k] : "";
+    const f = rmFirm[k];
+    if (f) {
+      rmCodeReal[k] = f.code;
+      rmSupply[k]   = f.supply;
+      rmStockF[SAP][k] = String(f.stock);             // real current stock (col N) overrides the dummy seed
+    } else {
+      // No match in the Sapiens feed: don't trust the dummy stock for a procurement number.
+      // Treat as unknown (0) so the Order qty reflects the full requirement (conservative) until reconciled.
+      rmStockF[SAP][k] = "0";
+    }
+  });
+}
+
+/* Deterministic pseudo-random dummy lead time (days) from a material name.
+ * RM -> ~15..60 days (often imported), PM -> ~7..30 days. */
+function dummyLead(name, kind) {
+  let h = 0; const s = String(name == null ? "" : name);
+  for (let i = 0; i < s.length; i++) h = (h * 17 + s.charCodeAt(i) + 7) >>> 0;
+  return kind === "pm" ? (h % 24) + 7 : (h % 46) + 15;
+}
+/* Simple deterministic string hash (>>>0 keeps it unsigned). */
+function hashStr(s) {
+  let h = 0; s = String(s == null ? "" : s);
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h;
+}
+/* DUMMY per-factory stock — deterministic from name + factory so each
+ * co-packer holds a different (but stable) amount. Summed across the 3
+ * factories these land in the same ballpark as the old single dummyStock. */
+function dummyStockF(name, kind, fcode) {
+  const h = hashStr(String(name) + "|" + fcode);
+  return kind === "pm" ? (h % 1500) + 150 : (h % 140) + 8;
+}
+/* DUMMY yesterday's production consumption per material + factory. RM small
+ * kg/day, PM tens..hundreds of units/day. Placeholder for the real daily
+ * production-consumption feed. */
+/* DUMMY minimum order quantity (kg) per RM — deterministic from the name,
+ * ~50..1000 kg in 25 kg steps. Placeholder until real supplier MOQs are loaded. */
+function dummyMoq(name) {
+  const h = hashStr(String(name) + "|moq");
+  return ((h % 39) + 2) * 25;   // 50 .. 1000 kg
+}
+
+/* ==================================================================
+ *  MATERIAL-CODE MASTER (DUMMY)
+ *  One Mosaic code per distinct RM/PM name + per-factory co-packer code,
+ *  UOM and category. Also seeds the per-factory inventory stores. This is
+ *  the normalisation layer the procurement framework calls Enabler 1/3.
+ * ================================================================== */
+const RM_CATS = ["Protein", "Sweetener", "Flavour", "Fibre", "Active", "Excipient"];
+const PM_CATS = ["Primary pack", "Closure", "Label", "Carton", "Insert"];
+function buildMaster() {
+  matMaster = {}; MATLIST = []; cpCode = {}; rmStockF = {}; pmStockF = {};
+  FACTORIES.forEach(f => { cpCode[f.code] = {}; rmStockF[f.code] = {}; pmStockF[f.code] = {}; });
+  let rmN = 0, pmN = 0;
+  function add(name, kind) {
+    const k = normKey(name);
+    if (matMaster[k]) return;
+    const code = kind === "rm" ? "RM-" + String(++rmN).padStart(4, "0")
+                               : "PM-" + String(++pmN).padStart(4, "0");
+    const cats = kind === "rm" ? RM_CATS : PM_CATS;
+    const e = {
+      key: k, name: String(name).trim(), kind, code,
+      uom: kind === "rm" ? "kg" : "nos",
+      category: cats[hashStr(name) % cats.length]
+    };
+    matMaster[k] = e; MATLIST.push(e);
+    FACTORIES.forEach(f => {
+      cpCode[f.code][k] = f.code.replace("CP-", "") + "-" + code.replace(/[^0-9]/g, "");  // dummy co-packer code
+      const store = kind === "rm" ? rmStockF : pmStockF;
+      store[f.code][k] = String(dummyStockF(name, kind, f.code));
+    });
+  }
+  RM.forEach(r => add(r.rm_name, "rm"));
+  PM.forEach(r => add(r.pm_name, "pm"));
+  // # distinct SKUs using each material (in BOM, regardless of demand)
+  const cnt = {};
+  RM.forEach(r => { const k = normKey(r.rm_name); (cnt[k] = cnt[k] || new Set()).add(r.sku_code); });
+  PM.forEach(r => { const k = normKey(r.pm_name); (cnt[k] = cnt[k] || new Set()).add(r.sku_code); });
+  MATLIST.forEach(e => e.skuCount = (cnt[e.key] || new Set()).size);
+}
+/* Stock in hand summed across all co-packers (what the consolidated tabs use). */
+function stockTotal(kind, key) {
+  const F = kind === "rm" ? rmStockF : pmStockF;
+  let t = 0; FACTORIES.forEach(f => t += num((F[f.code] || {})[key], true));
+  return t;
+}
+
+/* ==================================================================
+ *  CORE AGGREGATION
+ *  Returns consolidated RM (kg) and PM (units) keyed by material name.
+ * ================================================================== */
+function aggregateRM() {
+  const map = new Map();    // normKey -> {name, kg, dailyKg, skus:[{sku,fg,pct,kg,dem,drr,dailyKg}]}
+  RM.forEach(r => {
+    const s = skuIndex[r.sku_code]; if (!s) return;
+    const dem1 = num(demand[r.sku_code], true);
+    const dem2 = num(demandM2[r.sku_code], true);
+    const pack = num(s.pack_size_g, true);
+    const pct = num(r.rm_pct);
+    const drr = num(drrBySku[r.sku_code], true);
+    // REQ: month requirement kg = (rm_pct/100) * pack_size_g * month demand / 1000
+    const reqM1 = (pct / 100) * pack * dem1 / 1000;
+    const reqM2 = (pct / 100) * pack * dem2 / 1000;
+    const kg = reqM1 + reqM2;                                       // total 2-month requirement
+    // RUN-RATE: daily kg consumed at current Product DRR = (rm_pct/100) * pack_size_g * DRR / 1000
+    const dailyKg = (pct / 100) * pack * drr / 1000;
+    const k = normKey(r.rm_name);
+    let e = map.get(k);
+    if (!e) { e = { name: r.rm_name, kg: 0, reqM1Kg: 0, reqM2Kg: 0, dailyKg: 0, skus: [] }; map.set(k, e); }
+    e.kg += kg;
+    e.reqM1Kg += reqM1;
+    e.reqM2Kg += reqM2;
+    e.dailyKg += dailyKg;
+    e.skus.push({ sku: r.sku_code, fg: s.fg_name, pct, dem: dem1 + dem2, dem1, dem2, kg, drr, dailyKg });
+  });
+  return [...map.values()].sort((a, b) => b.kg - a.kg);
+}
+/* Run-rate days-on-hand: stock ÷ total RM kg/day consumed at current Product DRR.
+ * Returns null (rendered as "—") when nothing is consumed at the current
+ * run-rate (total daily kg = 0) — i.e. no demand, so DOH is undefined, not ∞. */
+function dohByRate(stockVal, dailyKg) {
+  if (dailyKg <= 0) return null;
+  return stockVal / dailyKg;
+}
+function aggregatePM() {
+  const map = new Map();    // normKey -> {name, units, skus:[...]}
+  PM.forEach(r => {
+    const s = skuIndex[r.sku_code]; if (!s) return;
+    const dem1 = num(demand[r.sku_code], true);
+    const dem2 = num(demandM2[r.sku_code], true);
+    const qty = num(r.pm_qty_per_unit);
+    const drr = num(drrBySku[r.sku_code], true);
+    // REQ: month requirement units = pm_qty_per_unit * month demand
+    const reqM1 = qty * dem1;
+    const reqM2 = qty * dem2;
+    const units = reqM1 + reqM2;                              // total 2-month requirement
+    // RUN-RATE: daily units consumed at current Product DRR = pm_qty_per_unit * DRR
+    const dailyUnits = qty * drr;
+    const k = normKey(r.pm_name);
+    let e = map.get(k);
+    if (!e) { e = { name: r.pm_name, units: 0, reqM1U: 0, reqM2U: 0, dailyUnits: 0, skus: [] }; map.set(k, e); }
+    e.units += units;
+    e.reqM1U += reqM1;
+    e.reqM2U += reqM2;
+    e.dailyUnits += dailyUnits;
+    e.skus.push({ sku: r.sku_code, fg: s.fg_name, qty, dem: dem1 + dem2, units, drr, dailyUnits });
+  });
+  return [...map.values()].sort((a, b) => b.units - a.units);
+}
+
+/* ==================================================================
+ *  DAYS ON HAND (DOH) — days the current stock covers at the plan rate.
+ *  daily consumption = total requirement / plan horizon (days).
+ *  DOH = stock in hand / daily consumption.  Infinite when there is no
+ *  consumption; undefined when the horizon is 0.
+ * ================================================================== */
+function dohDays(reqTotal, stockVal) {
+  const days = num(planDays, true);
+  if (days <= 0) return null;
+  const daily = reqTotal / days;
+  if (daily <= 0) return Infinity;       // material not consumed in this plan
+  return stockVal / daily;
+}
+/* Paint a DOH cell with RAG vs lead time: cover < lead = will stock out
+ * before resupply (red); < 1.5x lead = tight (amber); else healthy. */
+function paintDoh(td, reqTotal, stockVal, leadVal) {
+  const d = dohDays(reqTotal, stockVal);
+  if (d === null) { td.innerHTML = '<span class="muted">—</span>'; return; }
+  if (d === Infinity) { td.innerHTML = '<span class="muted">∞</span>'; return; }
+  const lead = num(leadVal, true);
+  let cls = "doh-ok";
+  if (lead > 0) { if (d < lead) cls = "doh-bad"; else if (d < lead * 1.5) cls = "doh-warn"; }
+  td.innerHTML = '<span class="' + cls + '">' + fmt(d, 1) + '</span>';
+}
+/* Is this material at risk (finite cover below its lead time)? */
+function dohAtRisk(reqTotal, stockVal, leadVal) {
+  const d = dohDays(reqTotal, stockVal);
+  const lead = num(leadVal, true);
+  return d !== null && d !== Infinity && lead > 0 && d < lead;
+}
+
+/* ==================================================================
+ *  TAB 1 — DEMAND ENTRY
+ * ================================================================== */
+function renderDemand() {
+  const tbody = $("demandRows");
+  tbody.innerHTML = "";
+  const f = demandFilter.toLowerCase();
+  let shown = 0;
+  SKU.forEach(s => {
+    if (f && !(s.sku_code.toLowerCase().includes(f) || s.fg_name.toLowerCase().includes(f))) return;
+    shown++;
+    const tr = document.createElement("tr");
+
+    const tdName = document.createElement("td");
+    tdName.innerHTML = '<div>' + escapeHtml(s.fg_name || "(unnamed)") +
+      '</div><div class="sku-code">' + escapeHtml(s.sku_code) + '</div>';
+
+    const tdPack = document.createElement("td"); tdPack.className = "num";
+    const packIn = mkNum(s.pack_size_g, v => { s.pack_size_g = v; updateDemandRow(tr, s); updateDemandFooter(); });
+    tdPack.appendChild(packIn);
+
+    const tdDrr = document.createElement("td"); tdDrr.className = "num";   // Product DRR (read-only feed)
+    const drrv = drrBySku[s.sku_code];
+    tdDrr.innerHTML = (drrv == null || drrv === "") ? '<span class="muted">—</span>' : fmt(drrv, 1);
+
+    const tdDem = document.createElement("td"); tdDem.className = "num";
+    const demIn = mkNum(demand[s.sku_code], v => { demand[s.sku_code] = v; updateDemandRow(tr, s); updateDemandFooter(); });
+    tdDem.appendChild(demIn);
+
+    const tdDem2 = document.createElement("td"); tdDem2.className = "num";
+    const dem2In = mkNum(demandM2[s.sku_code], v => { demandM2[s.sku_code] = v; updateDemandRow(tr, s); updateDemandFooter(); });
+    tdDem2.appendChild(dem2In);
+
+    const tdKg = document.createElement("td"); tdKg.className = "num req"; tdKg.dataset.kg = "1";
+
+    tr.append(tdName, tdPack, tdDrr, tdDem, tdDem2, tdKg);
+    tbody.appendChild(tr);
+    updateDemandRow(tr, s);
+  });
+  $("demandCount").textContent = shown + " of " + SKU.length + " SKUs shown";
+  updateDemandFooter();
+}
+/* batch weight (kg) for one SKU row, updated live without re-render. */
+function updateDemandRow(tr, s) {
+  const dem = num(demand[s.sku_code], true) + num(demandM2[s.sku_code], true);   // 2-month total
+  const pack = num(s.pack_size_g, true);
+  tr.querySelector('[data-kg]').textContent = fmt(pack * dem / 1000, 3);
+}
+function updateDemandFooter() {
+  let units = 0, unitsM2 = 0, kg = 0, n = 0, drrSum = 0;
+  SKU.forEach(s => {
+    const d1 = num(demand[s.sku_code], true), d2 = num(demandM2[s.sku_code], true);
+    if (d1 > 0 || d2 > 0) n++;
+    units += d1;
+    unitsM2 += d2;
+    kg += num(s.pack_size_g, true) * (d1 + d2) / 1000;
+    drrSum += num(drrBySku[s.sku_code], true);
+  });
+  $("demandDrrTotal").textContent = fmt(drrSum, 1);
+  $("demandUnitsTotal").textContent = fmt(units, 0);
+  $("demandUnitsTotalM2").textContent = fmt(unitsM2, 0);
+  $("demandKgTotal").textContent = fmt(kg, 3);
+  $("demandSkuTotal").textContent = n;
+}
+
+/* ==================================================================
+ *  TAB 2 — CONSOLIDATED RM
+ * ================================================================== */
+/* shared config strip for the RM & PM forward tabs */
+function fwdCfgHtml() {
+  return '<b>Forward config</b> · DAYS_PER_MONTH <code>' + FWD.DAYS_PER_MONTH + '</code> · SAFETY_DOH <code>' + FWD.SAFETY_DOH +
+    '</code> d · LEAD_TIME <code>' + FWD.LEAD_TIME_DAYS +
+    '</code> d · SUPPLY_SPLIT <code>' + FWD.SUPPLY_SPLIT +
+    '</code> · order quantity from <b>imported 2-month demand</b> (REQ − supply − stock)' +
+    (FWD.SUPPLY_SPLIT === "by_po_age" ? '<br><span style="color:var(--warn)">⚠ SUPPLY_SPLIT="by_po_age" needs PO dates (not embedded) → using all_m1</span>' : '');
+}
+function renderRM() {
+  const agg = aggregateRM();
+  const days = num(planDays, true);
+  $("rmCfg").innerHTML = fwdCfgHtml();
+  const NA = '<span class="muted">NA</span>';
+
+  const items = agg.map(e => {
+    const k = normKey(e.name);
+    const matched = !!rmFirm[k];
+    const reqM1 = e.reqM1Kg, reqM2 = e.reqM2Kg;          // demand-driven month requirement (kg)
+    const usage = e.dailyKg;                              // Used/day column = DRR run-rate (reference)
+    const moq = num(rmMoq[k], true);
+    const code = rmCodeReal[k] || (matMaster[k] ? matMaster[k].code : "");
+    let stock = null, supply = 0, supM1 = 0, supM2 = 0, cdoh = null, rdohM1 = null, rdohM2 = null, oM1 = null, oM2 = null;
+    if (matched) {
+      stock = stockTotal("rm", k);
+      supply = num(rmSupply[k], true);
+      [supM1, supM2] = fwdSupplySplit(supply);
+      // Current DOH = cover at the CURRENT consumption rate from the real Product DRR feed.
+      cdoh = dohByRate(stock, e.dailyKg);
+      // M1 available is shared by both calcs (no consumption yet this month).
+      // Desired quantity (per month) = max(0, REQ − (exp supply + available stock)), floored at 0 — demand-driven.
+      const availM1 = stock + supM1;
+      oM1 = fwdOrder(reqM1, availM1, moq);
+      const availM2Oq = (availM1 - reqM1) + supM2;        // OQ roll-forward: M1 consumes REQ(M1)
+      oM2 = fwdOrder(reqM2, availM2Oq, moq);
+      // Revised DOH roll-forward uses the DRR run-rate (Used/day), independent of demand:
+      //   available_M1 = stock + supply_M1; revised_doh_M1 = available_M1 / used_per_day
+      //   closing_M1   = available_M1 − used_per_day × DAYS_PER_MONTH
+      //   available_M2 = closing_M1 + supply_M2; revised_doh_M2 = available_M2 / used_per_day
+      rdohM1 = usage > 0 ? availM1 / usage : null;
+      const closingM1 = availM1 - usage * FWD.DAYS_PER_MONTH;
+      const availM2Doh = closingM1 + supM2;
+      rdohM2 = usage > 0 ? availM2Doh / usage : null;
+    }
+    return { e, k, matched, usage, supply, supM1, supM2, moq, code, stock, cdoh, rdohM1, rdohM2, oM1, oM2 };
+  });
+  items.sort((a, b) => {
+    const av = (a.matched && a.rdohM1 !== null) ? a.rdohM1 : Infinity;
+    const bv = (b.matched && b.rdohM1 !== null) ? b.rdohM1 : Infinity;
+    return av - bv;
+  });
+
+  const tbody = $("rmRows"); tbody.innerHTML = "";
+  let stockTot = 0, supplyTot = 0, supM1Tot = 0, supM2Tot = 0, usageTot = 0, m1Tot = 0, m2Tot = 0, adjM1Tot = 0, adjM2Tot = 0, reqM1Tot = 0, reqM2Tot = 0, atRisk = 0, na = 0;
+  items.forEach(r => {
+    usageTot += r.usage;
+    reqM1Tot += r.e.reqM1Kg; reqM2Tot += r.e.reqM2Kg;   // required qty is demand-driven (counts even for NA rows)
+    const tr = document.createElement("tr"); tr.className = "clickable";
+    const moqVal = (rmMoq[r.k] == null ? "" : rmMoq[r.k]);   // raw string: real MOQ (kg) or blank
+    const moqIn = '<input class="cell" type="number" min="0" step="25" value="' + escapeHtml(moqVal) +
+      '" data-k="' + escapeHtml(r.k) + '" style="width:80px" title="MOQ kg — RM PM Req Sheet2 (blank = none on file; editable)">';
+    if (!r.matched) {
+      na++;
+      tr.innerHTML =
+        '<td class="sku-code">' + escapeHtml(r.code || "—") + '</td><td>' + escapeHtml(r.e.name) + '</td>' +
+        '<td class="num">' + moqIn + '</td>' +
+        '<td class="num">' + NA + '</td>' +
+        '<td class="num"><span class="muted">—</span></td>' +
+        '<td class="num"><span class="muted">—</span></td>' +
+        '<td class="num">' + fmt(r.usage, 3) + '</td>' +
+        '<td class="num">' + NA + '</td>' +
+        '<td class="num grpL">' + NA + '</td><td class="num">' + fmt(r.e.reqM1Kg, 1) + '</td><td class="num">NA</td><td class="num">NA</td><td class="num">NA</td><td><span class="tag none">no stock feed</span></td>' +
+        '<td class="num grpL">' + NA + '</td><td class="num">' + fmt(r.e.reqM2Kg, 1) + '</td><td class="num">NA</td><td class="num">NA</td><td class="num">NA</td><td><span class="tag none">no stock feed</span></td>' +
+        '<td class="num"><button class="expand-btn">▸ details</button></td>';
+    } else {
+      stockTot += r.stock; supplyTot += r.supply; supM1Tot += r.supM1; supM2Tot += r.supM2; m1Tot += r.oM1.oq; m2Tot += r.oM2.oq;
+      adjM1Tot += moqAdjOrder(r.oM1.oq, r.moq); adjM2Tot += moqAdjOrder(r.oM2.oq, r.moq);
+      if (r.rdohM1 !== null && r.rdohM1 < FWD.SAFETY_DOH) atRisk++;
+      tr.innerHTML =
+        '<td class="sku-code">' + escapeHtml(r.code || "—") + '</td><td>' + escapeHtml(r.e.name) + '</td>' +
+        '<td class="num">' + moqIn + '</td>' +
+        '<td class="num req">' + fmt(r.stock, 3) + '</td>' +
+        '<td class="num">' + fmt(r.supM1, 3) + '</td>' +
+        '<td class="num">' + fmt(r.supM2, 3) + '</td>' +
+        '<td class="num">' + fmt(r.usage, 3) + '</td>' +
+        '<td class="num">' + fwdDohCell(r.cdoh) + '</td>' +
+        '<td class="num grpL">' + fwdDohCell(r.rdohM1) + '</td><td class="num">' + fmt(r.e.reqM1Kg, 1) + '</td><td class="num req">' + fmt(r.oM1.oq, 1) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM1.oq, r.moq), 1) + '</td>' + diffCell(r.oM1.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM1) + '</td>' +
+        '<td class="num grpL">' + fwdDohCell(r.rdohM2) + '</td><td class="num">' + fmt(r.e.reqM2Kg, 1) + '</td><td class="num req">' + fmt(r.oM2.oq, 1) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM2.oq, r.moq), 1) + '</td>' + diffCell(r.oM2.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM2) + '</td>' +
+        '<td class="num"><button class="expand-btn">▸ details</button></td>';
+    }
+    const drill = mkDrill(21, drillTableRM(r.e));
+    tbody.appendChild(tr); tbody.appendChild(drill);
+    const btn = tr.querySelector(".expand-btn");
+    btn.addEventListener("click", (ev) => { ev.stopPropagation(); toggleDrill(tr, drill, ev.target); });
+    tr.addEventListener("click", () => toggleDrill(tr, drill, btn));
+    const inp = tr.querySelector("input.cell");
+    inp.addEventListener("click", ev => ev.stopPropagation());
+    inp.addEventListener("change", () => { rmMoq[inp.getAttribute("data-k")] = inp.value; renderRM(); });
+  });
+
+  $("rmDistinct").textContent = items.length;
+  $("rmDistinct2").textContent = items.length + (na ? " (" + na + " NA)" : "");
+  $("rmStockTot").textContent = fmt(stockTot, 3);
+  $("rmSupplyTot").textContent = fmt(supplyTot, 3);
+  $("rmOrderM1").textContent = fmt(m1Tot, 1);
+  $("rmOrderM2").textContent = fmt(m2Tot, 1);
+  $("rmAtRisk").textContent = atRisk;
+  $("rmFootStock").textContent = fmt(stockTot, 3);
+  $("rmFootSupplyM1").textContent = fmt(supM1Tot, 3);
+  $("rmFootSupplyM2").textContent = fmt(supM2Tot, 3);
+  $("rmFootUsage").textContent = fmt(usageTot, 3);
+  $("rmFootReqM1").textContent = fmt(reqM1Tot, 1);
+  $("rmFootReqM2").textContent = fmt(reqM2Tot, 1);
+  $("rmFootM1").textContent = fmt(m1Tot, 1);
+  $("rmFootM2").textContent = fmt(m2Tot, 1);
+  $("rmFootAdjM1").textContent = fmt(adjM1Tot, 1);
+  $("rmFootAdjM2").textContent = fmt(adjM2Tot, 1);
+}
+/* DOH cell text: number (1dp), ∞ when nothing is consumed, — when no horizon. */
+function dohCellHtml(d) {
+  if (d === null) return '<span class="muted">—</span>';
+  if (d === Infinity) return '<span class="muted">∞</span>';
+  return fmt(d, 1);
+}
+/* Diff = (Actual − Desired) ÷ Desired, positive only. Blank when no order or no MOQ. */
+function updateRmDiff(td, moqVal, order) {
+  const moq = num(moqVal, true);
+  if (!(order > 0) || moq <= 0) { td.innerHTML = '<span class="muted">—</span>'; return; }
+  td.textContent = fmt(Math.max(0, (moq - order) / order * 100), 1) + "%";
+}
+function drillTableRM(e) {
+  const rows = e.skus.filter(x => x.kg > 0 || x.dem > 0 || x.dailyKg > 0).sort((a, b) => (b.kg - a.kg) || (b.dailyKg - a.dailyKg));
+  if (!rows.length) return '<div class="muted" style="padding:6px">No demand or run-rate for SKUs using this material.</div>';
+  let h = '<table><thead><tr><th>SKU</th><th>Product</th><th class="num">RM %</th><th class="num">Demand</th><th class="num">kg</th>' +
+    '<th class="num">DRR</th><th class="num">kg/day</th></tr></thead><tbody>';
+  rows.forEach(x => {
+    h += '<tr><td class="sku-code">' + escapeHtml(x.sku) + '</td><td>' + escapeHtml(x.fg) +
+      '</td><td class="num">' + fmt(x.pct, x.pct % 1 ? 2 : 0) + '%</td><td class="num">' + fmt(x.dem, 0) +
+      '</td><td class="num req">' + fmt(x.kg, 3) + '</td><td class="num">' + fmt(x.drr, 1) +
+      '</td><td class="num">' + fmt(x.dailyKg, 3) + '</td></tr>';
+  });
+  return h + '</tbody></table>';
+}
+
+/* ==================================================================
+ *  TAB 3 — CONSOLIDATED PM
+ * ================================================================== */
+function renderPM() {
+  const agg = aggregatePM();
+  const days = num(planDays, true);
+  $("pmCfg").innerHTML = fwdCfgHtml();
+
+  const items = agg.map(e => {
+    const k = normKey(e.name);
+    if (pmMoq[k] == null) pmMoq[k] = String(dummyMoqPm(e.name));   // DUMMY MOQ seed (units)
+    const reqM1 = e.reqM1U, reqM2 = e.reqM2U;           // demand-driven month requirement (units)
+    const usage = e.dailyUnits;                         // Used/day column = DRR run-rate (reference)
+    const moq = num(pmMoq[k], true);
+    const stock = stockTotal("pm", k);                  // DUMMY stock (edit on Live Inventory)
+    // Current DOH = cover at the CURRENT consumption rate from the real Product DRR feed.
+    const cdoh = dohByRate(stock, e.dailyUnits);
+    // Desired quantity (per month) = max(0, REQ − available stock). PM has no expected-supply feed. Demand-driven.
+    const availM1 = stock;
+    const oM1 = fwdOrder(reqM1, availM1, moq);
+    const availM2Oq = availM1 - reqM1;                  // OQ roll-forward: M1 consumes REQ(M1), no M2 supply
+    const oM2 = fwdOrder(reqM2, availM2Oq, moq);
+    // Revised DOH roll-forward uses the DRR run-rate (Used/day), independent of demand:
+    const rdohM1 = usage > 0 ? availM1 / usage : null;
+    const closingM1 = availM1 - usage * FWD.DAYS_PER_MONTH;
+    const availM2Doh = closingM1;                       // carry forward (no M2 supply)
+    const rdohM2 = usage > 0 ? availM2Doh / usage : null;
+    return { e, k, usage, moq, stock, cdoh, rdohM1, rdohM2, oM1, oM2 };
+  });
+  items.sort((a, b) => {
+    const av = a.rdohM1 !== null ? a.rdohM1 : Infinity;
+    const bv = b.rdohM1 !== null ? b.rdohM1 : Infinity;
+    return av - bv;
+  });
+
+  const tbody = $("pmRows"); tbody.innerHTML = "";
+  let stockTot = 0, usageTot = 0, m1Tot = 0, m2Tot = 0, adjM1Tot = 0, adjM2Tot = 0, reqM1Tot = 0, reqM2Tot = 0, atRisk = 0;
+  items.forEach(r => {
+    usageTot += r.usage; stockTot += r.stock; m1Tot += r.oM1.oq; m2Tot += r.oM2.oq;
+    adjM1Tot += moqAdjOrder(r.oM1.oq, r.moq); adjM2Tot += moqAdjOrder(r.oM2.oq, r.moq);
+    reqM1Tot += r.e.reqM1U; reqM2Tot += r.e.reqM2U;
+    if (r.rdohM1 !== null && r.rdohM1 < FWD.SAFETY_DOH) atRisk++;
+    const tr = document.createElement("tr"); tr.className = "clickable";
+    const moqIn = '<input class="cell" type="number" min="0" step="50" value="' + r.moq +
+      '" data-k="' + escapeHtml(r.k) + '" style="width:80px" title="DUMMY MOQ (editable)">';
+    tr.innerHTML =
+      '<td>' + escapeHtml(r.e.name) + '</td>' +
+      '<td class="num">' + moqIn + '</td>' +
+      '<td class="num req">' + fmt(r.stock, 0) + '</td>' +
+      '<td class="num">' + fmt(r.usage, 3) + '</td>' +
+      '<td class="num">' + fwdDohCell(r.cdoh) + '</td>' +
+      '<td class="num grpL">' + fwdDohCell(r.rdohM1) + '</td><td class="num">' + fmt(r.e.reqM1U, 0) + '</td><td class="num req">' + fmt(r.oM1.oq, 0) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM1.oq, r.moq), 0) + '</td>' + diffCell(r.oM1.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM1) + '</td>' +
+      '<td class="num grpL">' + fwdDohCell(r.rdohM2) + '</td><td class="num">' + fmt(r.e.reqM2U, 0) + '</td><td class="num req">' + fmt(r.oM2.oq, 0) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM2.oq, r.moq), 0) + '</td>' + diffCell(r.oM2.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM2) + '</td>' +
+      '<td class="num"><button class="expand-btn">▸ details</button></td>';
+    const drill = mkDrill(18, drillTablePM(r.e));
+    tbody.appendChild(tr); tbody.appendChild(drill);
+    const btn = tr.querySelector(".expand-btn");
+    btn.addEventListener("click", (ev) => { ev.stopPropagation(); toggleDrill(tr, drill, ev.target); });
+    tr.addEventListener("click", () => toggleDrill(tr, drill, btn));
+    const inp = tr.querySelector("input.cell");
+    inp.addEventListener("click", ev => ev.stopPropagation());
+    inp.addEventListener("change", () => { pmMoq[inp.getAttribute("data-k")] = inp.value; renderPM(); });
+  });
+
+  $("pmDistinct").textContent = items.length;
+  $("pmDistinct2").textContent = items.length;
+  $("pmStockTot").textContent = fmt(stockTot, 0);
+  $("pmOrderM1").textContent = fmt(m1Tot, 0);
+  $("pmOrderM2").textContent = fmt(m2Tot, 0);
+  $("pmAtRisk").textContent = atRisk;
+  $("pmFootStock").textContent = fmt(stockTot, 0);
+  $("pmFootUsage").textContent = fmt(usageTot, 3);
+  $("pmFootReqM1").textContent = fmt(reqM1Tot, 0);
+  $("pmFootReqM2").textContent = fmt(reqM2Tot, 0);
+  $("pmFootM1").textContent = fmt(m1Tot, 0);
+  $("pmFootM2").textContent = fmt(m2Tot, 0);
+  $("pmFootAdjM1").textContent = fmt(adjM1Tot, 0);
+  $("pmFootAdjM2").textContent = fmt(adjM2Tot, 0);
+}
+function drillTablePM(e) {
+  const rows = e.skus.filter(x => x.units > 0 || x.dem > 0).sort((a, b) => b.units - a.units);
+  if (!rows.length) return '<div class="muted" style="padding:6px">No demand entered for SKUs using this material.</div>';
+  let h = '<table><thead><tr><th>SKU</th><th>Product</th><th class="num">Qty/unit</th><th class="num">Demand</th><th class="num">Units</th></tr></thead><tbody>';
+  rows.forEach(x => {
+    h += '<tr><td class="sku-code">' + escapeHtml(x.sku) + '</td><td>' + escapeHtml(x.fg) +
+      '</td><td class="num">' + fmt(x.qty, x.qty % 1 ? 2 : 0) + '</td><td class="num">' + fmt(x.dem, 0) +
+      '</td><td class="num req">' + fmt(x.units, 0) + '</td></tr>';
+  });
+  return h + '</tbody></table>';
+}
+
+/* shared drill-down row helpers */
+function mkDrill(colspan, innerHtml) {
+  const tr = document.createElement("tr"); tr.className = "drill"; tr.style.display = "none";
+  const td = document.createElement("td"); td.colSpan = colspan;
+  td.innerHTML = '<div class="drill-inner">' + innerHtml + '</div>';
+  tr.appendChild(td); return tr;
+}
+function toggleDrill(tr, drill, btn) {
+  const open = drill.style.display !== "none";
+  drill.style.display = open ? "none" : "table-row";
+  if (btn) btn.textContent = open ? "▸ details" : "▾ details";
+}
+
+/* ==================================================================
+ *  TAB 4 — PER-SKU BREAKDOWN
+ * ================================================================== */
+function renderSkuPicker() {
+  const sel = $("skuPicker"); sel.innerHTML = "";
+  SKU.forEach(s => {
+    const o = document.createElement("option");
+    o.value = s.sku_code; o.textContent = s.fg_name + "  —  " + s.sku_code;
+    sel.appendChild(o);
+  });
+  if (SKU.length) renderSkuDetail(SKU[0].sku_code);
+}
+function renderSkuDetail(code) {
+  const s = skuIndex[code]; if (!s) return;
+  $("skuPicker").value = code;
+  $("skuDemand").value = demand[code];
+  $("skuDemand2").value = demandM2[code];
+  $("skuPack").value = s.pack_size_g;
+
+  // ----- RM table -----
+  const rmRows = RM.map((r, gi) => ({ r, gi })).filter(o => o.r.sku_code === code);
+  const tb = $("skuRmRows"); tb.innerHTML = "";
+  rmRows.forEach(({ r, gi }) => {
+    const tr = document.createElement("tr");
+    const tdN = document.createElement("td"); tdN.textContent = r.rm_name;
+    const tdP = document.createElement("td"); tdP.className = "num";
+    const pIn = mkNum(r.rm_pct, v => { RM[gi].rm_pct = v; recomputeSkuRow(tr, s); recomputeSkuFooter(code); });
+    pIn.style.width = "90px"; tdP.appendChild(pIn);
+    const tdG = document.createElement("td"); tdG.className = "num muted"; tdG.dataset.g = "1";
+    const tdK = document.createElement("td"); tdK.className = "num req"; tdK.dataset.k = "1";
+    tr.append(tdN, tdP, tdG, tdK);
+    tb.appendChild(tr);
+    recomputeSkuRow(tr, s);
+  });
+
+  // ----- PM table -----
+  const pmRows = PM.map((r, gi) => ({ r, gi })).filter(o => o.r.sku_code === code);
+  const ptb = $("skuPmRows"); ptb.innerHTML = "";
+  pmRows.forEach(({ r, gi }) => {
+    const tr = document.createElement("tr");
+    const tdN = document.createElement("td");
+    tdN.innerHTML = escapeHtml(r.pm_name) + (r.pm_code ? ' <span class="sku-code">' + escapeHtml(r.pm_code) + '</span>' : '');
+    const tdQ = document.createElement("td"); tdQ.className = "num";
+    const qIn = mkNum(r.pm_qty_per_unit, v => { PM[gi].pm_qty_per_unit = v; recomputeSkuPmRow(tr, code); recomputeSkuFooter(code); });
+    qIn.style.width = "90px"; tdQ.appendChild(qIn);
+    const tdU = document.createElement("td"); tdU.className = "num req"; tdU.dataset.u = "1";
+    tr.append(tdN, tdQ, tdU);
+    ptb.appendChild(tr);
+    recomputeSkuPmRow(tr, code);
+  });
+
+  recomputeSkuFooter(code);
+}
+function recomputeSkuRow(tr, s) {
+  const pct = num(tr.querySelector("input").value);
+  const pack = num(s.pack_size_g, true);
+  const dem = num(demand[s.sku_code], true) + num(demandM2[s.sku_code], true);   // 2-month total
+  tr.querySelector('[data-g]').textContent = fmt((pct / 100) * pack, 3);
+  tr.querySelector('[data-k]').textContent = fmt((pct / 100) * pack * dem / 1000, 3);
+}
+function recomputeSkuPmRow(tr, code) {
+  const qty = num(tr.querySelector("input").value);
+  const dem = num(demand[code], true) + num(demandM2[code], true);   // 2-month total
+  tr.querySelector('[data-u]').textContent = fmt(qty * dem, 0);
+}
+function recomputeSkuFooter(code) {
+  const s = skuIndex[code];
+  const pack = num(s.pack_size_g, true), dem = num(demand[code], true) + num(demandM2[code], true);   // 2-month total
+  let pct = 0, kg = 0;
+  RM.forEach(r => { if (r.sku_code === code) { const p = num(r.rm_pct); pct += p; kg += (p / 100) * pack * dem / 1000; } });
+  let qty = 0, units = 0;
+  PM.forEach(r => { if (r.sku_code === code) { const q = num(r.pm_qty_per_unit); qty += q; units += q * dem; } });
+
+  $("skuPctTotal").innerHTML = '<span class="' + (Math.abs(pct - 100) < 1e-9 ? "pct-ok" : "pct-bad") + '">' +
+    fmt(pct, pct % 1 ? 2 : 0) + '%</span>';
+  $("skuGramsTotal").textContent = fmt((pct / 100) * pack, 3);
+  $("skuKgTotal").textContent = fmt(kg, 3);
+  $("skuPmQtyTotal").textContent = fmt(qty, qty % 1 ? 2 : 0);
+  $("skuPmUnitsTotal").textContent = fmt(units, 0);
+
+  // per-SKU % warning banner (warn, never block)
+  const b = $("skuBanner");
+  if (RM.some(r => r.sku_code === code)) {
+    if (Math.abs(pct - 100) < 1e-9) { b.className = "banner ok"; b.innerHTML = "✓ RM percentages sum to 100%."; }
+    else { b.className = "banner warn"; b.innerHTML = "⚠ RM percentages sum to <b>" + fmt(pct, 2) + "%</b> (expected 100%). Calculations still shown."; }
+  } else { b.className = ""; b.innerHTML = ""; }
+}
+
+/* ---------- input factory: number cell that writes back as a string ---------- */
+function mkNum(value, onInput) {
+  const inp = document.createElement("input");
+  inp.className = "cell"; inp.type = "number"; inp.step = "any"; inp.min = "0";
+  inp.value = value == null ? "" : value;
+  inp.addEventListener("input", e => onInput(e.target.value));
+  return inp;
+}
+function escapeHtml(s) {
+  return String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+/* text input cell that writes back as a string (for UOM / category edits). */
+function mkText(value, onInput) {
+  const inp = document.createElement("input");
+  inp.className = "cell"; inp.type = "text";
+  inp.style.textAlign = "left"; inp.style.width = "120px";
+  inp.value = value == null ? "" : value;
+  inp.addEventListener("input", e => onInput(e.target.value));
+  return inp;
+}
+
+/* ==================================================================
+ *  TAB 5 — MATERIAL MASTER  (the normalisation layer; DUMMY codes)
+ * ================================================================== */
+function renderMaster() {
+  const f = ($("masterSearch").value || "").toLowerCase();
+  const tb = $("masterRows"); tb.innerHTML = "";
+  let shown = 0;
+  MATLIST.forEach(e => {
+    if (f && !(e.code.toLowerCase().includes(f) || e.name.toLowerCase().includes(f) || e.category.toLowerCase().includes(f))) return;
+    shown++;
+    const tr = document.createElement("tr"); tr.className = "clickable";
+
+    const tdCode = document.createElement("td"); tdCode.innerHTML = '<span class="sku-code">' + escapeHtml(e.code) + '</span>';
+    const tdName = document.createElement("td"); tdName.textContent = e.name;
+    const tdType = document.createElement("td"); tdType.innerHTML = '<span class="pill">' + (e.kind === "rm" ? "RM" : "PM") + '</span>';
+
+    const tdUom = document.createElement("td");
+    const uomIn = mkText(e.uom, v => { e.uom = v; });
+    uomIn.style.width = "70px"; uomIn.addEventListener("click", ev => ev.stopPropagation());
+    tdUom.appendChild(uomIn);
+
+    const tdCat = document.createElement("td");
+    const catIn = mkText(e.category, v => { e.category = v; });
+    catIn.addEventListener("click", ev => ev.stopPropagation());
+    tdCat.appendChild(catIn);
+
+    const tdSkus = document.createElement("td"); tdSkus.className = "num"; tdSkus.textContent = e.skuCount;
+
+    const tdExp = document.createElement("td"); tdExp.className = "num";
+    tdExp.innerHTML = '<button class="expand-btn">▸ codes</button>';
+
+    tr.append(tdCode, tdName, tdType, tdUom, tdCat, tdSkus, tdExp);
+    const drill = mkDrill(7, drillTableMaster(e));
+    tdExp.querySelector(".expand-btn").addEventListener("click", ev => { ev.stopPropagation(); toggleDrill(tr, drill, ev.target); });
+    tr.addEventListener("click", () => toggleDrill(tr, drill, tr.querySelector(".expand-btn")));
+    tb.appendChild(tr); tb.appendChild(drill);
+  });
+  $("mmRm").textContent = MATLIST.filter(e => e.kind === "rm").length;
+  $("mmPm").textContent = MATLIST.filter(e => e.kind === "pm").length;
+  $("mmFactories").textContent = FACTORIES.length;
+  $("masterCount").textContent = shown + " of " + MATLIST.length + " materials shown";
+}
+/* Per-co-packer code mapping for one material (the Mosaic↔co-packer normalisation). */
+function drillTableMaster(e) {
+  let h = '<table><thead><tr><th>Co-packer</th><th>Co-packer code</th><th>Mosaic code</th><th>UOM</th></tr></thead><tbody>';
+  FACTORIES.forEach(fct => {
+    h += '<tr><td>' + escapeHtml(fct.name) + '</td><td class="sku-code">' + escapeHtml(cpCode[fct.code][e.key] || "—") +
+      '</td><td class="sku-code">' + escapeHtml(e.code) + '</td><td>' + escapeHtml(e.uom) + '</td></tr>';
+  });
+  return h + '</tbody></table>';
+}
+
+/* ==================================================================
+ *  TAB 6 — LIVE INVENTORY  (per material per co-packer; DUMMY stock)
+ * ================================================================== */
+function ensureInvControls() {
+  const ff = $("invFactoryFilter");
+  // With a single co-packer the factory filter is pointless — hide it.
+  if (FACTORIES.length <= 1) { ff.style.display = "none"; return; }
+  ff.style.display = "";
+  if (ff.options.length) return;                 // populate once
+  ff.innerHTML = '<option value="all">All co-packers</option>';
+  FACTORIES.forEach(fct => {
+    const o = document.createElement("option"); o.value = fct.code; o.textContent = fct.name; ff.appendChild(o);
+  });
+}
+function renderInventory() {
+  ensureInvControls();
+  const multi = FACTORIES.length > 1;
+  const f = ($("invSearch").value || "").toLowerCase();
+  const ff = $("invFactoryFilter").value || "all";
+  const kf = $("invKindFilter").value || "all";
+  const shownF = (!multi || ff === "all") ? FACTORIES : FACTORIES.filter(x => x.code === ff);
+
+  // factory freshness strip
+  $("invFactoryStatus").innerHTML = FACTORIES.map(fct =>
+    '<div class="kpi"><b style="font-size:14px">' + escapeHtml(fct.name) + '</b>' +
+    '<span>Last updated · ' + escapeHtml(fct.lastUpdated) + '</span></div>').join("");
+
+  // plan-implied daily draw per material (Plan / day)
+  const days = num(planDays, true);
+  const reqMap = buildReqMap();
+
+  // header — stock col(s) per co-packer, then the plan-implied daily draw.
+  // "Total (all)" only added when >1 co-packer.
+  let head = '<th style="width:28%">Material</th><th>Code</th>';
+  shownF.forEach(fct => head += '<th class="num">' + escapeHtml(multi ? fct.code + " stock" : "Stock in hand") + '</th>');
+  if (multi) head += '<th class="num">Total stock</th>';
+  head += '<th class="num">Plan / day</th><th>UOM</th>';
+  $("invHead").innerHTML = head;
+
+  const tb = $("invRows"); tb.innerHTML = "";
+  let shown = 0;
+  MATLIST.forEach(e => {
+    if (kf !== "all" && e.kind !== kf) return;
+    if (f && !(e.code.toLowerCase().includes(f) || e.name.toLowerCase().includes(f))) return;
+    shown++;
+    const dp = e.kind === "rm" ? 3 : 0;
+    const tr = document.createElement("tr");
+    const tdName = document.createElement("td"); tdName.textContent = e.name;
+    const tdCode = document.createElement("td"); tdCode.innerHTML = '<span class="sku-code">' + escapeHtml(e.code) + '</span>';
+    tr.append(tdName, tdCode);
+    // stock per co-packer (editable)
+    shownF.forEach(fct => {
+      const store = e.kind === "rm" ? rmStockF : pmStockF;
+      const td = document.createElement("td"); td.className = "num";
+      const inp = mkNum(store[fct.code][e.key], v => {
+        store[fct.code][e.key] = v;
+        const tot = tr.querySelector("[data-tot]");
+        if (tot) tot.textContent = fmt(stockTotal(e.kind, e.key), dp);
+        updateInvKpis();
+      });
+      inp.style.width = "84px";
+      td.appendChild(inp); tr.appendChild(td);
+    });
+    if (multi) {
+      const tdTot = document.createElement("td"); tdTot.className = "num req"; tdTot.dataset.tot = "1";
+      tdTot.textContent = fmt(stockTotal(e.kind, e.key), dp);
+      tr.appendChild(tdTot);
+    }
+    const tdPlan = document.createElement("td"); tdPlan.className = "num muted";
+    tdPlan.textContent = days > 0 ? fmt((reqMap[e.key] || 0) / days, dp) : "—";
+    const tdUom = document.createElement("td"); tdUom.className = "muted"; tdUom.textContent = e.uom;
+    tr.append(tdPlan, tdUom);
+    tb.appendChild(tr);
+  });
+  $("invMaterials").textContent = MATLIST.length;
+  $("invCount").textContent = shown + " of " + MATLIST.length + " materials shown";
+  updateInvKpis();
+}
+/* required total per material (RM kg / PM units), keyed by normKey — for Plan / day. */
+function buildReqMap() {
+  const m = {};
+  aggregateRM().forEach(e => m[normKey(e.name)] = e.kg);
+  aggregatePM().forEach(e => m[normKey(e.name)] = e.units);
+  return m;
+}
+
+/* ------------------------------------------------------------------
+ *  REAL INVENTORY IMPORT  (the provision for swapping in real data)
+ *  Upload a .csv/.xlsx of [material identifier, stock qty]. Identifier
+ *  matches a Mosaic code (e.g. RM-0001) or a material name. The two
+ *  columns are auto-detected against the known material master, so no
+ *  manual mapping is needed. Matched materials' stock for the given
+ *  co-packer is replaced; everything else is left untouched.
+ * ------------------------------------------------------------------ */
+async function loadInventoryFile(file, factoryCode) {
+  const msg = $("invImportMsg");
+  msg.style.color = "";
+  try {
+    let rows;
+    if (/\.csv$/i.test(file.name)) rows = parseCSV(await file.text());
+    else if (/\.xlsx$/i.test(file.name)) rows = await readXlsx(await file.arrayBuffer());
+    else throw new Error("Unsupported file type. Use .xlsx or .csv (not the older .xls).");
+    rows = trimLeadingBlank(rows || []);
+    if (!rows.length) throw new Error("The file has no rows.");
+    const res = applyInventoryRows(rows, factoryCode);
+    const fct = FACTORIES.find(x => x.code === factoryCode);
+    if (fct && res.matched) fct.lastUpdated = file.name + " · " + new Date().toLocaleString();
+    renderInventory();
+    msg.innerHTML = "Imported <b>" + res.matched + "</b> material(s)" +
+      (res.unmatched.length ? "; <span class='miss-badge'>unmatched:</span> " +
+        escapeHtml(res.unmatched.slice(0, 6).join(", ")) + (res.unmatched.length > 6 ? " …" : "") : "") + ".";
+  } catch (e) {
+    msg.style.color = "var(--warn)";
+    msg.textContent = "⚠ " + (e && e.message ? e.message : "Could not read this file.");
+  }
+}
+function applyInventoryRows(rows, factoryCode) {
+  const byCode = {}, byName = {};
+  MATLIST.forEach(e => { byCode[e.code.toLowerCase()] = e; byName[e.key] = e; });
+  const width = rows.reduce((w, r) => Math.max(w, r.length), 0);
+  const cell = (r, c) => String(r[c] == null ? "" : r[c]).trim();
+  // identifier column = the one whose cells most often match a known code/name
+  let idCol = 0, idHits = -1;
+  for (let c = 0; c < width; c++) {
+    let hits = 0;
+    rows.forEach(r => { const v = cell(r, c); if (v && (byCode[v.toLowerCase()] || byName[normKey(v)])) hits++; });
+    if (hits > idHits) { idHits = hits; idCol = c; }
+  }
+  // qty column = the other column with the most numeric cells
+  let qtyCol = -1, qHits = -1;
+  for (let c = 0; c < width; c++) {
+    if (c === idCol) continue;
+    let hits = 0;
+    rows.forEach(r => { const s = cell(r, c); if (s !== "" && isFinite(parseFloat(s))) hits++; });
+    if (hits > qHits) { qHits = hits; qtyCol = c; }
+  }
+  let matched = 0; const unmatched = [];
+  rows.forEach(r => {
+    const qs = qtyCol >= 0 ? cell(r, qtyCol) : "";
+    if (qs === "" || !isFinite(parseFloat(qs))) return;     // skip header / non-data rows
+    const raw = cell(r, idCol);
+    if (!raw) return;
+    const e = byCode[raw.toLowerCase()] || byName[normKey(raw)];
+    if (!e) { unmatched.push(raw); return; }
+    const store = e.kind === "rm" ? rmStockF : pmStockF;
+    store[factoryCode][e.key] = qs;
+    matched++;
+  });
+  return { matched, unmatched };
+}
+function updateInvKpis() {
+  let rm = 0, pm = 0;
+  MATLIST.forEach(e => {
+    if (e.kind === "rm") rm += stockTotal("rm", e.key);
+    else pm += stockTotal("pm", e.key);
+  });
+  $("invTotalRm").textContent = fmt(rm, 3);
+  $("invTotalPm").textContent = fmt(pm, 0);
+}
+
+/* ==================================================================
+ *  EXPORTS
+ * ================================================================== */
+function exportRM() {
+  const agg = aggregateRM();
+  const L = ["RM Code,RM Name,MOQ (kg),Current Stock (kg),Exp Supply (kg),Used/day (kg),Current DOH," +
+    "M1 Revised DOH,M1 Required qty,M1 Desired quantity,M1 Actual Quantity,M1 Diff,M1 Status," +
+    "M2 Revised DOH,M2 Required qty,M2 Desired quantity,M2 Actual Quantity,M2 Diff,M2 Status"];
+  const ds = d => d === null ? "" : d.toFixed(1);
+  agg.forEach(e => {
+    const k = normKey(e.name);
+    const matched = !!rmFirm[k];
+    const reqM1 = e.reqM1Kg, reqM2 = e.reqM2Kg;   // demand-driven month requirement (kg)
+    const usage = e.dailyKg;                       // Used/day = DRR run-rate (reference)
+    const moq = num(rmMoq[k], true);
+    const moqStr = (rmMoq[k] == null || rmMoq[k] === "") ? "" : String(rmMoq[k]);   // blank = no MOQ on file
+    const code = rmCodeReal[k] || (matMaster[k] ? matMaster[k].code : "");
+    if (!matched) {
+      L.push([csvField(code), csvField(e.name), moqStr, "NA", "NA", usage.toFixed(3), "NA",
+        "NA", reqM1.toFixed(1), "NA", "NA", "NA", "no stock feed", "NA", reqM2.toFixed(1), "NA", "NA", "NA", "no stock feed"].join(","));
+      return;
+    }
+    const stock = stockTotal("rm", k), supply = num(rmSupply[k], true);
+    const [supM1, supM2] = fwdSupplySplit(supply);
+    const cdoh = dohByRate(stock, e.dailyKg);   // DRR run-rate Current DOH (matches the table)
+    const availM1 = stock + supM1;
+    const o1 = fwdOrder(reqM1, availM1, moq);
+    const availM2 = (availM1 - reqM1) + supM2;                          // OQ roll-forward (demand)
+    const o2 = fwdOrder(reqM2, availM2, moq);
+    const rdohM1 = usage > 0 ? availM1 / usage : null;                  // Revised DOH = DRR run-rate
+    const availM2Doh = (availM1 - usage * FWD.DAYS_PER_MONTH) + supM2;
+    const rdohM2 = usage > 0 ? availM2Doh / usage : null;
+    L.push([csvField(code), csvField(e.name), moqStr, stock.toFixed(3), supply.toFixed(3), usage.toFixed(3), ds(cdoh),
+      ds(rdohM1), reqM1.toFixed(1), o1.oq.toFixed(1), moqAdjOrder(o1.oq, moq).toFixed(1), (moqDiff(o1.oq, moq) * 100).toFixed(1) + "%", o1.status,
+      ds(rdohM2), reqM2.toFixed(1), o2.oq.toFixed(1), moqAdjOrder(o2.oq, moq).toFixed(1), (moqDiff(o2.oq, moq) * 100).toFixed(1) + "%", o2.status].join(","));
+  });
+  downloadCSV("consolidated_rm_forward.csv", L.join("\r\n"));
+}
+function exportPM() {
+  const agg = aggregatePM();
+  const L = ["PM Name,MOQ (units),Stock (units),Used/day (units),Current DOH," +
+    "M1 Revised DOH,M1 Required qty,M1 Desired quantity,M1 Actual Quantity,M1 Diff,M1 Status," +
+    "M2 Revised DOH,M2 Required qty,M2 Desired quantity,M2 Actual Quantity,M2 Diff,M2 Status"];
+  const ds = d => d === null ? "" : d.toFixed(1);
+  agg.forEach(e => {
+    const k = normKey(e.name);
+    if (pmMoq[k] == null) pmMoq[k] = String(dummyMoqPm(e.name));
+    const reqM1 = e.reqM1U, reqM2 = e.reqM2U;   // demand-driven month requirement (units)
+    const usage = e.dailyUnits;                  // Used/day = DRR run-rate (reference)
+    const moq = num(pmMoq[k], true);
+    const stock = stockTotal("pm", k);
+    const cdoh = dohByRate(stock, e.dailyUnits);   // DRR run-rate Current DOH (matches the table)
+    const availM1 = stock;
+    const o1 = fwdOrder(reqM1, availM1, moq);
+    const availM2 = availM1 - reqM1;                              // OQ roll-forward (demand)
+    const o2 = fwdOrder(reqM2, availM2, moq);
+    const rdohM1 = usage > 0 ? availM1 / usage : null;            // Revised DOH = DRR run-rate
+    const availM2Doh = availM1 - usage * FWD.DAYS_PER_MONTH;
+    const rdohM2 = usage > 0 ? availM2Doh / usage : null;
+    L.push([csvField(e.name), moq, Math.round(stock), usage.toFixed(3), ds(cdoh),
+      ds(rdohM1), Math.round(reqM1), Math.round(o1.oq), Math.round(moqAdjOrder(o1.oq, moq)), (moqDiff(o1.oq, moq) * 100).toFixed(1) + "%", o1.status,
+      ds(rdohM2), Math.round(reqM2), Math.round(o2.oq), Math.round(moqAdjOrder(o2.oq, moq)), (moqDiff(o2.oq, moq) * 100).toFixed(1) + "%", o2.status].join(","));
+  });
+  downloadCSV("consolidated_pm_forward.csv", L.join("\r\n"));
+}
+function exportSku() {
+  const code = $("skuPicker").value, s = skuIndex[code]; if (!s) return;
+  const pack = num(s.pack_size_g, true);
+  const dem1 = num(demand[code], true), dem2 = num(demandM2[code], true), dem = dem1 + dem2;
+  const lines = [
+    "SKU," + csvField(code), "Product," + csvField(s.fg_name),
+    "Pack size (g)," + pack, "Demand M1 (units)," + dem1, "Demand M2 (units)," + dem2, "Demand 2M (units)," + dem, "",
+    "Raw Material,RM %,g per unit,Required 2M (kg)"
+  ];
+  RM.filter(r => r.sku_code === code).forEach(r => {
+    const p = num(r.rm_pct);
+    lines.push([csvField(r.rm_name), p, ((p / 100) * pack).toFixed(3), ((p / 100) * pack * dem / 1000).toFixed(3)].join(","));
+  });
+  lines.push("", "Packaging Material,Qty per unit,Required 2M (units)");
+  PM.filter(r => r.sku_code === code).forEach(r => {
+    const q = num(r.pm_qty_per_unit);
+    lines.push([csvField(r.pm_name), q, Math.round(q * dem)].join(","));
+  });
+  downloadCSV("sku_" + code.replace(/[^\w.-]/g, "_") + ".csv", lines.join("\r\n"));
+}
+function exportMaster() {
+  const head = ["Mosaic Code", "Material", "Type", "UOM", "Category", "# SKUs in BOM"]
+    .concat(FACTORIES.map(f => f.code + " code"));
+  const lines = [head.join(",")];
+  MATLIST.forEach(e => {
+    const row = [csvField(e.code), csvField(e.name), e.kind.toUpperCase(), csvField(e.uom), csvField(e.category), e.skuCount]
+      .concat(FACTORIES.map(f => csvField(cpCode[f.code][e.key] || "")));
+    lines.push(row.join(","));
+  });
+  downloadCSV("material_master.csv", lines.join("\r\n"));
+}
+function exportInventory() {
+  const days = num(planDays, true);
+  const reqMap = buildReqMap();
+  const head = ["Mosaic Code", "Material", "Type", "UOM"]
+    .concat(FACTORIES.map(f => f.code + " stock")).concat(["Total stock (all)", "Plan/day"]);
+  const lines = [head.join(",")];
+  MATLIST.forEach(e => {
+    const store = e.kind === "rm" ? rmStockF : pmStockF;
+    const stockCells = FACTORIES.map(f => num(store[f.code][e.key], true));
+    const pd = days > 0 ? (reqMap[e.key] || 0) / days : null;
+    const row = [csvField(e.code), csvField(e.name), e.kind.toUpperCase(), csvField(e.uom)]
+      .concat(stockCells).concat([+stockTotal(e.kind, e.key).toFixed(3), pd === null ? "" : +pd.toFixed(3)]);
+    lines.push(row.join(","));
+  });
+  downloadCSV("live_inventory.csv", lines.join("\r\n"));
+}
+
+/* ==================================================================
+ *  DATA-QUALITY BANNERS
+ *  - dataset provenance / RM% gap
+ *  - near-duplicate material names (differ only by case/whitespace)
+ * ================================================================== */
+function dupGroups(names) {
+  const m = new Map();
+  names.forEach(n => { const k = normKey(n); if (!m.has(k)) m.set(k, new Set()); m.get(k).add(n.trim()); });
+  return [...m.values()].filter(set => set.size > 1).map(set => [...set]);
+}
+function renderBanners(source) {
+  const out = [];
+  const total = RM.length, withPct = RM.filter(r => r.rm_pct !== "" && num(r.rm_pct) !== 0 || r.rm_pct === "0").length;
+  const missing = RM.filter(r => r.rm_pct === "").length;
+
+  if (source === "fallback") {
+    out.push('<div class="banner warn">Only the single sample SKU is loaded. <b>Load the full SKU mapping</b> ' +
+      '(place sku_master.csv / bom_rm.csv / bom_pm.csv beside this page, or use “Upload CSVs”) to enable consolidated planning.</div>');
+  }
+  if (missing > 0) {
+    out.push('<div class="banner warn">⚠ <b>' + missing + ' of ' + total + ' RM rows have no % in the source workbook.</b> ' +
+      'RM % is not present in the Excel BOM; values shown are inherited from the one known recipe (Sheet1) by ingredient-name match. ' +
+      'These rows contribute 0 kg until a % is entered (edit on the Per-SKU tab). ' +
+      '<b>Verify all percentages with the formulation team before using output for procurement.</b></div>');
+  }
+  // Sapiens "PM-RM Planing" feed coverage for the consolidated RM tab
+  const rmKeys = new Set(); RM.forEach(r => rmKeys.add(normKey(r.rm_name)));
+  const matchedFirm = [...rmKeys].filter(k => rmFirm[k]).length;
+  if (rmKeys.size && matchedFirm < rmKeys.size) {
+    out.push('<div class="banner info">ℹ <b>' + matchedFirm + ' of ' + rmKeys.size + ' raw materials</b> matched the ' +
+      'Sapiens “PM-RM Planing” feed by name (RM code, current stock col N, expected supply col P). The unmatched ones show ' +
+      '<b>NA</b> for current stock, DOH and order qty (left out of the totals) until material names are reconciled. Verify before raising POs.</div>');
+  }
+
+  // SKUs used in an RM BOM that have no DRR (units/day) row — their consumption
+  // is treated as 0 in the Current DOH run-rate, so flag them rather than hide it.
+  const rmSkus = new Set(RM.map(r => r.sku_code));
+  const noDrr = [...rmSkus].filter(sku => drrBySku[sku] == null || drrBySku[sku] === "");
+  if (noDrr.length) {
+    const show = noDrr.slice(0, 20).map(sku => { const s = skuIndex[sku]; return escapeHtml(sku) + (s ? " (" + escapeHtml(s.fg_name) + ")" : ""); });
+    out.push('<div class="banner warn">⚠ <b>' + noDrr.length + ' SKU' + (noDrr.length > 1 ? "s" : "") + ' in the RM BOM have no DRR (units/day) row.</b> ' +
+      'Their consumption is treated as <b>0</b> when computing <b>Total RM used/day</b> and <b>Current DOH</b> (the DOH will read high or “—”). Reconcile in the DRR feed: ' +
+      show.join(", ") + (noDrr.length > 20 ? ", …" : "") + '.</div>');
+  }
+
+  // near-duplicate name detection
+  const rmDups = dupGroups(RM.map(r => r.rm_name));
+  const pmDups = dupGroups(PM.map(r => r.pm_name));
+  if (rmDups.length || pmDups.length) {
+    let msg = '⚠ Possible duplicate material names (differ only by case/spacing — they will be merged in aggregation): ';
+    msg += [...rmDups, ...pmDups].map(g => '“' + g.join('” ≈ “') + '”').join("; ");
+    out.push('<div class="banner warn">' + msg + '</div>');
+  }
+  $("banners").innerHTML = out.join("");
+}
+
+/* ==================================================================
+ *  TABS + WIRING
+ * ================================================================== */
+/* ==================================================================
+ *  FORWARD-PLANNING HELPERS (shared by Consolidated RM & PM tabs)
+ *  Revised DOH M1/M2 + Order Qty with MOQ gate. Demand-driven:
+ *  usage/day = (demand-based total requirement) / plan horizon.
+ * ================================================================== */
+const FWD = {
+  DAYS_PER_MONTH:   30,    // days per forward month
+  SAFETY_DOH:       30,    // days of cover that triggers RED
+  SAFETY_BUFFER_KG: 0,     // extra target stock added to each month's 'required'
+  LEAD_TIME_DAYS:   60,    // RM lead time (context: why we plan 2 months out)
+  SUPPLY_SPLIT:     "all_m1",  // "all_m1" (impl) | "50_50" (impl) | "by_po_age" (falls back to all_m1)
+  FORECAST_MODE:    "jun_flat" // "jun_flat" (impl) | "trend" | "manual" (both fall back to jun_flat)
+};
+function fwdSupplySplit(total) {
+  if (FWD.SUPPLY_SPLIT === "50_50") return [total / 2, total / 2];
+  return [total, 0];   // all_m1, and by_po_age fallback (no PO-ageing data embedded)
+}
+/* Per-month EXPECTED-DRR multiplier [M1, M2] vs the current (Jun) DRR run-rate.
+ * "jun_flat": flat — expected DRR(M1)=DRR(M2)=current DRR. "trend"/"manual" need
+ * monthly DRR history / a per-SKU forecast column that the dataset does not carry,
+ * so they fall back to flat. TODO: implement once Apr→May→Jun DRR (trend) or a
+ * per-SKU per-month forecast column (manual) is supplied in data.js. */
+function fwdForecastMult() {
+  return [1, 1];   // jun_flat; trend/manual fall back here until source data exists
+}
+function fwdRag(doh) {
+  if (doh === null) return "";
+  if (doh < FWD.SAFETY_DOH) return "doh-bad";
+  if (doh < FWD.SAFETY_DOH * 1.5) return "doh-warn";
+  return "doh-ok";
+}
+function fwdDohCell(doh) {
+  return doh === null ? '<span class="muted">—</span>' : '<span class="' + fwdRag(doh) + '">' + fmt(doh, 1) + '</span>';
+}
+/* Desired quantity for one month = max(0, REQ − (expected supply + current stock)).
+ * REQ is the demand-driven material requirement for that month (passed in as `req`).
+ * diff = (Actual − Desired) / Desired is computed internally to derive the Status flag. */
+function fwdOrder(req, available, moq) {
+  const oq = Math.max(0, req - available);
+  let status = "no order needed", tag = "none";
+  if (oq > 0) {
+    const diff = moqDiff(oq, moq);
+    if (diff > 0) { status = "order excess";  tag = "buf"; }
+    else          { status = "order desired"; tag = "ok"; }
+  }
+  return { oq, status, tag };
+}
+function fwdStatusCell(o) { return '<span class="tag ' + o.tag + '">' + escapeHtml(o.status) + '</span>'; }
+/* Actual Quantity: when an order is needed, floor it at the MOQ —
+ * OQ ≥ MOQ (or no MOQ on file) → OQ unchanged; OQ < MOQ → MOQ; no order needed → 0. */
+function moqAdjOrder(oq, moq) {
+  if (!(oq > 0)) return 0;
+  return (moq > 0 && oq < moq) ? moq : oq;
+}
+/* Diff (fraction): |Desired − Actual| ÷ Desired, positive only.
+ * = (Actual − Desired) ÷ Desired when MOQ lifts the order; 0 otherwise. */
+function moqDiff(oq, moq) {
+  const adj = moqAdjOrder(oq, moq);
+  if (!(oq > 0)) return 0;
+  return Math.max(0, (adj - oq) / oq);
+}
+function diffCell(oq, moq, decimals) {
+  const v = moqDiff(oq, moq);
+  const cls = v > 0 ? ' class="diff-flag"' : '';
+  return '<td class="num"><span' + cls + '>' + fmt(v * 100, decimals) + '%</span></td>';
+}
+/* DUMMY PM MOQ (units) seed — deterministic from the name (no real supplier feed). */
+function dummyMoqPm(name) { const h = hashStr(String(name) + "|pmmoq"); return ((h % 20) + 5) * 100; }  // 500..2500 units
+
+function showTab(name) {
+  curTab = name;
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
+  document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+  $("panel-" + name).classList.add("active");
+  // Output tabs recompute from current state every time they are shown (live).
+  if (name === "demand") renderDemand();
+  if (name === "rm") renderRM();
+  if (name === "pm") renderPM();
+  if (name === "sku") renderSkuDetail($("skuPicker").value || (SKU[0] && SKU[0].sku_code));
+  if (name === "master") renderMaster();
+  if (name === "inv") renderInventory();
+}
+
+function wire() {
+  document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => showTab(t.dataset.tab)));
+
+  $("demandSearch").addEventListener("input", e => { demandFilter = e.target.value; renderDemand(); });
+  $("btnReset").addEventListener("click", () => { SKU.forEach(s => { demand[s.sku_code] = "0"; demandM2[s.sku_code] = "0"; }); showTab(curTab); });
+  $("planDays").addEventListener("input", e => { planDays = e.target.value; if (curTab === "rm" || curTab === "pm") showTab(curTab); });
+
+  // Per-SKU controls
+  $("skuPicker").addEventListener("change", e => renderSkuDetail(e.target.value));
+  $("skuDemand").addEventListener("input", e => { const c = $("skuPicker").value; demand[c] = e.target.value; renderSkuDetail(c); });
+  $("skuDemand2").addEventListener("input", e => { const c = $("skuPicker").value; demandM2[c] = e.target.value; renderSkuDetail(c); });
+  $("skuPack").addEventListener("input", e => { const c = $("skuPicker").value; skuIndex[c].pack_size_g = e.target.value; renderSkuDetail(c); });
+
+  // Exports
+  $("exportRm").addEventListener("click", exportRM);
+  $("exportPm").addEventListener("click", exportPM);
+  $("exportSku").addEventListener("click", exportSku);
+  $("exportMaster").addEventListener("click", exportMaster);
+  $("exportInv").addEventListener("click", exportInventory);
+
+  // Material Master + Live Inventory controls
+  $("masterSearch").addEventListener("input", renderMaster);
+  $("invSearch").addEventListener("input", renderInventory);
+  $("invFactoryFilter").addEventListener("change", renderInventory);
+  $("invKindFilter").addEventListener("change", renderInventory);
+  $("btnInvFile").addEventListener("click", () => $("invFile").click());
+  $("invFile").addEventListener("change", e => {
+    const f = e.target.files[0];
+    e.target.value = "";                                    // allow re-picking the same file
+    if (f) loadInventoryFile(f, FACTORIES[0].code);         // single co-packer: Sapiens
+  });
+
+  // Bulk paste modal
+  $("btnPaste").addEventListener("click", () => { $("pasteArea").value = ""; $("pasteResult").textContent = ""; $("pasteModal").classList.add("show"); });
+  $("closePaste").addEventListener("click", () => $("pasteModal").classList.remove("show"));
+  $("applyPaste").addEventListener("click", applyPaste);
+
+  // Import demand file modal
+  $("btnDemandFile").addEventListener("click", () => {
+    demandRowsFile = null;
+    $("nameDemandFile").textContent = "no file";
+    $("demandFileSetup").style.display = "none";
+    $("demandFileErr").style.display = "none";
+    $("applyDemandFile").disabled = true;
+    $("demandFileModal").classList.add("show");
+  });
+  $("closeDemandFile").addEventListener("click", () => $("demandFileModal").classList.remove("show"));
+  $("pickDemandFile").addEventListener("click", () => $("fileDemand").click());
+  $("fileDemand").addEventListener("change", e => {
+    const f = e.target.files[0];
+    $("nameDemandFile").textContent = f ? f.name : "no file";
+    e.target.value = "";                                  // allow re-picking the same file
+    if (f) loadDemandFile(f);
+  });
+  $("colSku").addEventListener("change", refreshDemandPreview);
+  $("colDemand").addEventListener("change", refreshDemandPreview);
+  $("colDemand2").addEventListener("change", refreshDemandPreview);
+  $("hasHeader").addEventListener("change", () => {
+    if (!demandRowsFile) return;
+    const width = demandRowsFile.reduce((w, r) => Math.max(w, r.length), 0);
+    const hh = $("hasHeader").checked;
+    populateColSelect($("colSku"), width, demandRowsFile, hh, +$("colSku").value);
+    populateColSelect($("colDemand"), width, demandRowsFile, hh, +$("colDemand").value);
+    populateColSelect($("colDemand2"), width, demandRowsFile, hh, +$("colDemand2").value);
+    refreshDemandPreview();
+  });
+  $("applyDemandFile").addEventListener("click", applyDemandFile);
+
+  // Upload modal
+  $("btnUpload").addEventListener("click", () => $("uploadModal").classList.add("show"));
+  $("closeUpload").addEventListener("click", () => $("uploadModal").classList.remove("show"));
+  $("pickSku").addEventListener("click", () => $("fileSku").click());
+  $("pickRm").addEventListener("click", () => $("fileRm").click());
+  $("pickPm").addEventListener("click", () => $("filePm").click());
+  $("fileSku").addEventListener("change", e => { pending.sku = e.target.files[0]; $("nameSku").textContent = pending.sku ? pending.sku.name : "no file"; });
+  $("fileRm").addEventListener("change", e => { pending.rm = e.target.files[0]; $("nameRm").textContent = pending.rm ? pending.rm.name : "no file"; });
+  $("filePm").addEventListener("change", e => { pending.pm = e.target.files[0]; $("namePm").textContent = pending.pm ? pending.pm.name : "no file"; });
+  $("applyUpload").addEventListener("click", applyUpload);
+}
+
+/* Bulk paste: lines of "sku_code <sep> units". sep = tab / comma / whitespace. */
+function applyPaste() {
+  const text = $("pasteArea").value;
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  // case-insensitive lookup of known SKU codes
+  const lut = {}; SKU.forEach(s => lut[s.sku_code.toLowerCase()] = s.sku_code);
+  let matched = 0; const misses = [];
+  lines.forEach(l => {
+    const parts = l.split(/[\t,]+|\s{2,}|\s+/).filter(Boolean);
+    if (parts.length < 2) return;
+    let m1, m2 = null, code;
+    if (parts.length >= 3) {                       // sku, M1, M2
+      m2 = parts[parts.length - 1];
+      m1 = parts[parts.length - 2];
+      code = parts.slice(0, parts.length - 2).join(" ").trim();
+    } else {                                       // sku, M1  (M2 left as-is)
+      m1 = parts[parts.length - 1];
+      code = parts.slice(0, parts.length - 1).join(" ").trim();
+    }
+    const hit = lut[code.toLowerCase()];
+    if (hit) { demand[hit] = m1; if (m2 !== null) demandM2[hit] = m2; matched++; } else misses.push(code);
+  });
+  $("pasteResult").innerHTML = "Matched <b>" + matched + "</b> SKU(s)." +
+    (misses.length ? " Unmatched: " + escapeHtml(misses.slice(0, 8).join(", ")) + (misses.length > 8 ? " …" : "") : "");
+  if (matched) setTimeout(() => { $("pasteModal").classList.remove("show"); showTab(curTab); }, 700);
+}
+
+/* ==================================================================
+ *  IMPORT DEMAND FILE  (one .xlsx / .csv of SKU -> demand)
+ *  Only the demand vector is read; the embedded BOM is untouched.
+ * ================================================================== */
+let demandRowsFile = null;   // 2-D array of the loaded file (leading blank rows trimmed)
+
+function trimLeadingBlank(rows) {
+  let i = 0;
+  while (i < rows.length && rows[i].every(c => String(c == null ? "" : c).trim() === "")) i++;
+  return rows.slice(i);
+}
+const SKU_HINT = /sku|code|item|fg|material|product|article/i;
+const DEM_HINT = /demand|qty|quant|unit|forecast|order|volume|nos|pcs|plan|req/i;
+
+/* Guess header presence + which columns hold SKU and demand. */
+function autoDetectDemandCols(rows) {
+  const width = rows.reduce((w, r) => Math.max(w, r.length), 0);
+  const first = (rows[0] || []).map(c => String(c == null ? "" : c).trim());
+  const hasHeader = first.some(h => SKU_HINT.test(h) || DEM_HINT.test(h));
+  let skuCol = 0, demCol = width > 1 ? 1 : 0, demCol2 = width > 2 ? 2 : demCol;
+  if (hasHeader) {
+    const si = first.findIndex(h => SKU_HINT.test(h));
+    const dems = first.map((h, i) => (i !== si && DEM_HINT.test(h)) ? i : -1).filter(i => i >= 0);
+    if (si >= 0) skuCol = si;
+    if (dems.length >= 1) demCol = dems[0];
+    demCol2 = dems.length >= 2 ? dems[1] : demCol;
+  } else {
+    // No header: the column that looks like a SKU code (has letters) is the SKU,
+    // the numeric columns are the M1 / M2 demand.
+    const sample = rows.find(r => r.some(c => String(c).trim() !== "")) || [];
+    const looksSku = v => /[a-z]/i.test(String(v)) && /[._\d]/.test(String(v));
+    const looksNum = v => String(v).trim() !== "" && isFinite(parseFloat(v));
+    const si = sample.findIndex(looksSku);
+    const nums = sample.map((v, i) => (i !== si && looksNum(v)) ? i : -1).filter(i => i >= 0);
+    if (si >= 0) skuCol = si;
+    if (nums.length >= 1) demCol = nums[0];
+    demCol2 = nums.length >= 2 ? nums[1] : demCol;
+  }
+  if (demCol === skuCol) demCol = skuCol === 0 ? Math.min(1, width - 1) : 0;
+  if (demCol2 === skuCol) demCol2 = demCol;
+  return { hasHeader, skuCol, demCol, demCol2, width };
+}
+
+function populateColSelect(sel, width, rows, hasHeader, chosen) {
+  sel.innerHTML = "";
+  for (let i = 0; i < width; i++) {
+    const o = document.createElement("option");
+    o.value = i;
+    const label = indexToCol(i);
+    const head = hasHeader && rows[0] && String(rows[0][i] || "").trim();
+    o.textContent = head ? (label + " — " + head) : ("Column " + label);
+    if (i === chosen) o.selected = true;
+    sel.appendChild(o);
+  }
+}
+
+/* Read the current selections into matched / missed lists. */
+function computeDemandMatch() {
+  const rows = demandRowsFile || [];
+  const sCol = +$("colSku").value, dCol = +$("colDemand").value, dCol2 = +$("colDemand2").value;
+  const dataRows = $("hasHeader").checked ? rows.slice(1) : rows;
+  const lut = {}; SKU.forEach(s => lut[s.sku_code.toLowerCase()] = s.sku_code);
+  const matches = [], misses = [];
+  dataRows.forEach(r => {
+    const code = String(r[sCol] == null ? "" : r[sCol]).trim();
+    if (!code) return;
+    const m1 = String(r[dCol] == null ? "" : r[dCol]).trim();
+    const m2 = String(r[dCol2] == null ? "" : r[dCol2]).trim();
+    const hit = lut[code.toLowerCase()];
+    if (hit) matches.push([hit, m1, m2]); else misses.push(code);
+  });
+  return { matches, misses, dataRows };
+}
+
+/* Refresh preview table + match summary + Apply button state. */
+function refreshDemandPreview() {
+  if (!demandRowsFile) return;
+  const sCol = +$("colSku").value, dCol = +$("colDemand").value, dCol2 = +$("colDemand2").value;
+  const { matches, misses, dataRows } = computeDemandMatch();
+
+  let h = '<table class="mini"><thead><tr><th>SKU (from file)</th><th class="num">M1</th><th class="num">M2</th><th>Match</th></tr></thead><tbody>';
+  dataRows.slice(0, 6).forEach(r => {
+    const code = String(r[sCol] == null ? "" : r[sCol]).trim();
+    const m1 = String(r[dCol] == null ? "" : r[dCol]).trim();
+    const m2 = String(r[dCol2] == null ? "" : r[dCol2]).trim();
+    if (!code && !m1 && !m2) return;
+    const hit = SKU.some(s => s.sku_code.toLowerCase() === code.toLowerCase());
+    h += '<tr><td class="sku-code">' + escapeHtml(code) + '</td><td class="num">' + escapeHtml(m1) +
+      '</td><td class="num">' + escapeHtml(m2) +
+      '</td><td>' + (hit ? '<span class="ok-badge">✓ matched</span>' : '<span class="miss-badge">no SKU</span>') + '</td></tr>';
+  });
+  h += '</tbody></table>';
+  if (dataRows.length > 6) h += '<div class="hint">…and ' + (dataRows.length - 6) + ' more row(s).</div>';
+  $("demandPreview").innerHTML = h;
+
+  $("demandMatch").innerHTML = "<b>" + matches.length + "</b> of " + (matches.length + misses.length) +
+    " file row(s) match a known SKU." +
+    (misses.length ? ' <span class="miss-badge">Unmatched:</span> ' +
+      escapeHtml(misses.slice(0, 6).join(", ")) + (misses.length > 6 ? " …" : "") : "");
+  $("applyDemandFile").disabled = matches.length === 0;
+}
+
+/* Parse the chosen file into demandRowsFile, then show the mapping UI. */
+async function loadDemandFile(file) {
+  const err = $("demandFileErr");
+  err.style.display = "none"; err.textContent = "";
+  $("demandFileSetup").style.display = "none";
+  $("applyDemandFile").disabled = true;
+  try {
+    let rows;
+    if (/\.csv$/i.test(file.name)) {
+      rows = parseCSV(await file.text());
+    } else if (/\.xlsx$/i.test(file.name)) {
+      rows = await readXlsx(await file.arrayBuffer());
+    } else {
+      throw new Error("Unsupported file type. Use .xlsx or .csv (not the older .xls).");
+    }
+    rows = trimLeadingBlank(rows || []);
+    if (!rows.length) throw new Error("The file has no rows.");
+    demandRowsFile = rows;
+
+    const det = autoDetectDemandCols(rows);
+    $("hasHeader").checked = det.hasHeader;
+    populateColSelect($("colSku"), det.width, rows, det.hasHeader, det.skuCol);
+    populateColSelect($("colDemand"), det.width, rows, det.hasHeader, det.demCol);
+    populateColSelect($("colDemand2"), det.width, rows, det.hasHeader, det.demCol2);
+    $("demandFileSetup").style.display = "block";
+    refreshDemandPreview();
+  } catch (e) {
+    demandRowsFile = null;
+    err.textContent = "⚠ " + (e && e.message ? e.message : "Could not read this file.");
+    err.style.display = "block";
+  }
+}
+
+function applyDemandFile() {
+  const { matches } = computeDemandMatch();
+  if (!matches.length) return;
+  if ($("zeroOthers").checked) SKU.forEach(s => { demand[s.sku_code] = "0"; demandM2[s.sku_code] = "0"; });
+  matches.forEach(([code, m1, m2]) => { demand[code] = (m1 === "" ? "0" : m1); demandM2[code] = (m2 === "" ? "0" : m2); });
+  $("demandFileModal").classList.remove("show");
+  showTab(curTab);
+}
+
+/* Upload: replace dataset from up to 3 CSVs. */
+const pending = { sku: null, rm: null, pm: null };
+function applyUpload() {
+  const reads = [];
+  const data = {
+    sku_master: SKU.map(s => ({ ...s })),
+    bom_rm: RM.map(r => ({ ...r })),
+    bom_pm: PM.map(r => ({ ...r }))
+  };
+  function readFile(file) { return new Promise(res => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsText(file); }); }
+  if (pending.sku) reads.push(readFile(pending.sku).then(t => data.sku_master = csvToObjects(t)));
+  if (pending.rm) reads.push(readFile(pending.rm).then(t => data.bom_rm = csvToObjects(t)));
+  if (pending.pm) reads.push(readFile(pending.pm).then(t => data.bom_pm = csvToObjects(t)));
+  if (!reads.length) { $("uploadModal").classList.remove("show"); return; }
+  Promise.all(reads).then(() => {
+    loadDataset(data);
+    pending.sku = pending.rm = pending.pm = null;
+    $("nameSku").textContent = $("nameRm").textContent = $("namePm").textContent = "no file";
+    $("uploadModal").classList.remove("show");
+    boot("upload");
+  });
+}
+
+/* ==================================================================
+ *  BOOTSTRAP
+ *  Source priority: embedded seed (data.js) -> fetch ./data/*.csv -> fallback SKU.
+ * ================================================================== */
+function setStatus(source) {
+  const txt = {
+    seed: SKU.length + " SKUs · " + RM.length + " RM rows · " + PM.length + " PM rows (embedded dataset)",
+    upload: SKU.length + " SKUs · " + RM.length + " RM rows · " + PM.length + " PM rows (uploaded)",
+    fetch: SKU.length + " SKUs · " + RM.length + " RM rows · " + PM.length + " PM rows (loaded from /data)",
+    fallback: "Sample SKU only — full mapping not found"
+  }[source] || (SKU.length + " SKUs loaded");
+  $("dataStatus").textContent = txt;
+}
+function boot(source) {
+  renderSkuPicker();
+  renderBanners(source);
+  setStatus(source);
+  showTab(curTab);
+}
+
+async function init() {
+  wire();
+  // 1) embedded seed
+  if (window.__MRP_SEED__ && (window.__MRP_SEED__.sku_master || []).length) {
+    loadDataset(window.__MRP_SEED__);
+    return boot("seed");
+  }
+  // 2) try fetching CSVs from ./data (works when served over http)
+  try {
+    const [sm, rm, pm] = await Promise.all([
+      fetch("data/sku_master.csv").then(r => r.ok ? r.text() : Promise.reject()),
+      fetch("data/bom_rm.csv").then(r => r.ok ? r.text() : Promise.reject()),
+      fetch("data/bom_pm.csv").then(r => r.ok ? r.text() : Promise.reject())
+    ]);
+    loadDataset({ sku_master: csvToObjects(sm), bom_rm: csvToObjects(rm), bom_pm: csvToObjects(pm) });
+    return boot("fetch");
+  } catch (_) { /* fall through */ }
+  // 3) fallback
+  loadDataset(FALLBACK);
+  boot("fallback");
+}
+async function loadAndInit() {
+  try {
+    const resp = await fetch('/api/data');
+    if (resp.ok) {
+      const seed = await resp.json();
+      if (seed && Array.isArray(seed.sku_master) && seed.sku_master.length > 0) {
+        window.__MRP_SEED__ = seed;
+      }
+    }
+  } catch (e) {
+    console.warn('Could not load data from /api/data — falling back to embedded data:', e);
+  }
+  init();
+}
+loadAndInit();
+</script>
+</body>
+</html>
