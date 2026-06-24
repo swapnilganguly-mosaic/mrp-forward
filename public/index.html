@@ -2187,7 +2187,39 @@ async function init() {
   loadDataset(FALLBACK);
   boot("fallback");
 }
+// ── Client-side Google Sheets fetch (fallback if Vercel API can't reach gviz) ──
+const _SHEET_ID = '1PDvEjSHOqrn902Y6vIpRvVwlkw3B5HpwP4w6_Stl58o';
+function _parseCSV(text) {
+  if (!text) return [];
+  const rows = []; let row = [], field = '', i = 0, q = false;
+  text = text.replace(/^﻿/, '');
+  while (i < text.length) {
+    const c = text[i];
+    if (q) { if (c==='"') { if (text[i+1]==='"') { field+='"'; i++; } else q=false; } else field+=c; }
+    else { if (c==='"') q=true; else if (c===',') { row.push(field); field=''; }
+           else if (c==='\n') { row.push(field); rows.push(row); row=[]; field=''; }
+           else if (c!=='\r') field+=c; }
+    i++;
+  }
+  if (field||row.length) { row.push(field); rows.push(row); }
+  return rows.filter(r => r.some(c => String(c).trim()!==''));
+}
+function _csvToObjs(text) {
+  const rows = _parseCSV(text); if (rows.length<2) return [];
+  const h = rows[0].map(x => x.trim().toLowerCase());
+  return rows.slice(1).map(r => { const o={}; h.forEach((k,i)=>{ o[k]=String(r[i]??'').trim(); }); return o; });
+}
+function _pick(row, ...keys) {
+  for (const k of keys) { const v=row[k]??row[k.replace(/ /g,'_')]??row[k.replace(/_/g,' ')]; if (v!=null&&v!=='') return v; } return '';
+}
+async function _fetchGviz(tab) {
+  try { const r=await fetch(`https://docs.google.com/spreadsheets/d/${_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tab)}`);
+    const t=await r.text(); if (!r.ok||t.startsWith('<')) return null; return t;
+  } catch { return null; }
+}
+
 async function loadAndInit() {
+  // 1. Try server-side Vercel API
   try {
     const resp = await fetch('/api/data');
     if (resp.ok) {
@@ -2196,8 +2228,50 @@ async function loadAndInit() {
         window.__MRP_SEED__ = seed;
       }
     }
-  } catch (e) {
-    console.warn('Could not load data from /api/data — falling back to embedded data:', e);
+  } catch (e) { console.warn('api/data failed:', e); }
+
+  // 2. If server returned empty, fetch gviz directly from browser
+  if (!window.__MRP_SEED__ || !(window.__MRP_SEED__.sku_master||[]).length) {
+    try {
+      console.log('Fetching live data from Google Sheets (client-side)…');
+      const [skuT,rmT,pmT,drrT,firmT,moqT] = await Promise.all([
+        _fetchGviz('SKU Master'),_fetchGviz('RM BOM'),_fetchGviz('PM BOM'),
+        _fetchGviz('DRR'),_fetchGviz('RM Firm'),_fetchGviz('RM MOQ')
+      ]);
+      const sku_master = _csvToObjs(skuT).map(r=>({
+        sku_code:    _pick(r,'sku_code','sku code','sku','code'),
+        fg_name:     _pick(r,'fg_name','fg name','product name','name','product'),
+        pack_size_g: _pick(r,'pack_size_g','pack size (g)','pack_size','pack size','pack'),
+      })).filter(r=>r.sku_code);
+      const bom_rm = _csvToObjs(rmT).map(r=>({
+        sku_code: _pick(r,'sku_code','sku code','sku'),
+        rm_name:  _pick(r,'rm_name','rm name','raw material','name'),
+        rm_pct:   _pick(r,'rm_pct','rm %','rm percent','pct','percent','%'),
+      })).filter(r=>r.sku_code&&r.rm_name);
+      const bom_pm = _csvToObjs(pmT).map(r=>({
+        sku_code:        _pick(r,'sku_code','sku code','sku'),
+        pm_name:         _pick(r,'pm_name','pm name','packaging material','name'),
+        pm_qty_per_unit: _pick(r,'pm_qty_per_unit','qty per unit','qty/unit','qty','quantity')||'1',
+        pm_code:         _pick(r,'pm_code','pm code','code')||'',
+      })).filter(r=>r.sku_code&&r.pm_name);
+      const drr = {};
+      _csvToObjs(drrT).forEach(r=>{ const s=_pick(r,'sku_code','sku code','sku'); const v=_pick(r,'drr','units/day','units per day','daily run rate'); if(s) drr[s]=parseFloat(v)||0; });
+      const rm_firm = _csvToObjs(firmT).map(r=>({
+        name:   _pick(r,'name','rm_name','rm name','material'),
+        code:   _pick(r,'code','rm_code','rm code'),
+        stock:  _pick(r,'stock','current stock','stock (kg)'),
+        supply: _pick(r,'supply','supply_m1','expected supply','supply (kg)'),
+      })).filter(r=>r.name);
+      const rm_moq = _csvToObjs(moqT).map(r=>({
+        name: _pick(r,'name','rm_name','rm name','material'),
+        code: _pick(r,'code','rm_code')||'',
+        moq:  _pick(r,'moq','moq (kg)','minimum order qty'),
+      })).filter(r=>r.name);
+      if (sku_master.length>0) {
+        window.__MRP_SEED__ = { sku_master, bom_rm, bom_pm, drr, rm_firm, rm_moq };
+        console.log('Live data loaded:', sku_master.length, 'SKUs,', rm_firm.length, 'RM Firm rows');
+      }
+    } catch (e) { console.warn('Client-side gviz fetch failed:', e); }
   }
   init();
 }
