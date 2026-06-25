@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>MRP — Forward Planning (Revised DOH M1/M2 &amp; Order Qty)</title>
+<title>MRP — Forward Planning</title>
 <style>
   :root {
     --bg:#f4f6f9; --card:#fff; --border:#d9dee6; --accent:#2563eb;
@@ -61,9 +61,6 @@
     font-size:12px; font-weight:600; }
   .pct-ok { color:var(--good); font-weight:700; }
   .pct-bad { color:var(--warn); font-weight:700; }
-  .doh-ok { color:var(--good); font-weight:700; }
-  .doh-warn { color:var(--warn); font-weight:700; }
-  .doh-bad { color:#dc2626; font-weight:700; }
   .diff-flag { color:#dc2626; font-weight:700; }
   th.grp { text-align:center; border-left:2px solid var(--border); color:var(--accent); }
   td.grpL { border-left:2px solid var(--border); }
@@ -155,7 +152,6 @@
         <tr>
           <th style="width:34%">Finished Good (SKU)</th>
           <th class="num" style="width:12%">Pack size (g)</th>
-          <th class="num" style="width:12%">DRR (units/day)</th>
           <th class="num" style="width:14%">Supply M1 (units)</th>
           <th class="num" style="width:14%">Supply M2 (units)</th>
           <th class="num" style="width:14%">Batch weight 2M (kg)</th>
@@ -165,8 +161,6 @@
       <tfoot>
         <tr>
           <td>Total · <span id="demandSkuTotal">0</span> SKUs with demand</td>
-          <td class="num muted">—</td>
-          <td class="num req" id="demandDrrTotal">0.0</td>
           <td class="num req" id="demandUnitsTotal">0</td>
           <td class="num req" id="demandUnitsTotalM2">0</td>
           <td class="num req" id="demandKgTotal">0.000</td>
@@ -177,8 +171,7 @@
       <b>Import demand file</b> and the consolidated RM/PM tabs compute the order quantity for each month automatically.
       Demand &amp; pack size recalculate every other tab live — there is no submit button.
       Batch weight 2M (kg) = pack size (g) × (M1 + M2 demand) ÷ 1000. Empty / non-numeric entries are treated as 0.
-      <b>DRR</b> (daily run rate, units/day) is the <b>Product DRR</b> read from the Stock Matrix Base
-      <code>Main</code> sheet (column AR), matched per SKU — read-only reference.</div>
+</div>
   </section>
 
   <!-- ============ TAB 2: CONSOLIDATED RM ============ -->
@@ -189,7 +182,7 @@
       <div class="kpi"><b id="rmSupplyTot">0.000</b><span>Expected supply (kg)</span></div>
       <div class="kpi"><b id="rmOrderM1">0.0</b><span>Order — M1 (kg)</span></div>
       <div class="kpi"><b id="rmOrderM2">0.0</b><span>Order — M2 (kg)</span></div>
-      <div class="kpi"><b id="rmAtRisk">0</b><span>At-risk (Revised DOH M1 &lt; safety)</span></div>
+      <div class="kpi"><b id="rmAtRisk">0</b><span>M1 orders needed</span></div>
       <div class="spacer"></div>
       <div class="field" style="justify-content:flex-end"><button class="btn primary" id="exportRm">Export RM CSV</button></div>
     </div>
@@ -202,17 +195,15 @@
           <th rowspan="2">RM Name</th>
           <th rowspan="2" class="num">MOQ (kg)</th>
           <th rowspan="2" class="num">Current stock (kg)</th>
-          <th rowspan="2" class="num">Exp. supply<br>M1 (kg)</th>
-          <th rowspan="2" class="num">Exp. supply<br>M2 (kg)</th>
-          <th rowspan="2" class="num">Used/day (kg)</th>
-          <th rowspan="2" class="num">Current DOH</th>
-          <th colspan="6" class="grp">Month 1 (0–30 d)</th>
-          <th colspan="6" class="grp">Month 2 (31–60 d)</th>
+          <th rowspan="2" class="num">Exp. supply M1</th>
+          <th rowspan="2" class="num">Exp. supply M2</th>
+          <th colspan="5" class="grp">Month 1 (0–30 d)</th>
+          <th colspan="5" class="grp">Month 2 (31–60 d)</th>
           <th rowspan="2" style="width:80px"></th>
         </tr>
         <tr>
-          <th class="num grp">Revised DOH</th><th class="num">Required qty</th><th class="num">Desired quantity</th><th class="num">Actual Quantity</th><th class="num">Diff</th><th>Status</th>
-          <th class="num grp">Revised DOH</th><th class="num">Required qty</th><th class="num">Desired quantity</th><th class="num">Actual Quantity</th><th class="num">Diff</th><th>Status</th>
+          <th class="num">Required qty</th><th class="num">Desired qty</th><th class="num">Actual Qty</th><th class="num">Diff</th><th>Status</th>
+          <th class="num">Required qty</th><th class="num">Desired qty</th><th class="num">Actual Qty</th><th class="num">Diff</th><th>Status</th>
         </tr>
       </thead>
       <tbody id="rmRows"></tbody>
@@ -221,24 +212,13 @@
         <td class="num req" id="rmFootStock">0.000</td>
         <td class="num req" id="rmFootSupplyM1">0.000</td>
         <td class="num req" id="rmFootSupplyM2">0.000</td>
-        <td class="num req" id="rmFootUsage">0.000</td>
-        <td></td>
-        <td class="grpL"></td><td class="num req" id="rmFootReqM1">0.0</td><td class="num req" id="rmFootM1">0.0</td><td class="num req" id="rmFootAdjM1">0.0</td><td></td><td></td>
-        <td class="grpL"></td><td class="num req" id="rmFootReqM2">0.0</td><td class="num req" id="rmFootM2">0.0</td><td class="num req" id="rmFootAdjM2">0.0</td><td></td><td></td>
+        <td class="num req" id="rmFootReqM1">0.0</td><td class="num req" id="rmFootM1">0.0</td><td class="num req" id="rmFootAdjM1">0.0</td><td></td><td></td>
+        <td class="num req" id="rmFootReqM2">0.0</td><td class="num req" id="rmFootM2">0.0</td><td class="num req" id="rmFootAdjM2">0.0</td><td></td><td></td>
         <td></td>
       </tr></tfoot>
     </table>
     </div>
-    <div class="hint"><b>Forward planning</b>: order quantity is driven by the <b>imported 2-month SKU demand</b> (Tab 1); Revised DOH by the <b>DRR run-rate</b>.
-      <b>Desired quantity</b> (per month) = max(0, <b>REQ − (Exp. supply + Current stock)</b>), floored at 0; <b>REQ</b> = that month's SKU demand exploded through the recipe = Σ(rm_pct ÷ 100 × pack_size_g × month demand ÷ 1000) kg, shown in the <b>Required qty</b> column. M1 consumes REQ M1; its closing stock + supply M2 carries into M2's order quantity.
-      <b>Actual Quantity</b> floors the order at the MOQ: OQ ≥ MOQ (or no MOQ on file) → OQ unchanged; 0 &lt; OQ &lt; MOQ → MOQ; no order needed → 0.
-      <b>Diff</b> = (Desired − Actual) ÷ Desired, positive values only — shows MOQ over-buy as a % of the desired quantity; 0 when no MOQ uplift.
-      <b>Status</b>: <b>Order desired</b> when Diff = 0 (no MOQ uplift); <b>Order excess</b> (red) when Diff &gt; 0 (MOQ forces a larger order).
-      <b>Used/day</b> = <b>DRR run-rate</b> kg/day = Σ(rm_pct ÷ 100 × pack_size_g × Product DRR ÷ 1000). <b>Current DOH</b> = current stock ÷ used/day.
-      <b>Revised DOH</b> rolls forward on used/day: available M1 = stock + supply M1, revised DOH = available ÷ used/day; closing M1 = available M1 − used/day × 30, + supply M2 → available M2 ÷ used/day. RAG-coloured vs the safety cover.
-      <b>Exp. supply M1 / M2</b> split the total Sapiens expected supply per <code>SUPPLY_SPLIT</code> (<code>all_m1</code> → all in M1; <code>50_50</code> → half each).
-      <b>RM Code / Current stock / Exp. supply</b> are the Sapiens “PM-RM Planing” feed; unmatched materials show <b>NA</b>. <b>MOQ</b> is from <b>RM PM Req</b> Sheet2 (blank = none on file; editable).
-      Click a row to drill into per-SKU contributions. Edit current stock on the <b>Live Inventory</b> tab. <b>Verify against the source sheets before raising any PO.</b></div>
+    <div class="hint"><b>Forward planning</b>: <b>Required qty</b> (per month, kg) = Σ(rm_pct ÷ 100 × pack_size_g × month demand ÷ 1000). M1→M2 carry-forward: closing M1 stock = current stock + supply M1 − required M1 (may be negative). <b>Desired quantity</b> = max(0, REQ − available). <b>Actual Quantity</b> floors at MOQ. Click a row for per-SKU details. <b>Verify before raising any PO.</b></div>
   </section>
 
   <!-- ============ TAB 3: CONSOLIDATED PM ============ -->
@@ -248,7 +228,7 @@
       <div class="kpi"><b id="pmStockTot">0</b><span>Stock in hand (units)</span></div>
       <div class="kpi"><b id="pmOrderM1">0</b><span>Order — M1 (units)</span></div>
       <div class="kpi"><b id="pmOrderM2">0</b><span>Order — M2 (units)</span></div>
-      <div class="kpi"><b id="pmAtRisk">0</b><span>At-risk (Revised DOH M1 &lt; safety)</span></div>
+      <div class="kpi"><b id="pmAtRisk">0</b><span>M1 orders needed</span></div>
       <div class="spacer"></div>
       <div class="field" style="justify-content:flex-end"><button class="btn primary" id="exportPm">Export PM CSV</button></div>
     </div>
@@ -260,36 +240,26 @@
           <th rowspan="2">Packaging Material</th>
           <th rowspan="2" class="num">MOQ (units)</th>
           <th rowspan="2" class="num">Stock in hand (units)</th>
-          <th rowspan="2" class="num">Used/day (units)</th>
-          <th rowspan="2" class="num">Current DOH</th>
-          <th colspan="6" class="grp">Month 1 (0–30 d)</th>
-          <th colspan="6" class="grp">Month 2 (31–60 d)</th>
+          <th colspan="5" class="grp">Month 1 (0–30 d)</th>
+          <th colspan="5" class="grp">Month 2 (31–60 d)</th>
           <th rowspan="2" style="width:90px"></th>
         </tr>
         <tr>
-          <th class="num grp">Revised DOH</th><th class="num">Required qty</th><th class="num">Desired quantity</th><th class="num">Actual Quantity</th><th class="num">Diff</th><th>Status</th>
-          <th class="num grp">Revised DOH</th><th class="num">Required qty</th><th class="num">Desired quantity</th><th class="num">Actual Quantity</th><th class="num">Diff</th><th>Status</th>
+          <th class="num">Required qty</th><th class="num">Desired quantity</th><th class="num">Actual Quantity</th><th class="num">Diff</th><th>Status</th>
+          <th class="num">Required qty</th><th class="num">Desired quantity</th><th class="num">Actual Quantity</th><th class="num">Diff</th><th>Status</th>
         </tr>
       </thead>
       <tbody id="pmRows"></tbody>
       <tfoot><tr>
         <td colspan="2">Grand total · <span id="pmDistinct2">0</span> PM</td>
         <td class="num req" id="pmFootStock">0</td>
-        <td class="num req" id="pmFootUsage">0.000</td>
-        <td></td>
-        <td class="grpL"></td><td class="num req" id="pmFootReqM1">0</td><td class="num req" id="pmFootM1">0</td><td class="num req" id="pmFootAdjM1">0</td><td></td><td></td>
-        <td class="grpL"></td><td class="num req" id="pmFootReqM2">0</td><td class="num req" id="pmFootM2">0</td><td class="num req" id="pmFootAdjM2">0</td><td></td><td></td>
+        <td class="num req" id="pmFootReqM1">0</td><td class="num req" id="pmFootM1">0</td><td class="num req" id="pmFootAdjM1">0</td><td></td><td></td>
+        <td class="num req" id="pmFootReqM2">0</td><td class="num req" id="pmFootM2">0</td><td class="num req" id="pmFootAdjM2">0</td><td></td><td></td>
         <td></td>
       </tr></tfoot>
     </table>
     </div>
-    <div class="hint"><b>Forward planning</b>: order quantity is driven by the <b>imported 2-month SKU demand</b> (Tab 1); Revised DOH by the <b>DRR run-rate</b>.
-      <b>Desired quantity</b> (per month) = max(0, <b>REQ − Current stock</b>), floored at 0 — PM has <b>no expected-supply feed</b>; <b>REQ</b> = Σ(pm_qty_per_unit × month demand) units, shown in the <b>Required qty</b> column. M1 consumes REQ M1; its closing stock carries into M2's order quantity.
-      <b>Actual Quantity</b> floors the order at the MOQ: OQ ≥ MOQ → OQ unchanged; 0 &lt; OQ &lt; MOQ → MOQ; no order needed → 0.
-      <b>Diff</b> = (Desired − Actual) ÷ Desired, positive values only — shows MOQ over-buy as a % of the desired quantity; 0 when no MOQ uplift.
-      <b>Status</b>: <b>Order desired</b> when Diff = 0 (no MOQ uplift); <b>Order excess</b> (red) when Diff &gt; 0 (MOQ forces a larger order).
-      <b>Used/day</b> = <b>DRR run-rate</b> units/day = Σ(pm_qty_per_unit × Product DRR). <b>Current DOH</b> = stock ÷ used/day. <b>Revised DOH</b> rolls forward on used/day: available M1 = stock, revised DOH = available ÷ used/day; closing M1 = available M1 − used/day × 30 carries into M2 (no M2 supply).
-      <b>Stock is DUMMY</b> (edit on the Live Inventory tab) and <b>MOQ is DUMMY &amp; editable</b> (units). Click a row to drill into per-SKU contributions. <b>Verify before raising any PO.</b></div>
+    <div class="hint"><b>Forward planning</b>: <b>Required qty</b> (per month, units) = Σ(pm_qty_per_unit × month demand). M1→M2 carry-forward: closing M1 stock = current stock − required M1 (may be negative). PM has no expected-supply feed. <b>Desired quantity</b> = max(0, REQ − available). <b>Actual Quantity</b> floors at MOQ. Click a row for per-SKU details. <b>Verify before raising any PO.</b></div>
   </section>
 
   <!-- ============ TAB 4: PER-SKU BREAKDOWN ============ -->
@@ -892,28 +862,24 @@ function stockTotal(kind, key) {
  *  Returns consolidated RM (kg) and PM (units) keyed by material name.
  * ================================================================== */
 function aggregateRM() {
-  const map = new Map();    // normKey -> {name, kg, dailyKg, skus:[{sku,fg,pct,kg,dem,drr,dailyKg}]}
+  const map = new Map();    // normKey -> {name, kg, skus:[{sku,fg,pct,kg,dem1,dem2}]}
   RM.forEach(r => {
     const s = skuIndex[r.sku_code]; if (!s) return;
     const dem1 = num(demand[r.sku_code], true);
     const dem2 = num(demandM2[r.sku_code], true);
     const pack = num(s.pack_size_g, true);
     const pct = num(r.rm_pct);
-    const drr = num(drrBySku[r.sku_code], true);
     // REQ: month requirement kg = (rm_pct/100) * pack_size_g * month demand / 1000
     const reqM1 = (pct / 100) * pack * dem1 / 1000;
     const reqM2 = (pct / 100) * pack * dem2 / 1000;
     const kg = reqM1 + reqM2;                                       // total 2-month requirement
-    // RUN-RATE: daily kg consumed at current Product DRR = (rm_pct/100) * pack_size_g * DRR / 1000
-    const dailyKg = (pct / 100) * pack * drr / 1000;
     const k = normKey(r.rm_name);
     let e = map.get(k);
-    if (!e) { e = { name: r.rm_name, kg: 0, reqM1Kg: 0, reqM2Kg: 0, dailyKg: 0, skus: [] }; map.set(k, e); }
+    if (!e) { e = { name: r.rm_name, kg: 0, reqM1Kg: 0, reqM2Kg: 0, skus: [] }; map.set(k, e); }
     e.kg += kg;
     e.reqM1Kg += reqM1;
     e.reqM2Kg += reqM2;
-    e.dailyKg += dailyKg;
-    e.skus.push({ sku: r.sku_code, fg: s.fg_name, pct, dem: dem1 + dem2, dem1, dem2, kg, drr, dailyKg });
+    e.skus.push({ sku: r.sku_code, fg: s.fg_name, pct, dem: dem1 + dem2, dem1, dem2, kg });
   });
   return [...map.values()].sort((a, b) => b.kg - a.kg);
 }
@@ -931,21 +897,17 @@ function aggregatePM() {
     const dem1 = num(demand[r.sku_code], true);
     const dem2 = num(demandM2[r.sku_code], true);
     const qty = num(r.pm_qty_per_unit);
-    const drr = num(drrBySku[r.sku_code], true);
     // REQ: month requirement units = pm_qty_per_unit * month demand
     const reqM1 = qty * dem1;
     const reqM2 = qty * dem2;
     const units = reqM1 + reqM2;                              // total 2-month requirement
-    // RUN-RATE: daily units consumed at current Product DRR = pm_qty_per_unit * DRR
-    const dailyUnits = qty * drr;
     const k = normKey(r.pm_name);
     let e = map.get(k);
-    if (!e) { e = { name: r.pm_name, units: 0, reqM1U: 0, reqM2U: 0, dailyUnits: 0, skus: [] }; map.set(k, e); }
+    if (!e) { e = { name: r.pm_name, units: 0, reqM1U: 0, reqM2U: 0, skus: [] }; map.set(k, e); }
     e.units += units;
     e.reqM1U += reqM1;
     e.reqM2U += reqM2;
-    e.dailyUnits += dailyUnits;
-    e.skus.push({ sku: r.sku_code, fg: s.fg_name, qty, dem: dem1 + dem2, units, drr, dailyUnits });
+    e.skus.push({ sku: r.sku_code, fg: s.fg_name, qty, dem: dem1 + dem2, units });
   });
   return [...map.values()].sort((a, b) => b.units - a.units);
 }
@@ -1002,10 +964,6 @@ function renderDemand() {
     const packIn = mkNum(s.pack_size_g, v => { s.pack_size_g = v; updateDemandRow(tr, s); updateDemandFooter(); });
     tdPack.appendChild(packIn);
 
-    const tdDrr = document.createElement("td"); tdDrr.className = "num";   // Product DRR (read-only feed)
-    const drrv = drrBySku[s.sku_code];
-    tdDrr.innerHTML = (drrv == null || drrv === "") ? '<span class="muted">—</span>' : fmt(drrv, 1);
-
     const tdDem = document.createElement("td"); tdDem.className = "num";
     const demIn = mkNum(demand[s.sku_code], v => { demand[s.sku_code] = v; updateDemandRow(tr, s); updateDemandFooter(); });
     tdDem.appendChild(demIn);
@@ -1016,7 +974,7 @@ function renderDemand() {
 
     const tdKg = document.createElement("td"); tdKg.className = "num req"; tdKg.dataset.kg = "1";
 
-    tr.append(tdName, tdPack, tdDrr, tdDem, tdDem2, tdKg);
+    tr.append(tdName, tdPack, tdDem, tdDem2, tdKg);
     tbody.appendChild(tr);
     updateDemandRow(tr, s);
   });
@@ -1030,16 +988,14 @@ function updateDemandRow(tr, s) {
   tr.querySelector('[data-kg]').textContent = fmt(pack * dem / 1000, 3);
 }
 function updateDemandFooter() {
-  let units = 0, unitsM2 = 0, kg = 0, n = 0, drrSum = 0;
+  let units = 0, unitsM2 = 0, kg = 0, n = 0;
   SKU.forEach(s => {
     const d1 = num(demand[s.sku_code], true), d2 = num(demandM2[s.sku_code], true);
     if (d1 > 0 || d2 > 0) n++;
     units += d1;
     unitsM2 += d2;
     kg += num(s.pack_size_g, true) * (d1 + d2) / 1000;
-    drrSum += num(drrBySku[s.sku_code], true);
   });
-  $("demandDrrTotal").textContent = fmt(drrSum, 1);
   $("demandUnitsTotal").textContent = fmt(units, 0);
   $("demandUnitsTotalM2").textContent = fmt(unitsM2, 0);
   $("demandKgTotal").textContent = fmt(kg, 3);
@@ -1059,56 +1015,41 @@ function fwdCfgHtml() {
 }
 function renderRM() {
   const agg = aggregateRM();
-  const days = num(planDays, true);
   $("rmCfg").innerHTML = fwdCfgHtml();
   const NA = '<span class="muted">NA</span>';
 
   const items = agg.map(e => {
     const k = normKey(e.name);
     const matched = !!rmFirm[k];
-    const reqM1 = e.reqM1Kg, reqM2 = e.reqM2Kg;          // demand-driven month requirement (kg)
-    const usage = e.dailyKg;                              // Used/day column = DRR run-rate (reference)
+    const reqM1 = e.reqM1Kg, reqM2 = e.reqM2Kg;
     const moq = num(rmMoq[k], true);
     const code = rmCodeReal[k] || (matMaster[k] ? matMaster[k].code : "");
-    let stock = null, supply = 0, supM1 = 0, supM2 = 0, cdoh = null, rdohM1 = null, rdohM2 = null, oM1 = null, oM2 = null;
+    let stock = null, supply = 0, supM1 = 0, supM2 = 0, oM1 = null, oM2 = null;
     if (matched) {
       stock = stockTotal("rm", k);
       supply = num(rmSupply[k], true);
       [supM1, supM2] = fwdSupplySplit(supply);
-      // Current DOH = cover at the CURRENT consumption rate from the real Product DRR feed.
-      cdoh = dohByRate(stock, e.dailyKg);
-      // M1 available is shared by both calcs (no consumption yet this month).
-      // Desired quantity (per month) = max(0, REQ − (exp supply + available stock)), floored at 0 — demand-driven.
       const availM1 = stock + supM1;
       oM1 = fwdOrder(reqM1, availM1, moq);
-      const availM2Oq = (availM1 - reqM1) + supM2;        // OQ roll-forward: M1 consumes REQ(M1)
-      oM2 = fwdOrder(reqM2, availM2Oq, moq);
-      // Revised DOH roll-forward uses the DRR run-rate (Used/day), independent of demand:
-      //   available_M1 = stock + supply_M1; revised_doh_M1 = available_M1 / used_per_day
-      //   closing_M1   = available_M1 − used_per_day × DAYS_PER_MONTH
-      //   available_M2 = closing_M1 + supply_M2; revised_doh_M2 = available_M2 / used_per_day
-      rdohM1 = usage > 0 ? availM1 / usage : null;
-      const closingM1 = availM1 - usage * FWD.DAYS_PER_MONTH;
-      const availM2Doh = closingM1 + supM2;
-      rdohM2 = usage > 0 ? availM2Doh / usage : null;
+      const stockIntoM2 = stock + supM1 - reqM1;   // carry-forward (may be negative)
+      const availM2 = stockIntoM2 + supM2;
+      oM2 = fwdOrder(reqM2, availM2, moq);
     }
-    return { e, k, matched, usage, supply, supM1, supM2, moq, code, stock, cdoh, rdohM1, rdohM2, oM1, oM2 };
+    return { e, k, matched, supply, supM1, supM2, moq, code, stock, oM1, oM2 };
   });
   items.sort((a, b) => {
-    const av = (a.matched && a.rdohM1 !== null) ? a.rdohM1 : Infinity;
-    const bv = (b.matched && b.rdohM1 !== null) ? b.rdohM1 : Infinity;
-    return av - bv;
+    if (a.matched !== b.matched) return a.matched ? -1 : 1;
+    return b.e.reqM1Kg - a.e.reqM1Kg;
   });
 
   const tbody = $("rmRows"); tbody.innerHTML = "";
-  let stockTot = 0, supplyTot = 0, supM1Tot = 0, supM2Tot = 0, usageTot = 0, m1Tot = 0, m2Tot = 0, adjM1Tot = 0, adjM2Tot = 0, reqM1Tot = 0, reqM2Tot = 0, atRisk = 0, na = 0;
+  let stockTot = 0, supplyTot = 0, supM1Tot = 0, supM2Tot = 0, m1Tot = 0, m2Tot = 0, adjM1Tot = 0, adjM2Tot = 0, reqM1Tot = 0, reqM2Tot = 0, ordersNeeded = 0, na = 0;
   items.forEach(r => {
-    usageTot += r.usage;
-    reqM1Tot += r.e.reqM1Kg; reqM2Tot += r.e.reqM2Kg;   // required qty is demand-driven (counts even for NA rows)
+    reqM1Tot += r.e.reqM1Kg; reqM2Tot += r.e.reqM2Kg;
     const tr = document.createElement("tr"); tr.className = "clickable";
-    const moqVal = (rmMoq[r.k] == null ? "" : rmMoq[r.k]);   // raw string: real MOQ (kg) or blank
+    const moqVal = (rmMoq[r.k] == null ? "" : rmMoq[r.k]);
     const moqIn = '<input class="cell" type="number" min="0" step="25" value="' + escapeHtml(moqVal) +
-      '" data-k="' + escapeHtml(r.k) + '" style="width:80px" title="MOQ kg — RM PM Req Sheet2 (blank = none on file; editable)">';
+      '" data-k="' + escapeHtml(r.k) + '" style="width:80px" title="MOQ kg — editable">';
     if (!r.matched) {
       na++;
       tr.innerHTML =
@@ -1117,28 +1058,25 @@ function renderRM() {
         '<td class="num">' + NA + '</td>' +
         '<td class="num"><span class="muted">—</span></td>' +
         '<td class="num"><span class="muted">—</span></td>' +
-        '<td class="num">' + fmt(r.usage, 3) + '</td>' +
-        '<td class="num">' + NA + '</td>' +
-        '<td class="num grpL">' + NA + '</td><td class="num">' + fmt(r.e.reqM1Kg, 1) + '</td><td class="num">NA</td><td class="num">NA</td><td class="num">NA</td><td><span class="tag none">no stock feed</span></td>' +
-        '<td class="num grpL">' + NA + '</td><td class="num">' + fmt(r.e.reqM2Kg, 1) + '</td><td class="num">NA</td><td class="num">NA</td><td class="num">NA</td><td><span class="tag none">no stock feed</span></td>' +
+        '<td class="num">' + fmt(r.e.reqM1Kg, 1) + '</td><td class="num">NA</td><td class="num">NA</td><td class="num">NA</td><td><span class="tag none">no stock feed</span></td>' +
+        '<td class="num">' + fmt(r.e.reqM2Kg, 1) + '</td><td class="num">NA</td><td class="num">NA</td><td class="num">NA</td><td><span class="tag none">no stock feed</span></td>' +
         '<td class="num"><button class="expand-btn">▸ details</button></td>';
     } else {
-      stockTot += r.stock; supplyTot += r.supply; supM1Tot += r.supM1; supM2Tot += r.supM2; m1Tot += r.oM1.oq; m2Tot += r.oM2.oq;
+      stockTot += r.stock; supplyTot += r.supply; supM1Tot += r.supM1; supM2Tot += r.supM2;
+      m1Tot += r.oM1.oq; m2Tot += r.oM2.oq;
       adjM1Tot += moqAdjOrder(r.oM1.oq, r.moq); adjM2Tot += moqAdjOrder(r.oM2.oq, r.moq);
-      if (r.rdohM1 !== null && r.rdohM1 < FWD.SAFETY_DOH) atRisk++;
+      if (r.oM1.oq > 0) ordersNeeded++;
       tr.innerHTML =
         '<td class="sku-code">' + escapeHtml(r.code || "—") + '</td><td>' + escapeHtml(r.e.name) + '</td>' +
         '<td class="num">' + moqIn + '</td>' +
         '<td class="num req">' + fmt(r.stock, 3) + '</td>' +
         '<td class="num">' + fmt(r.supM1, 3) + '</td>' +
         '<td class="num">' + fmt(r.supM2, 3) + '</td>' +
-        '<td class="num">' + fmt(r.usage, 3) + '</td>' +
-        '<td class="num">' + fwdDohCell(r.cdoh) + '</td>' +
-        '<td class="num grpL">' + fwdDohCell(r.rdohM1) + '</td><td class="num">' + fmt(r.e.reqM1Kg, 1) + '</td><td class="num req">' + fmt(r.oM1.oq, 1) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM1.oq, r.moq), 1) + '</td>' + diffCell(r.oM1.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM1) + '</td>' +
-        '<td class="num grpL">' + fwdDohCell(r.rdohM2) + '</td><td class="num">' + fmt(r.e.reqM2Kg, 1) + '</td><td class="num req">' + fmt(r.oM2.oq, 1) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM2.oq, r.moq), 1) + '</td>' + diffCell(r.oM2.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM2) + '</td>' +
+        '<td class="num">' + fmt(r.e.reqM1Kg, 1) + '</td><td class="num req">' + fmt(r.oM1.oq, 1) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM1.oq, r.moq), 1) + '</td>' + diffCell(r.oM1.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM1) + '</td>' +
+        '<td class="num">' + fmt(r.e.reqM2Kg, 1) + '</td><td class="num req">' + fmt(r.oM2.oq, 1) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM2.oq, r.moq), 1) + '</td>' + diffCell(r.oM2.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM2) + '</td>' +
         '<td class="num"><button class="expand-btn">▸ details</button></td>';
     }
-    const drill = mkDrill(21, drillTableRM(r.e));
+    const drill = mkDrill(17, drillTableRM(r.e));
     tbody.appendChild(tr); tbody.appendChild(drill);
     const btn = tr.querySelector(".expand-btn");
     btn.addEventListener("click", (ev) => { ev.stopPropagation(); toggleDrill(tr, drill, ev.target); });
@@ -1154,11 +1092,10 @@ function renderRM() {
   $("rmSupplyTot").textContent = fmt(supplyTot, 3);
   $("rmOrderM1").textContent = fmt(m1Tot, 1);
   $("rmOrderM2").textContent = fmt(m2Tot, 1);
-  $("rmAtRisk").textContent = atRisk;
+  $("rmAtRisk").textContent = ordersNeeded;
   $("rmFootStock").textContent = fmt(stockTot, 3);
   $("rmFootSupplyM1").textContent = fmt(supM1Tot, 3);
   $("rmFootSupplyM2").textContent = fmt(supM2Tot, 3);
-  $("rmFootUsage").textContent = fmt(usageTot, 3);
   $("rmFootReqM1").textContent = fmt(reqM1Tot, 1);
   $("rmFootReqM2").textContent = fmt(reqM2Tot, 1);
   $("rmFootM1").textContent = fmt(m1Tot, 1);
@@ -1179,15 +1116,14 @@ function updateRmDiff(td, moqVal, order) {
   td.textContent = fmt(Math.max(0, (moq - order) / order * 100), 1) + "%";
 }
 function drillTableRM(e) {
-  const rows = e.skus.filter(x => x.kg > 0 || x.dem > 0 || x.dailyKg > 0).sort((a, b) => (b.kg - a.kg) || (b.dailyKg - a.dailyKg));
-  if (!rows.length) return '<div class="muted" style="padding:6px">No demand or run-rate for SKUs using this material.</div>';
-  let h = '<table><thead><tr><th>SKU</th><th>Product</th><th class="num">RM %</th><th class="num">Demand</th><th class="num">kg</th>' +
-    '<th class="num">DRR</th><th class="num">kg/day</th></tr></thead><tbody>';
+  const rows = e.skus.filter(x => x.kg > 0 || x.dem > 0).sort((a, b) => b.kg - a.kg);
+  if (!rows.length) return '<div class="muted" style="padding:6px">No demand for SKUs using this material.</div>';
+  let h = '<table><thead><tr><th>SKU</th><th>Product</th><th class="num">RM %</th><th class="num">Demand M1</th><th class="num">Demand M2</th><th class="num">Required (kg)</th></tr></thead><tbody>';
   rows.forEach(x => {
     h += '<tr><td class="sku-code">' + escapeHtml(x.sku) + '</td><td>' + escapeHtml(x.fg) +
-      '</td><td class="num">' + fmt(x.pct, x.pct % 1 ? 2 : 0) + '%</td><td class="num">' + fmt(x.dem, 0) +
-      '</td><td class="num req">' + fmt(x.kg, 3) + '</td><td class="num">' + fmt(x.drr, 1) +
-      '</td><td class="num">' + fmt(x.dailyKg, 3) + '</td></tr>';
+      '</td><td class="num">' + fmt(x.pct, x.pct % 1 ? 2 : 0) + '%</td><td class="num">' + fmt(x.dem1, 0) +
+      '</td><td class="num">' + fmt(x.dem2, 0) +
+      '</td><td class="num req">' + fmt(x.kg, 3) + '</td></tr>';
   });
   return h + '</tbody></table>';
 }
@@ -1197,56 +1133,40 @@ function drillTableRM(e) {
  * ================================================================== */
 function renderPM() {
   const agg = aggregatePM();
-  const days = num(planDays, true);
   $("pmCfg").innerHTML = fwdCfgHtml();
 
   const items = agg.map(e => {
     const k = normKey(e.name);
-    if (pmMoq[k] == null) pmMoq[k] = String(dummyMoqPm(e.name));   // DUMMY MOQ seed (units)
-    const reqM1 = e.reqM1U, reqM2 = e.reqM2U;           // demand-driven month requirement (units)
-    const usage = e.dailyUnits;                         // Used/day column = DRR run-rate (reference)
+    if (pmMoq[k] == null) pmMoq[k] = String(dummyMoqPm(e.name));
+    const reqM1 = e.reqM1U, reqM2 = e.reqM2U;
     const moq = num(pmMoq[k], true);
-    const stock = stockTotal("pm", k);                  // DUMMY stock (edit on Live Inventory)
-    // Current DOH = cover at the CURRENT consumption rate from the real Product DRR feed.
-    const cdoh = dohByRate(stock, e.dailyUnits);
-    // Desired quantity (per month) = max(0, REQ − available stock). PM has no expected-supply feed. Demand-driven.
+    const stock = stockTotal("pm", k);
     const availM1 = stock;
     const oM1 = fwdOrder(reqM1, availM1, moq);
-    const availM2Oq = availM1 - reqM1;                  // OQ roll-forward: M1 consumes REQ(M1), no M2 supply
-    const oM2 = fwdOrder(reqM2, availM2Oq, moq);
-    // Revised DOH roll-forward uses the DRR run-rate (Used/day), independent of demand:
-    const rdohM1 = usage > 0 ? availM1 / usage : null;
-    const closingM1 = availM1 - usage * FWD.DAYS_PER_MONTH;
-    const availM2Doh = closingM1;                       // carry forward (no M2 supply)
-    const rdohM2 = usage > 0 ? availM2Doh / usage : null;
-    return { e, k, usage, moq, stock, cdoh, rdohM1, rdohM2, oM1, oM2 };
+    const stockIntoM2 = stock - reqM1;   // carry-forward (may be negative)
+    const oM2 = fwdOrder(reqM2, stockIntoM2, moq);
+    return { e, k, moq, stock, oM1, oM2 };
   });
-  items.sort((a, b) => {
-    const av = a.rdohM1 !== null ? a.rdohM1 : Infinity;
-    const bv = b.rdohM1 !== null ? b.rdohM1 : Infinity;
-    return av - bv;
-  });
+  items.sort((a, b) => b.e.reqM1U - a.e.reqM1U);
 
   const tbody = $("pmRows"); tbody.innerHTML = "";
-  let stockTot = 0, usageTot = 0, m1Tot = 0, m2Tot = 0, adjM1Tot = 0, adjM2Tot = 0, reqM1Tot = 0, reqM2Tot = 0, atRisk = 0;
+  let stockTot = 0, m1Tot = 0, m2Tot = 0, adjM1Tot = 0, adjM2Tot = 0, reqM1Tot = 0, reqM2Tot = 0, ordersNeeded = 0;
   items.forEach(r => {
-    usageTot += r.usage; stockTot += r.stock; m1Tot += r.oM1.oq; m2Tot += r.oM2.oq;
+    stockTot += r.stock; m1Tot += r.oM1.oq; m2Tot += r.oM2.oq;
     adjM1Tot += moqAdjOrder(r.oM1.oq, r.moq); adjM2Tot += moqAdjOrder(r.oM2.oq, r.moq);
     reqM1Tot += r.e.reqM1U; reqM2Tot += r.e.reqM2U;
-    if (r.rdohM1 !== null && r.rdohM1 < FWD.SAFETY_DOH) atRisk++;
+    if (r.oM1.oq > 0) ordersNeeded++;
     const tr = document.createElement("tr"); tr.className = "clickable";
     const moqIn = '<input class="cell" type="number" min="0" step="50" value="' + r.moq +
-      '" data-k="' + escapeHtml(r.k) + '" style="width:80px" title="DUMMY MOQ (editable)">';
+      '" data-k="' + escapeHtml(r.k) + '" style="width:80px" title="MOQ (editable)">';
     tr.innerHTML =
       '<td>' + escapeHtml(r.e.name) + '</td>' +
       '<td class="num">' + moqIn + '</td>' +
       '<td class="num req">' + fmt(r.stock, 0) + '</td>' +
-      '<td class="num">' + fmt(r.usage, 3) + '</td>' +
-      '<td class="num">' + fwdDohCell(r.cdoh) + '</td>' +
-      '<td class="num grpL">' + fwdDohCell(r.rdohM1) + '</td><td class="num">' + fmt(r.e.reqM1U, 0) + '</td><td class="num req">' + fmt(r.oM1.oq, 0) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM1.oq, r.moq), 0) + '</td>' + diffCell(r.oM1.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM1) + '</td>' +
-      '<td class="num grpL">' + fwdDohCell(r.rdohM2) + '</td><td class="num">' + fmt(r.e.reqM2U, 0) + '</td><td class="num req">' + fmt(r.oM2.oq, 0) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM2.oq, r.moq), 0) + '</td>' + diffCell(r.oM2.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM2) + '</td>' +
+      '<td class="num">' + fmt(r.e.reqM1U, 0) + '</td><td class="num req">' + fmt(r.oM1.oq, 0) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM1.oq, r.moq), 0) + '</td>' + diffCell(r.oM1.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM1) + '</td>' +
+      '<td class="num">' + fmt(r.e.reqM2U, 0) + '</td><td class="num req">' + fmt(r.oM2.oq, 0) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM2.oq, r.moq), 0) + '</td>' + diffCell(r.oM2.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM2) + '</td>' +
       '<td class="num"><button class="expand-btn">▸ details</button></td>';
-    const drill = mkDrill(18, drillTablePM(r.e));
+    const drill = mkDrill(14, drillTablePM(r.e));
     tbody.appendChild(tr); tbody.appendChild(drill);
     const btn = tr.querySelector(".expand-btn");
     btn.addEventListener("click", (ev) => { ev.stopPropagation(); toggleDrill(tr, drill, ev.target); });
@@ -1261,9 +1181,8 @@ function renderPM() {
   $("pmStockTot").textContent = fmt(stockTot, 0);
   $("pmOrderM1").textContent = fmt(m1Tot, 0);
   $("pmOrderM2").textContent = fmt(m2Tot, 0);
-  $("pmAtRisk").textContent = atRisk;
+  $("pmAtRisk").textContent = ordersNeeded;
   $("pmFootStock").textContent = fmt(stockTot, 0);
-  $("pmFootUsage").textContent = fmt(usageTot, 3);
   $("pmFootReqM1").textContent = fmt(reqM1Tot, 0);
   $("pmFootReqM2").textContent = fmt(reqM2Tot, 0);
   $("pmFootM1").textContent = fmt(m1Tot, 0);
@@ -1622,63 +1541,52 @@ function updateInvKpis() {
  * ================================================================== */
 function exportRM() {
   const agg = aggregateRM();
-  const L = ["RM Code,RM Name,MOQ (kg),Current Stock (kg),Exp Supply (kg),Used/day (kg),Current DOH," +
-    "M1 Revised DOH,M1 Required qty,M1 Desired quantity,M1 Actual Quantity,M1 Diff,M1 Status," +
-    "M2 Revised DOH,M2 Required qty,M2 Desired quantity,M2 Actual Quantity,M2 Diff,M2 Status"];
-  const ds = d => d === null ? "" : d.toFixed(1);
+  const L = ["RM Code,RM Name,MOQ (kg),Current Stock (kg),Exp Supply M1 (kg),Exp Supply M2 (kg)," +
+    "M1 Required qty,M1 Desired quantity,M1 Actual Quantity,M1 Diff,M1 Status," +
+    "M2 Required qty,M2 Desired quantity,M2 Actual Quantity,M2 Diff,M2 Status"];
   agg.forEach(e => {
     const k = normKey(e.name);
     const matched = !!rmFirm[k];
-    const reqM1 = e.reqM1Kg, reqM2 = e.reqM2Kg;   // demand-driven month requirement (kg)
-    const usage = e.dailyKg;                       // Used/day = DRR run-rate (reference)
+    const reqM1 = e.reqM1Kg, reqM2 = e.reqM2Kg;
     const moq = num(rmMoq[k], true);
-    const moqStr = (rmMoq[k] == null || rmMoq[k] === "") ? "" : String(rmMoq[k]);   // blank = no MOQ on file
+    const moqStr = (rmMoq[k] == null || rmMoq[k] === "") ? "" : String(rmMoq[k]);
     const code = rmCodeReal[k] || (matMaster[k] ? matMaster[k].code : "");
     if (!matched) {
-      L.push([csvField(code), csvField(e.name), moqStr, "NA", "NA", usage.toFixed(3), "NA",
-        "NA", reqM1.toFixed(1), "NA", "NA", "NA", "no stock feed", "NA", reqM2.toFixed(1), "NA", "NA", "NA", "no stock feed"].join(","));
+      L.push([csvField(code), csvField(e.name), moqStr, "NA", "NA", "NA",
+        reqM1.toFixed(1), "NA", "NA", "NA", "no stock feed", reqM2.toFixed(1), "NA", "NA", "NA", "no stock feed"].join(","));
       return;
     }
     const stock = stockTotal("rm", k), supply = num(rmSupply[k], true);
     const [supM1, supM2] = fwdSupplySplit(supply);
-    const cdoh = dohByRate(stock, e.dailyKg);   // DRR run-rate Current DOH (matches the table)
     const availM1 = stock + supM1;
     const o1 = fwdOrder(reqM1, availM1, moq);
-    const availM2 = (availM1 - reqM1) + supM2;                          // OQ roll-forward (demand)
+    const stockIntoM2 = stock + supM1 - reqM1;
+    const availM2 = stockIntoM2 + supM2;
     const o2 = fwdOrder(reqM2, availM2, moq);
-    const rdohM1 = usage > 0 ? availM1 / usage : null;                  // Revised DOH = DRR run-rate
-    const availM2Doh = (availM1 - usage * FWD.DAYS_PER_MONTH) + supM2;
-    const rdohM2 = usage > 0 ? availM2Doh / usage : null;
-    L.push([csvField(code), csvField(e.name), moqStr, stock.toFixed(3), supply.toFixed(3), usage.toFixed(3), ds(cdoh),
-      ds(rdohM1), reqM1.toFixed(1), o1.oq.toFixed(1), moqAdjOrder(o1.oq, moq).toFixed(1), (moqDiff(o1.oq, moq) * 100).toFixed(1) + "%", o1.status,
-      ds(rdohM2), reqM2.toFixed(1), o2.oq.toFixed(1), moqAdjOrder(o2.oq, moq).toFixed(1), (moqDiff(o2.oq, moq) * 100).toFixed(1) + "%", o2.status].join(","));
+    L.push([csvField(code), csvField(e.name), moqStr, stock.toFixed(3), supM1.toFixed(3), supM2.toFixed(3),
+      reqM1.toFixed(1), o1.oq.toFixed(1), moqAdjOrder(o1.oq, moq).toFixed(1), (moqDiff(o1.oq, moq) * 100).toFixed(1) + "%", o1.status,
+      reqM2.toFixed(1), o2.oq.toFixed(1), moqAdjOrder(o2.oq, moq).toFixed(1), (moqDiff(o2.oq, moq) * 100).toFixed(1) + "%", o2.status].join(","));
   });
   downloadCSV("consolidated_rm_forward.csv", L.join("\r\n"));
 }
 function exportPM() {
   const agg = aggregatePM();
-  const L = ["PM Name,MOQ (units),Stock (units),Used/day (units),Current DOH," +
-    "M1 Revised DOH,M1 Required qty,M1 Desired quantity,M1 Actual Quantity,M1 Diff,M1 Status," +
-    "M2 Revised DOH,M2 Required qty,M2 Desired quantity,M2 Actual Quantity,M2 Diff,M2 Status"];
-  const ds = d => d === null ? "" : d.toFixed(1);
+  const L = ["PM Name,MOQ (units),Stock (units)," +
+    "M1 Required qty,M1 Desired quantity,M1 Actual Quantity,M1 Diff,M1 Status," +
+    "M2 Required qty,M2 Desired quantity,M2 Actual Quantity,M2 Diff,M2 Status"];
   agg.forEach(e => {
     const k = normKey(e.name);
     if (pmMoq[k] == null) pmMoq[k] = String(dummyMoqPm(e.name));
-    const reqM1 = e.reqM1U, reqM2 = e.reqM2U;   // demand-driven month requirement (units)
-    const usage = e.dailyUnits;                  // Used/day = DRR run-rate (reference)
+    const reqM1 = e.reqM1U, reqM2 = e.reqM2U;
     const moq = num(pmMoq[k], true);
     const stock = stockTotal("pm", k);
-    const cdoh = dohByRate(stock, e.dailyUnits);   // DRR run-rate Current DOH (matches the table)
     const availM1 = stock;
     const o1 = fwdOrder(reqM1, availM1, moq);
-    const availM2 = availM1 - reqM1;                              // OQ roll-forward (demand)
-    const o2 = fwdOrder(reqM2, availM2, moq);
-    const rdohM1 = usage > 0 ? availM1 / usage : null;            // Revised DOH = DRR run-rate
-    const availM2Doh = availM1 - usage * FWD.DAYS_PER_MONTH;
-    const rdohM2 = usage > 0 ? availM2Doh / usage : null;
-    L.push([csvField(e.name), moq, Math.round(stock), usage.toFixed(3), ds(cdoh),
-      ds(rdohM1), Math.round(reqM1), Math.round(o1.oq), Math.round(moqAdjOrder(o1.oq, moq)), (moqDiff(o1.oq, moq) * 100).toFixed(1) + "%", o1.status,
-      ds(rdohM2), Math.round(reqM2), Math.round(o2.oq), Math.round(moqAdjOrder(o2.oq, moq)), (moqDiff(o2.oq, moq) * 100).toFixed(1) + "%", o2.status].join(","));
+    const stockIntoM2 = stock - reqM1;
+    const o2 = fwdOrder(reqM2, stockIntoM2, moq);
+    L.push([csvField(e.name), moq, Math.round(stock),
+      Math.round(reqM1), Math.round(o1.oq), Math.round(moqAdjOrder(o1.oq, moq)), (moqDiff(o1.oq, moq) * 100).toFixed(1) + "%", o1.status,
+      Math.round(reqM2), Math.round(o2.oq), Math.round(moqAdjOrder(o2.oq, moq)), (moqDiff(o2.oq, moq) * 100).toFixed(1) + "%", o2.status].join(","));
   });
   downloadCSV("consolidated_pm_forward.csv", L.join("\r\n"));
 }
