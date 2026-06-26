@@ -184,9 +184,14 @@
       <div class="kpi"><b id="rmOrderM2">0.0</b><span>Order — M2 (kg)</span></div>
       <div class="kpi"><b id="rmAtRisk">0</b><span>M1 orders needed</span></div>
       <div class="spacer"></div>
-      <div class="field" style="justify-content:flex-end"><button class="btn primary" id="exportRm">Export RM CSV</button></div>
+      <div class="field" style="justify-content:flex-end;gap:8px">
+        <button class="btn sm" id="btnImportReqRm" title="Import a CSV/Excel with columns: RM Name (or RM Code), Required M1 (kg), Required M2 (kg)">Import Req Qty</button>
+        <button class="btn sm" id="btnClearReqRm" style="display:none" title="Remove imported required qty overrides and revert to BOM-calculated values">Clear override</button>
+        <button class="btn primary" id="exportRm">Export RM CSV</button>
+      </div>
     </div>
     <div id="rmCfg" class="hint" style="margin-bottom:10px"></div>
+    <input type="file" id="fileReqRm" accept=".xlsx,.csv" style="display:none" />
     <div style="overflow-x:auto">
     <table>
       <thead>
@@ -672,6 +677,7 @@ let rmSupply   = {}; // normKey(rm_name) -> expected supply (kg), Firm sheet col
 let rmCodeReal = {}; // normKey(rm_name) -> real RM code, Firm sheet col F (matched only)
 let rmMoq      = {}; // normKey(rm_name) -> MOQ (kg) string, user-entered (no source feed yet)
 let pmMoq      = {}; // normKey(pm_name) -> MOQ (units) string — DUMMY seed, editable (no source feed yet)
+let rmReqOverride = {}; // normKey(rm_name or code) -> {m1, m2} kg — set by "Import Req Qty"
 let curTab = "demand";
 let demandFilter = "";
 let planDays = "30";   // demand-plan horizon (days); converts total requirement -> daily rate for DOH
@@ -1017,11 +1023,15 @@ function renderRM() {
   const agg = aggregateRM();
   $("rmCfg").innerHTML = fwdCfgHtml();
   const NA = '<span class="muted">NA</span>';
+  const hasOverride = Object.keys(rmReqOverride).length > 0;
+  if ($("btnClearReqRm")) $("btnClearReqRm").style.display = hasOverride ? "" : "none";
 
   const items = agg.map(e => {
     const k = normKey(e.name);
     const matched = !!rmFirm[k];
-    const reqM1 = e.reqM1Kg, reqM2 = e.reqM2Kg;
+    const ov = rmReqOverride[k] || rmReqOverride[normKey(rmCodeReal[k] || "")];
+    const reqM1 = ov ? (ov.m1 ?? e.reqM1Kg) : e.reqM1Kg;
+    const reqM2 = ov ? (ov.m2 ?? e.reqM2Kg) : e.reqM2Kg;
     const moq = num(rmMoq[k], true);
     const code = rmCodeReal[k] || (matMaster[k] ? matMaster[k].code : "");
     let stock = null, supply = 0, supM1 = 0, supM2 = 0, oM1 = null, oM2 = null;
@@ -1796,6 +1806,51 @@ function wire() {
   // Exports
   $("exportRm").addEventListener("click", exportRM);
   $("exportPm").addEventListener("click", exportPM);
+
+  // Import Required Qty (RM tab)
+  $("btnImportReqRm").addEventListener("click", () => $("fileReqRm").click());
+  $("btnClearReqRm").addEventListener("click", () => {
+    rmReqOverride = {};
+    $("btnClearReqRm").style.display = "none";
+    renderRM();
+  });
+  $("fileReqRm").addEventListener("change", async e => {
+    const file = e.target.files[0]; if (!file) return;
+    e.target.value = "";
+    try {
+      let rows;
+      if (/\.csv$/i.test(file.name)) {
+        const text = await file.text();
+        rows = text.trim().split(/\r?\n/).map(l => l.split(",").map(c => c.replace(/^"|"$/g, "").trim()));
+      } else if (/\.xlsx$/i.test(file.name)) {
+        rows = await readXlsx(await file.arrayBuffer());
+      } else { alert("Use .csv or .xlsx (not .xls)"); return; }
+
+      // Detect header row (first row), find columns by name
+      const hdr = rows[0].map(h => h.toLowerCase().replace(/[^a-z0-9]/g, ""));
+      const colName = hdr.findIndex(h => h.includes("rmname") || h.includes("name") || h.includes("material") || h.includes("rmcode") || h.includes("code"));
+      const colM1   = hdr.findIndex(h => h.includes("m1") || h.includes("month1") || h.includes("required") && !h.includes("m2"));
+      const colM2   = hdr.findIndex(h => h.includes("m2") || h.includes("month2"));
+
+      if (colName < 0 || colM1 < 0) { alert("Cannot find required columns.\nExpected: RM Name, Required M1 (kg), Required M2 (kg)"); return; }
+
+      let loaded = 0;
+      rmReqOverride = {};
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        const nameRaw = (row[colName] || "").trim();
+        if (!nameRaw) continue;
+        const m1 = parseFloat((row[colM1] || "").replace(/,/g, ""));
+        const m2 = colM2 >= 0 ? parseFloat((row[colM2] || "").replace(/,/g, "")) : 0;
+        if (isNaN(m1)) continue;
+        rmReqOverride[normKey(nameRaw)] = { m1: isNaN(m1) ? 0 : m1, m2: isNaN(m2) ? 0 : m2 };
+        loaded++;
+      }
+      if (!loaded) { alert("No valid rows found. Check your file has RM Name and Required M1 (kg) columns."); return; }
+      alert("Loaded required qty for " + loaded + " RM(s). Override is active — click "Clear override" to revert to BOM-calculated values.");
+      renderRM();
+    } catch (err) { alert("Error reading file: " + err.message); }
+  });
   $("exportSku").addEventListener("click", exportSku);
   $("exportMaster").addEventListener("click", exportMaster);
   $("exportInv").addEventListener("click", exportInventory);
