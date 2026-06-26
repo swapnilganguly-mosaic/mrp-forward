@@ -130,8 +130,8 @@
   <div id="banners"></div>
 
   <div class="tabs" id="tabs">
-    <div class="tab" data-tab="demand" style="display:none">1 · Demand Entry</div>
-    <div class="tab active" data-tab="rm">2 · Consolidated RM</div>
+    <div class="tab active" data-tab="demand">1 · Demand Entry</div>
+    <div class="tab" data-tab="rm">2 · Consolidated RM</div>
     <div class="tab" data-tab="pm">3 · Consolidated PM</div>
     <div class="tab" data-tab="sku">4 · Per-SKU Breakdown</div>
     <div class="tab" data-tab="master">5 · Material Master</div>
@@ -139,13 +139,14 @@
   </div>
 
   <!-- ============ TAB 1: DEMAND ENTRY ============ -->
-  <section class="panel" id="panel-demand">
+  <section class="panel active" id="panel-demand">
     <div class="toolbar">
       <input class="search" id="demandSearch" placeholder="Type to filter by SKU code or product name…" />
       <span class="count-tag" id="demandCount"></span>
       <div class="spacer"></div>
       <button class="btn sm primary" id="btnDemandFile">Import demand file</button>
       <button class="btn sm" id="btnPaste">Bulk paste demand</button>
+      <button class="btn sm" id="btnExportForNovaCore" title="Export demand plan as CSV to send to Nova Core for required quantity calculation" style="margin-left:12px;background:#7c3aed;color:#fff;border-color:#7c3aed">&#9660; Export for Nova Core</button>
     </div>
     <table>
       <thead>
@@ -167,15 +168,11 @@
         </tr>
       </tfoot>
     </table>
-    <div class="hint">The recipe (RM % &amp; PM quantities) is built in — feed <b>one</b> file of SKU → <b>Month-1</b> and <b>Month-2</b> demand via
-      <b>Import demand file</b> and the consolidated RM/PM tabs compute the order quantity for each month automatically.
-      Demand &amp; pack size recalculate every other tab live — there is no submit button.
-      Batch weight 2M (kg) = pack size (g) × (M1 + M2 demand) ÷ 1000. Empty / non-numeric entries are treated as 0.
-</div>
+    <div class="hint"><b>Step 1:</b> Enter or import demand (units per SKU, M1 &amp; M2). <b>Step 2:</b> Click <b style="color:#7c3aed">Export for Nova Core</b> to download the demand plan as CSV — send this to Nova Core (BOM ERP) to get required quantities. <b>Step 3:</b> Once Nova Core responds, go to <b>Consolidated RM</b> or <b>PM</b> tab and click <b>Import Req Qty</b> to load the required quantities. Order calculations run automatically.</div>
   </section>
 
   <!-- ============ TAB 2: CONSOLIDATED RM ============ -->
-  <section class="panel active" id="panel-rm">
+  <section class="panel" id="panel-rm">
     <div class="grand">
       <div class="kpi"><b id="rmDistinct">0</b><span>Distinct raw materials</span></div>
       <div class="kpi"><b id="rmStockTot">0.000</b><span>Current stock (kg)</span></div>
@@ -684,7 +681,7 @@ let rmMoq      = {}; // normKey(rm_name) -> MOQ (kg) string, user-entered (no so
 let pmMoq      = {}; // normKey(pm_name) -> MOQ (units) string — DUMMY seed, editable (no source feed yet)
 let rmReqOverride = {}; // normKey(rm_name) -> {name, m1, m2} kg — set by "Import Req Qty"
 let pmReqOverride = {}; // normKey(pm_name) -> {name, m1, m2} units — set by "Import Req Qty"
-let curTab = "rm";
+let curTab = "demand";
 let demandFilter = "";
 let planDays = "30";   // demand-plan horizon (days); converts total requirement -> daily rate for DOH
 
@@ -1557,6 +1554,29 @@ function updateInvKpis() {
 /* ==================================================================
  *  EXPORTS
  * ================================================================== */
+function exportForNovaCore() {
+  // Export demand plan: SKU Code, SKU Name, Pack Size (g), Demand M1 (units), Demand M2 (units)
+  // so Nova Core can calculate required RM/PM quantities
+  const rows = [["SKU Code", "SKU Name", "Pack Size (g)", "Demand M1 (units)", "Demand M2 (units)"]];
+  SKU.forEach(s => {
+    const dem1 = num(demandM1[s.sku_code], true);
+    const dem2 = num(demandM2[s.sku_code], true);
+    if (dem1 === 0 && dem2 === 0) return; // skip SKUs with no demand
+    rows.push([
+      csvField(s.sku_code),
+      csvField(s.fg_name),
+      num(packSize[s.sku_code], true),
+      dem1,
+      dem2
+    ]);
+  });
+  if (rows.length === 1) { alert("No demand entered. Please enter demand for at least one SKU first."); return; }
+  const csv = rows.map(r => r.join(",")).join("\n");
+  const a = document.createElement("a");
+  a.href = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
+  a.download = "demand_for_novacore_" + new Date().toISOString().slice(0,10) + ".csv";
+  a.click();
+}
 function exportRM() {
   const agg = aggregateRM();
   const L = ["RM Code,RM Name,MOQ (kg),Current Stock (kg),Exp Supply M1 (kg),Exp Supply M2 (kg)," +
@@ -1812,6 +1832,7 @@ function wire() {
   $("skuPack").addEventListener("input", e => { const c = $("skuPicker").value; skuIndex[c].pack_size_g = e.target.value; renderSkuDetail(c); });
 
   // Exports
+  $("btnExportForNovaCore").addEventListener("click", exportForNovaCore);
   $("exportRm").addEventListener("click", exportRM);
   $("exportPm").addEventListener("click", exportPM);
 
