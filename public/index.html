@@ -130,7 +130,7 @@
   <div id="banners"></div>
 
   <div class="tabs" id="tabs">
-    <div class="tab active" data-tab="demand">1 · Demand Entry</div>
+    <div class="tab active" data-tab="demand">1 · Supply Entry</div>
     <div class="tab" data-tab="rm">2 · Consolidated RM</div>
     <div class="tab" data-tab="pm">3 · Consolidated PM</div>
     <div class="tab" data-tab="sku">4 · Per-SKU Breakdown</div>
@@ -153,8 +153,8 @@
         <tr>
           <th style="width:34%">Finished Good (SKU)</th>
           <th class="num" style="width:12%">Pack size (g)</th>
-          <th class="num" style="width:14%">Demand M1 (units)</th>
-          <th class="num" style="width:14%">Demand M2 (units)</th>
+          <th class="num" style="width:14%">Supply M1 (units)</th>
+          <th class="num" style="width:14%">Supply M2 (units)</th>
           <th class="num" style="width:14%">Batch weight 2M (kg)</th>
         </tr>
       </thead>
@@ -277,11 +277,11 @@
         <select class="sku" id="skuPicker"></select>
       </div>
       <div class="field">
-        <label>Demand M1 (units)</label>
+        <label>Supply M1 (units)</label>
         <input class="cell" id="skuDemand" type="number" min="0" step="1" />
       </div>
       <div class="field">
-        <label>Demand M2 (units)</label>
+        <label>Supply M2 (units)</label>
         <input class="cell" id="skuDemand2" type="number" min="0" step="1" />
       </div>
       <div class="field">
@@ -436,7 +436,7 @@
 <div class="modal-bg" id="demandFileModal">
   <div class="modal">
     <h3>Import demand from a file</h3>
-    <p class="muted" style="margin-top:4px">Upload <b>one</b> spreadsheet listing each SKU and its <b>Month-1</b> and <b>Month-2</b> demand.
+    <p class="muted" style="margin-top:4px">Upload <b>one</b> spreadsheet listing each SKU and its <b>Month-1</b> and <b>Month-2</b> supply.
       The recipe (RM % &amp; PM quantities per unit) is already built in — only the demand columns are read from this file.
       Accepted: <code>.xlsx</code> or <code>.csv</code> (not the older <code>.xls</code>). SKU codes are matched case-insensitively.</p>
     <div class="row-flex" style="margin:12px 0 6px">
@@ -447,8 +447,8 @@
     <div id="demandFileSetup" style="display:none">
       <div class="row-flex" style="margin:12px 0 4px; align-items:flex-end">
         <div class="field"><label>SKU column</label><select class="col" id="colSku"></select></div>
-        <div class="field"><label>M1 demand column</label><select class="col" id="colDemand"></select></div>
-        <div class="field"><label>M2 demand column</label><select class="col" id="colDemand2"></select></div>
+        <div class="field"><label>M1 supply column</label><select class="col" id="colDemand"></select></div>
+        <div class="field"><label>M2 supply column</label><select class="col" id="colDemand2"></select></div>
         <label class="row-flex" style="gap:6px; font-size:13px; padding-bottom:8px">
           <input type="checkbox" id="hasHeader" /> First row is a header</label>
       </div>
@@ -1131,7 +1131,7 @@ function updateRmDiff(td, moqVal, order) {
 function drillTableRM(e) {
   const rows = e.skus.filter(x => x.kg > 0 || x.dem > 0).sort((a, b) => b.kg - a.kg);
   if (!rows.length) return '<div class="muted" style="padding:6px">No demand for SKUs using this material.</div>';
-  let h = '<table><thead><tr><th>SKU</th><th>Product</th><th class="num">RM %</th><th class="num">Demand M1</th><th class="num">Demand M2</th><th class="num">Required (kg)</th></tr></thead><tbody>';
+  let h = '<table><thead><tr><th>SKU</th><th>Product</th><th class="num">RM %</th><th class="num">Supply M1</th><th class="num">Supply M2</th><th class="num">Required (kg)</th></tr></thead><tbody>';
   rows.forEach(x => {
     h += '<tr><td class="sku-code">' + escapeHtml(x.sku) + '</td><td>' + escapeHtml(x.fg) +
       '</td><td class="num">' + fmt(x.pct, x.pct % 1 ? 2 : 0) + '%</td><td class="num">' + fmt(x.dem1, 0) +
@@ -1557,7 +1557,7 @@ function updateInvKpis() {
 function exportForNovaCore() {
   // Export demand plan: SKU Code, SKU Name, Pack Size (g), Demand M1 (units), Demand M2 (units)
   // so Nova Core can calculate required RM/PM quantities
-  const rows = [["SKU Code", "SKU Name", "Pack Size (g)", "Demand M1 (units)", "Demand M2 (units)"]];
+  const rows = [["SKU Code", "SKU Name", "Pack Size (g)", "Supply M1 (units)", "Supply M2 (units)"]];
   SKU.forEach(s => {
     const dem1 = num(demandM1[s.sku_code], true);
     const dem2 = num(demandM2[s.sku_code], true);
@@ -1634,7 +1634,7 @@ function exportSku() {
   const dem1 = num(demand[code], true), dem2 = num(demandM2[code], true), dem = dem1 + dem2;
   const lines = [
     "SKU," + csvField(code), "Product," + csvField(s.fg_name),
-    "Pack size (g)," + pack, "Demand M1 (units)," + dem1, "Demand M2 (units)," + dem2, "Demand 2M (units)," + dem, "",
+    "Pack size (g)," + pack, "Supply M1 (units)," + dem1, "Supply M2 (units)," + dem2, "Supply 2M (units)," + dem, "",
     "Raw Material,RM %,g per unit,Required 2M (kg)"
   ];
   RM.filter(r => r.sku_code === code).forEach(r => {
@@ -2154,164 +2154,4 @@ function applyDemandFile() {
   const { matches } = computeDemandMatch();
   if (!matches.length) return;
   if ($("zeroOthers").checked) SKU.forEach(s => { demand[s.sku_code] = "0"; demandM2[s.sku_code] = "0"; });
-  matches.forEach(([code, m1, m2]) => { demand[code] = (m1 === "" ? "0" : m1); demandM2[code] = (m2 === "" ? "0" : m2); });
-  $("demandFileModal").classList.remove("show");
-  showTab(curTab);
-}
-
-/* Upload: replace dataset from up to 3 CSVs. */
-const pending = { sku: null, rm: null, pm: null };
-function applyUpload() {
-  const reads = [];
-  const data = {
-    sku_master: SKU.map(s => ({ ...s })),
-    bom_rm: RM.map(r => ({ ...r })),
-    bom_pm: PM.map(r => ({ ...r }))
-  };
-  function readFile(file) { return new Promise(res => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsText(file); }); }
-  if (pending.sku) reads.push(readFile(pending.sku).then(t => data.sku_master = csvToObjects(t)));
-  if (pending.rm) reads.push(readFile(pending.rm).then(t => data.bom_rm = csvToObjects(t)));
-  if (pending.pm) reads.push(readFile(pending.pm).then(t => data.bom_pm = csvToObjects(t)));
-  if (!reads.length) { $("uploadModal").classList.remove("show"); return; }
-  Promise.all(reads).then(() => {
-    loadDataset(data);
-    pending.sku = pending.rm = pending.pm = null;
-    $("nameSku").textContent = $("nameRm").textContent = $("namePm").textContent = "no file";
-    $("uploadModal").classList.remove("show");
-    boot("upload");
-  });
-}
-
-/* ==================================================================
- *  BOOTSTRAP
- *  Source priority: embedded seed (data.js) -> fetch ./data/*.csv -> fallback SKU.
- * ================================================================== */
-function setStatus(source) {
-  const txt = {
-    seed: SKU.length + " SKUs · " + RM.length + " RM rows · " + PM.length + " PM rows (live · Google Sheets)",
-    upload: SKU.length + " SKUs · " + RM.length + " RM rows · " + PM.length + " PM rows (uploaded)",
-    fetch: SKU.length + " SKUs · " + RM.length + " RM rows · " + PM.length + " PM rows (loaded from /data)",
-    fallback: "Sample SKU only — full mapping not found"
-  }[source] || (SKU.length + " SKUs loaded");
-  $("dataStatus").textContent = txt;
-}
-function boot(source) {
-  renderSkuPicker();
-  renderBanners(source);
-  setStatus(source);
-  showTab(curTab);
-}
-
-async function init() {
-  wire();
-  // 1) embedded seed
-  if (window.__MRP_SEED__ && (window.__MRP_SEED__.sku_master || []).length) {
-    loadDataset(window.__MRP_SEED__);
-    return boot("seed");
-  }
-  // 2) try fetching CSVs from ./data (works when served over http)
-  try {
-    const [sm, rm, pm] = await Promise.all([
-      fetch("data/sku_master.csv").then(r => r.ok ? r.text() : Promise.reject()),
-      fetch("data/bom_rm.csv").then(r => r.ok ? r.text() : Promise.reject()),
-      fetch("data/bom_pm.csv").then(r => r.ok ? r.text() : Promise.reject())
-    ]);
-    loadDataset({ sku_master: csvToObjects(sm), bom_rm: csvToObjects(rm), bom_pm: csvToObjects(pm) });
-    return boot("fetch");
-  } catch (_) { /* fall through */ }
-  // 3) fallback
-  loadDataset(FALLBACK);
-  boot("fallback");
-}
-// ── Client-side Google Sheets fetch (fallback if Vercel API can't reach gviz) ──
-const _SHEET_ID = '1PDvEjSHOqrn902Y6vIpRvVwlkw3B5HpwP4w6_Stl58o';
-function _parseCSV(text) {
-  if (!text) return [];
-  const rows = []; let row = [], field = '', i = 0, q = false;
-  text = text.replace(/^﻿/, '');
-  while (i < text.length) {
-    const c = text[i];
-    if (q) { if (c==='"') { if (text[i+1]==='"') { field+='"'; i++; } else q=false; } else field+=c; }
-    else { if (c==='"') q=true; else if (c===',') { row.push(field); field=''; }
-           else if (c==='\n') { row.push(field); rows.push(row); row=[]; field=''; }
-           else if (c!=='\r') field+=c; }
-    i++;
-  }
-  if (field||row.length) { row.push(field); rows.push(row); }
-  return rows.filter(r => r.some(c => String(c).trim()!==''));
-}
-function _csvToObjs(text) {
-  const rows = _parseCSV(text); if (rows.length<2) return [];
-  const h = rows[0].map(x => x.trim().toLowerCase());
-  return rows.slice(1).map(r => { const o={}; h.forEach((k,i)=>{ o[k]=String(r[i]??'').trim(); }); return o; });
-}
-function _pick(row, ...keys) {
-  for (const k of keys) { const v=row[k]??row[k.replace(/ /g,'_')]??row[k.replace(/_/g,' ')]; if (v!=null&&v!=='') return v; } return '';
-}
-async function _fetchGviz(tab) {
-  try { const r=await fetch(`https://docs.google.com/spreadsheets/d/${_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tab)}`);
-    const t=await r.text(); if (!r.ok||t.startsWith('<')) return null; return t;
-  } catch { return null; }
-}
-
-async function loadAndInit() {
-  // 1. Try server-side Vercel API
-  try {
-    const resp = await fetch('/api/data');
-    if (resp.ok) {
-      const seed = await resp.json();
-      if (seed && Array.isArray(seed.sku_master) && seed.sku_master.length > 0) {
-        window.__MRP_SEED__ = seed;
-      }
-    }
-  } catch (e) { console.warn('api/data failed:', e); }
-
-  // 2. If server returned empty, fetch gviz directly from browser
-  if (!window.__MRP_SEED__ || !(window.__MRP_SEED__.sku_master||[]).length) {
-    try {
-      console.log('Fetching live data from Google Sheets (client-side)…');
-      const [skuT,rmT,pmT,drrT,firmT,moqT] = await Promise.all([
-        _fetchGviz('SKU Master'),_fetchGviz('RM BOM'),_fetchGviz('PM BOM'),
-        _fetchGviz('DRR'),_fetchGviz('RM Firm'),_fetchGviz('RM MOQ')
-      ]);
-      const sku_master = _csvToObjs(skuT).map(r=>({
-        sku_code:    _pick(r,'sku_code','sku code','sku','code'),
-        fg_name:     _pick(r,'fg_name','fg name','product name','name','product'),
-        pack_size_g: _pick(r,'pack_size_g','pack size (g)','pack_size','pack size','pack'),
-      })).filter(r=>r.sku_code);
-      const bom_rm = _csvToObjs(rmT).map(r=>({
-        sku_code: _pick(r,'sku_code','sku code','sku'),
-        rm_name:  _pick(r,'rm_name','rm name','raw material','name'),
-        rm_pct:   _pick(r,'rm_pct','rm %','rm percent','pct','percent','%'),
-      })).filter(r=>r.sku_code&&r.rm_name);
-      const bom_pm = _csvToObjs(pmT).map(r=>({
-        sku_code:        _pick(r,'sku_code','sku code','sku'),
-        pm_name:         _pick(r,'pm_name','pm name','packaging material','name'),
-        pm_qty_per_unit: _pick(r,'pm_qty_per_unit','qty per unit','qty/unit','qty','quantity')||'1',
-        pm_code:         _pick(r,'pm_code','pm code','code')||'',
-      })).filter(r=>r.sku_code&&r.pm_name);
-      const drr = {};
-      _csvToObjs(drrT).forEach(r=>{ const s=_pick(r,'sku_code','sku code','sku'); const v=_pick(r,'drr','units/day','units per day','daily run rate'); if(s) drr[s]=parseFloat(v)||0; });
-      const rm_firm = _csvToObjs(firmT).map(r=>({
-        name:   _pick(r,'name','rm_name','rm name','material'),
-        code:   _pick(r,'code','rm_code','rm code'),
-        stock:  _pick(r,'stock','current stock','stock (kg)'),
-        supply: _pick(r,'supply','supply_m1','expected supply','supply (kg)'),
-      })).filter(r=>r.name);
-      const rm_moq = _csvToObjs(moqT).map(r=>({
-        name: _pick(r,'name','rm_name','rm name','material'),
-        code: _pick(r,'code','rm_code')||'',
-        moq:  _pick(r,'moq','moq (kg)','minimum order qty'),
-      })).filter(r=>r.name);
-      if (sku_master.length>0) {
-        window.__MRP_SEED__ = { sku_master, bom_rm, bom_pm, drr, rm_firm, rm_moq };
-        console.log('Live data loaded:', sku_master.length, 'SKUs,', rm_firm.length, 'RM Firm rows');
-      }
-    } catch (e) { console.warn('Client-side gviz fetch failed:', e); }
-  }
-  init();
-}
-loadAndInit();
-</script>
-</body>
-</html>
+  matches.forEach(([code, m1, m2]) => { demand[code] = (m1 === "" ? "0" : m1); demandM2
