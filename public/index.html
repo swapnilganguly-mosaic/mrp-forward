@@ -1847,7 +1847,7 @@ function wire() {
         loaded++;
       }
       if (!loaded) { alert("No valid rows found. Check your file has RM Name and Required M1 (kg) columns."); return; }
-      alert("Loaded required qty for " + loaded + " RM(s). Override is active — click "Clear override" to revert to BOM-calculated values.");
+      alert('Loaded required qty for ' + loaded + ' RM(s). Override is active — click [Clear override] to revert to BOM-calculated values.');
       renderRM();
     } catch (err) { alert("Error reading file: " + err.message); }
   });
