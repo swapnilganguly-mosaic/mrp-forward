@@ -130,8 +130,8 @@
   <div id="banners"></div>
 
   <div class="tabs" id="tabs">
-    <div class="tab active" data-tab="demand">1 · Demand Entry</div>
-    <div class="tab" data-tab="rm">2 · Consolidated RM</div>
+    <div class="tab" data-tab="demand" style="display:none">1 · Demand Entry</div>
+    <div class="tab active" data-tab="rm">2 · Consolidated RM</div>
     <div class="tab" data-tab="pm">3 · Consolidated PM</div>
     <div class="tab" data-tab="sku">4 · Per-SKU Breakdown</div>
     <div class="tab" data-tab="master">5 · Material Master</div>
@@ -139,7 +139,7 @@
   </div>
 
   <!-- ============ TAB 1: DEMAND ENTRY ============ -->
-  <section class="panel active" id="panel-demand">
+  <section class="panel" id="panel-demand">
     <div class="toolbar">
       <input class="search" id="demandSearch" placeholder="Type to filter by SKU code or product name…" />
       <span class="count-tag" id="demandCount"></span>
@@ -175,7 +175,7 @@
   </section>
 
   <!-- ============ TAB 2: CONSOLIDATED RM ============ -->
-  <section class="panel" id="panel-rm">
+  <section class="panel active" id="panel-rm">
     <div class="grand">
       <div class="kpi"><b id="rmDistinct">0</b><span>Distinct raw materials</span></div>
       <div class="kpi"><b id="rmStockTot">0.000</b><span>Current stock (kg)</span></div>
@@ -235,9 +235,14 @@
       <div class="kpi"><b id="pmOrderM2">0</b><span>Order — M2 (units)</span></div>
       <div class="kpi"><b id="pmAtRisk">0</b><span>M1 orders needed</span></div>
       <div class="spacer"></div>
-      <div class="field" style="justify-content:flex-end"><button class="btn primary" id="exportPm">Export PM CSV</button></div>
+      <div class="field" style="justify-content:flex-end;gap:8px">
+        <button class="btn sm" id="btnImportReqPm" title="Import a CSV/Excel with columns: PM Name, Required M1 (units), Required M2 (units)">Import Req Qty</button>
+        <button class="btn sm" id="btnClearReqPm" style="display:none" title="Remove imported required qty and revert to empty">Clear override</button>
+        <button class="btn primary" id="exportPm">Export PM CSV</button>
+      </div>
     </div>
     <div id="pmCfg" class="hint" style="margin-bottom:10px"></div>
+    <input type="file" id="fileReqPm" accept=".xlsx,.csv" style="display:none" />
     <div style="overflow-x:auto">
     <table>
       <thead>
@@ -677,8 +682,9 @@ let rmSupply   = {}; // normKey(rm_name) -> expected supply (kg), Firm sheet col
 let rmCodeReal = {}; // normKey(rm_name) -> real RM code, Firm sheet col F (matched only)
 let rmMoq      = {}; // normKey(rm_name) -> MOQ (kg) string, user-entered (no source feed yet)
 let pmMoq      = {}; // normKey(pm_name) -> MOQ (units) string — DUMMY seed, editable (no source feed yet)
-let rmReqOverride = {}; // normKey(rm_name or code) -> {m1, m2} kg — set by "Import Req Qty"
-let curTab = "demand";
+let rmReqOverride = {}; // normKey(rm_name) -> {name, m1, m2} kg — set by "Import Req Qty"
+let pmReqOverride = {}; // normKey(pm_name) -> {name, m1, m2} units — set by "Import Req Qty"
+let curTab = "rm";
 let demandFilter = "";
 let planDays = "30";   // demand-plan horizon (days); converts total requirement -> daily rate for DOH
 
@@ -1020,18 +1026,22 @@ function fwdCfgHtml() {
     (FWD.SUPPLY_SPLIT === "by_po_age" ? '<br><span style="color:var(--warn)">⚠ SUPPLY_SPLIT="by_po_age" needs PO dates (not embedded) → using all_m1</span>' : '');
 }
 function renderRM() {
-  const agg = aggregateRM();
   $("rmCfg").innerHTML = fwdCfgHtml();
   const NA = '<span class="muted">NA</span>';
   const hasOverride = Object.keys(rmReqOverride).length > 0;
   if ($("btnClearReqRm")) $("btnClearReqRm").style.display = hasOverride ? "" : "none";
 
-  const items = agg.map(e => {
-    const k = normKey(e.name);
+  if (!hasOverride) {
+    $("rmRows").innerHTML = '<tr><td colspan="17" style="text-align:center;padding:32px;color:#888;font-style:italic">Click <b>Import Req Qty</b> above to load required quantities from Excel/CSV.</td></tr>';
+    ["rmDistinct","rmDistinct2","rmStockTot","rmSupplyTot","rmOrderM1","rmOrderM2","rmAtRisk"].forEach(id => { const el = $(id); if (el) el.textContent = "0"; });
+    ["rmFootStock","rmFootSupplyM1","rmFootSupplyM2","rmFootReqM1","rmFootReqM2","rmFootM1","rmFootM2","rmFootAdjM1","rmFootAdjM2"].forEach(id => { const el = $(id); if (el) el.textContent = "0"; });
+    return;
+  }
+
+  const items = Object.entries(rmReqOverride).map(([k, ov]) => {
     const matched = !!rmFirm[k];
-    const ov = rmReqOverride[k] || rmReqOverride[normKey(rmCodeReal[k] || "")];
-    const reqM1 = ov ? (ov.m1 ?? e.reqM1Kg) : e.reqM1Kg;
-    const reqM2 = ov ? (ov.m2 ?? e.reqM2Kg) : e.reqM2Kg;
+    const reqM1 = ov.m1 || 0;
+    const reqM2 = ov.m2 || 0;
     const moq = num(rmMoq[k], true);
     const code = rmCodeReal[k] || (matMaster[k] ? matMaster[k].code : "");
     let stock = null, supply = 0, supM1 = 0, supM2 = 0, oM1 = null, oM2 = null;
@@ -1045,17 +1055,17 @@ function renderRM() {
       const availM2 = stockIntoM2 + supM2;
       oM2 = fwdOrder(reqM2, availM2, moq);
     }
-    return { e, k, matched, supply, supM1, supM2, moq, code, stock, oM1, oM2 };
+    return { k, name: ov.name, reqM1, reqM2, matched, supply, supM1, supM2, moq, code, stock, oM1, oM2 };
   });
   items.sort((a, b) => {
     if (a.matched !== b.matched) return a.matched ? -1 : 1;
-    return b.e.reqM1Kg - a.e.reqM1Kg;
+    return b.reqM1 - a.reqM1;
   });
 
   const tbody = $("rmRows"); tbody.innerHTML = "";
   let stockTot = 0, supplyTot = 0, supM1Tot = 0, supM2Tot = 0, m1Tot = 0, m2Tot = 0, adjM1Tot = 0, adjM2Tot = 0, reqM1Tot = 0, reqM2Tot = 0, ordersNeeded = 0, na = 0;
   items.forEach(r => {
-    reqM1Tot += r.e.reqM1Kg; reqM2Tot += r.e.reqM2Kg;
+    reqM1Tot += r.reqM1; reqM2Tot += r.reqM2;
     const tr = document.createElement("tr"); tr.className = "clickable";
     const moqVal = (rmMoq[r.k] == null ? "" : rmMoq[r.k]);
     const moqIn = '<input class="cell" type="number" min="0" step="25" value="' + escapeHtml(moqVal) +
@@ -1063,34 +1073,30 @@ function renderRM() {
     if (!r.matched) {
       na++;
       tr.innerHTML =
-        '<td class="sku-code">' + escapeHtml(r.code || "—") + '</td><td>' + escapeHtml(r.e.name) + '</td>' +
+        '<td class="sku-code">' + escapeHtml(r.code || "—") + '</td><td>' + escapeHtml(r.name) + '</td>' +
         '<td class="num">' + moqIn + '</td>' +
         '<td class="num">' + NA + '</td>' +
         '<td class="num"><span class="muted">—</span></td>' +
         '<td class="num"><span class="muted">—</span></td>' +
-        '<td class="num">' + fmt(r.e.reqM1Kg, 1) + '</td><td class="num">NA</td><td class="num">NA</td><td class="num">NA</td><td><span class="tag none">no stock feed</span></td>' +
-        '<td class="num">' + fmt(r.e.reqM2Kg, 1) + '</td><td class="num">NA</td><td class="num">NA</td><td class="num">NA</td><td><span class="tag none">no stock feed</span></td>' +
-        '<td class="num"><button class="expand-btn">▸ details</button></td>';
+        '<td class="num">' + fmt(r.reqM1, 1) + '</td><td class="num">NA</td><td class="num">NA</td><td class="num">NA</td><td><span class="tag none">no stock feed</span></td>' +
+        '<td class="num">' + fmt(r.reqM2, 1) + '</td><td class="num">NA</td><td class="num">NA</td><td class="num">NA</td><td><span class="tag none">no stock feed</span></td>' +
+        '<td class="num"></td>';
     } else {
       stockTot += r.stock; supplyTot += r.supply; supM1Tot += r.supM1; supM2Tot += r.supM2;
       m1Tot += r.oM1.oq; m2Tot += r.oM2.oq;
       adjM1Tot += moqAdjOrder(r.oM1.oq, r.moq); adjM2Tot += moqAdjOrder(r.oM2.oq, r.moq);
       if (r.oM1.oq > 0) ordersNeeded++;
       tr.innerHTML =
-        '<td class="sku-code">' + escapeHtml(r.code || "—") + '</td><td>' + escapeHtml(r.e.name) + '</td>' +
+        '<td class="sku-code">' + escapeHtml(r.code || "—") + '</td><td>' + escapeHtml(r.name) + '</td>' +
         '<td class="num">' + moqIn + '</td>' +
         '<td class="num req">' + fmt(r.stock, 3) + '</td>' +
         '<td class="num">' + fmt(r.supM1, 3) + '</td>' +
         '<td class="num">' + fmt(r.supM2, 3) + '</td>' +
-        '<td class="num">' + fmt(r.e.reqM1Kg, 1) + '</td><td class="num req">' + fmt(r.oM1.oq, 1) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM1.oq, r.moq), 1) + '</td>' + diffCell(r.oM1.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM1) + '</td>' +
-        '<td class="num">' + fmt(r.e.reqM2Kg, 1) + '</td><td class="num req">' + fmt(r.oM2.oq, 1) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM2.oq, r.moq), 1) + '</td>' + diffCell(r.oM2.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM2) + '</td>' +
-        '<td class="num"><button class="expand-btn">▸ details</button></td>';
+        '<td class="num">' + fmt(r.reqM1, 1) + '</td><td class="num req">' + fmt(r.oM1.oq, 1) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM1.oq, r.moq), 1) + '</td>' + diffCell(r.oM1.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM1) + '</td>' +
+        '<td class="num">' + fmt(r.reqM2, 1) + '</td><td class="num req">' + fmt(r.oM2.oq, 1) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM2.oq, r.moq), 1) + '</td>' + diffCell(r.oM2.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM2) + '</td>' +
+        '<td class="num"></td>';
     }
-    const drill = mkDrill(17, drillTableRM(r.e));
-    tbody.appendChild(tr); tbody.appendChild(drill);
-    const btn = tr.querySelector(".expand-btn");
-    btn.addEventListener("click", (ev) => { ev.stopPropagation(); toggleDrill(tr, drill, ev.target); });
-    tr.addEventListener("click", () => toggleDrill(tr, drill, btn));
+    tbody.appendChild(tr);
     const inp = tr.querySelector("input.cell");
     inp.addEventListener("click", ev => ev.stopPropagation());
     inp.addEventListener("change", () => { rmMoq[inp.getAttribute("data-k")] = inp.value; renderRM(); });
@@ -1142,45 +1148,47 @@ function drillTableRM(e) {
  *  TAB 3 — CONSOLIDATED PM
  * ================================================================== */
 function renderPM() {
-  const agg = aggregatePM();
   $("pmCfg").innerHTML = fwdCfgHtml();
+  const hasOverride = Object.keys(pmReqOverride).length > 0;
+  if ($("btnClearReqPm")) $("btnClearReqPm").style.display = hasOverride ? "" : "none";
 
-  const items = agg.map(e => {
-    const k = normKey(e.name);
-    if (pmMoq[k] == null) pmMoq[k] = String(dummyMoqPm(e.name));
-    const reqM1 = e.reqM1U, reqM2 = e.reqM2U;
+  if (!hasOverride) {
+    $("pmRows").innerHTML = '<tr><td colspan="14" style="text-align:center;padding:32px;color:#888;font-style:italic">Click <b>Import Req Qty</b> above to load required quantities from Excel/CSV.</td></tr>';
+    ["pmDistinct","pmDistinct2","pmStockTot","pmOrderM1","pmOrderM2","pmAtRisk"].forEach(id => { const el = $(id); if (el) el.textContent = "0"; });
+    ["pmFootStock","pmFootReqM1","pmFootReqM2","pmFootM1","pmFootM2","pmFootAdjM1","pmFootAdjM2"].forEach(id => { const el = $(id); if (el) el.textContent = "0"; });
+    return;
+  }
+
+  const items = Object.entries(pmReqOverride).map(([k, ov]) => {
+    if (pmMoq[k] == null) pmMoq[k] = "0";
+    const reqM1 = ov.m1 || 0, reqM2 = ov.m2 || 0;
     const moq = num(pmMoq[k], true);
     const stock = stockTotal("pm", k);
-    const availM1 = stock;
-    const oM1 = fwdOrder(reqM1, availM1, moq);
-    const stockIntoM2 = stock - reqM1;   // carry-forward (may be negative)
+    const oM1 = fwdOrder(reqM1, stock, moq);
+    const stockIntoM2 = stock - reqM1;
     const oM2 = fwdOrder(reqM2, stockIntoM2, moq);
-    return { e, k, moq, stock, oM1, oM2 };
+    return { k, name: ov.name, reqM1, reqM2, moq, stock, oM1, oM2 };
   });
-  items.sort((a, b) => b.e.reqM1U - a.e.reqM1U);
+  items.sort((a, b) => b.reqM1 - a.reqM1);
 
   const tbody = $("pmRows"); tbody.innerHTML = "";
   let stockTot = 0, m1Tot = 0, m2Tot = 0, adjM1Tot = 0, adjM2Tot = 0, reqM1Tot = 0, reqM2Tot = 0, ordersNeeded = 0;
   items.forEach(r => {
     stockTot += r.stock; m1Tot += r.oM1.oq; m2Tot += r.oM2.oq;
     adjM1Tot += moqAdjOrder(r.oM1.oq, r.moq); adjM2Tot += moqAdjOrder(r.oM2.oq, r.moq);
-    reqM1Tot += r.e.reqM1U; reqM2Tot += r.e.reqM2U;
+    reqM1Tot += r.reqM1; reqM2Tot += r.reqM2;
     if (r.oM1.oq > 0) ordersNeeded++;
     const tr = document.createElement("tr"); tr.className = "clickable";
     const moqIn = '<input class="cell" type="number" min="0" step="50" value="' + r.moq +
       '" data-k="' + escapeHtml(r.k) + '" style="width:80px" title="MOQ (editable)">';
     tr.innerHTML =
-      '<td>' + escapeHtml(r.e.name) + '</td>' +
+      '<td>' + escapeHtml(r.name) + '</td>' +
       '<td class="num">' + moqIn + '</td>' +
       '<td class="num req">' + fmt(r.stock, 0) + '</td>' +
-      '<td class="num">' + fmt(r.e.reqM1U, 0) + '</td><td class="num req">' + fmt(r.oM1.oq, 0) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM1.oq, r.moq), 0) + '</td>' + diffCell(r.oM1.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM1) + '</td>' +
-      '<td class="num">' + fmt(r.e.reqM2U, 0) + '</td><td class="num req">' + fmt(r.oM2.oq, 0) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM2.oq, r.moq), 0) + '</td>' + diffCell(r.oM2.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM2) + '</td>' +
-      '<td class="num"><button class="expand-btn">▸ details</button></td>';
-    const drill = mkDrill(14, drillTablePM(r.e));
-    tbody.appendChild(tr); tbody.appendChild(drill);
-    const btn = tr.querySelector(".expand-btn");
-    btn.addEventListener("click", (ev) => { ev.stopPropagation(); toggleDrill(tr, drill, ev.target); });
-    tr.addEventListener("click", () => toggleDrill(tr, drill, btn));
+      '<td class="num">' + fmt(r.reqM1, 0) + '</td><td class="num req">' + fmt(r.oM1.oq, 0) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM1.oq, r.moq), 0) + '</td>' + diffCell(r.oM1.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM1) + '</td>' +
+      '<td class="num">' + fmt(r.reqM2, 0) + '</td><td class="num req">' + fmt(r.oM2.oq, 0) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM2.oq, r.moq), 0) + '</td>' + diffCell(r.oM2.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM2) + '</td>' +
+      '<td class="num"></td>';
+    tbody.appendChild(tr);
     const inp = tr.querySelector("input.cell");
     inp.addEventListener("click", ev => ev.stopPropagation());
     inp.addEventListener("change", () => { pmMoq[inp.getAttribute("data-k")] = inp.value; renderPM(); });
@@ -1826,13 +1834,12 @@ function wire() {
         rows = await readXlsx(await file.arrayBuffer());
       } else { alert("Use .csv or .xlsx (not .xls)"); return; }
 
-      // Detect header row (first row), find columns by name
-      const hdr = rows[0].map(h => h.toLowerCase().replace(/[^a-z0-9]/g, ""));
-      const colName = hdr.findIndex(h => h.includes("rmname") || h.includes("name") || h.includes("material") || h.includes("rmcode") || h.includes("code"));
-      const colM1   = hdr.findIndex(h => h.includes("m1") || h.includes("month1") || h.includes("required") && !h.includes("m2"));
+      const hdr = rows[0].map(h => (h || "").toLowerCase().replace(/[^a-z0-9]/g, ""));
+      const colName = hdr.findIndex(h => h.includes("rmname") || h === "name" || h.includes("material") || h.includes("rmcode"));
+      const colM1   = hdr.findIndex(h => h.includes("m1") || h.includes("month1") || (h.includes("req") && !h.includes("m2")));
       const colM2   = hdr.findIndex(h => h.includes("m2") || h.includes("month2"));
 
-      if (colName < 0 || colM1 < 0) { alert("Cannot find required columns.\nExpected: RM Name, Required M1 (kg), Required M2 (kg)"); return; }
+      if (colName < 0 || colM1 < 0) { alert("Cannot find columns.\nExpected: RM NAME, REQ QUANTITY M1 (KGS), REQ QUANTITY M2 (KGS)"); return; }
 
       let loaded = 0;
       rmReqOverride = {};
@@ -1840,17 +1847,62 @@ function wire() {
         const row = rows[i];
         const nameRaw = (row[colName] || "").trim();
         if (!nameRaw) continue;
-        const m1 = parseFloat((row[colM1] || "").replace(/,/g, ""));
-        const m2 = colM2 >= 0 ? parseFloat((row[colM2] || "").replace(/,/g, "")) : 0;
+        const m1 = parseFloat((row[colM1] || "").toString().replace(/,/g, ""));
+        const m2 = colM2 >= 0 ? parseFloat((row[colM2] || "").toString().replace(/,/g, "")) : 0;
         if (isNaN(m1)) continue;
-        rmReqOverride[normKey(nameRaw)] = { m1: isNaN(m1) ? 0 : m1, m2: isNaN(m2) ? 0 : m2 };
+        rmReqOverride[normKey(nameRaw)] = { name: nameRaw, m1: m1, m2: isNaN(m2) ? 0 : m2 };
         loaded++;
       }
-      if (!loaded) { alert("No valid rows found. Check your file has RM Name and Required M1 (kg) columns."); return; }
-      alert('Loaded required qty for ' + loaded + ' RM(s). Override is active — click [Clear override] to revert to BOM-calculated values.');
+      if (!loaded) { alert("No valid rows found. Expected columns: RM NAME, REQ QUANTITY M1 (KGS), REQ QUANTITY M2 (KGS)"); return; }
+      alert('Loaded ' + loaded + ' RM(s). Click [Clear override] to remove.');
       renderRM();
     } catch (err) { alert("Error reading file: " + err.message); }
   });
+
+  // Import Required Qty (PM tab)
+  $("btnImportReqPm").addEventListener("click", () => $("fileReqPm").click());
+  $("btnClearReqPm").addEventListener("click", () => {
+    pmReqOverride = {};
+    $("btnClearReqPm").style.display = "none";
+    renderPM();
+  });
+  $("fileReqPm").addEventListener("change", async e => {
+    const file = e.target.files[0]; if (!file) return;
+    e.target.value = "";
+    try {
+      let rows;
+      if (/\.csv$/i.test(file.name)) {
+        const text = await file.text();
+        rows = text.trim().split(/\r?\n/).map(l => l.split(",").map(c => c.replace(/^"|"$/g, "").trim()));
+      } else if (/\.xlsx$/i.test(file.name)) {
+        rows = await readXlsx(await file.arrayBuffer());
+      } else { alert("Use .csv or .xlsx (not .xls)"); return; }
+
+      const hdr = rows[0].map(h => (h || "").toLowerCase().replace(/[^a-z0-9]/g, ""));
+      const colName = hdr.findIndex(h => h.includes("pmname") || h === "name" || h.includes("packaging") || h.includes("material"));
+      const colM1   = hdr.findIndex(h => h.includes("m1") || h.includes("month1") || (h.includes("req") && !h.includes("m2")));
+      const colM2   = hdr.findIndex(h => h.includes("m2") || h.includes("month2"));
+
+      if (colName < 0 || colM1 < 0) { alert("Cannot find columns.\nExpected: PM NAME, REQ QUANTITY M1, REQ QUANTITY M2"); return; }
+
+      let loaded = 0;
+      pmReqOverride = {};
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        const nameRaw = (row[colName] || "").trim();
+        if (!nameRaw) continue;
+        const m1 = parseFloat((row[colM1] || "").toString().replace(/,/g, ""));
+        const m2 = colM2 >= 0 ? parseFloat((row[colM2] || "").toString().replace(/,/g, "")) : 0;
+        if (isNaN(m1)) continue;
+        pmReqOverride[normKey(nameRaw)] = { name: nameRaw, m1: m1, m2: isNaN(m2) ? 0 : m2 };
+        loaded++;
+      }
+      if (!loaded) { alert("No valid rows found. Expected columns: PM NAME, REQ QUANTITY M1, REQ QUANTITY M2"); return; }
+      alert('Loaded ' + loaded + ' PM(s). Click [Clear override] to remove.');
+      renderPM();
+    } catch (err) { alert("Error reading file: " + err.message); }
+  });
+
   $("exportSku").addEventListener("click", exportSku);
   $("exportMaster").addEventListener("click", exportMaster);
   $("exportInv").addEventListener("click", exportInventory);
