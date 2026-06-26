@@ -2154,4 +2154,12 @@ function applyDemandFile() {
   const { matches } = computeDemandMatch();
   if (!matches.length) return;
   if ($("zeroOthers").checked) SKU.forEach(s => { demand[s.sku_code] = "0"; demandM2[s.sku_code] = "0"; });
-  matches.forEach(([code, m1, m2]) => { demand[code] = (m1 === "" ? "0" : m1); demandM2
+  matches.forEach(([code, m1, m2]) => { demand[code] = (m1 === "" ? "0" : m1); demandM2[code] = (m2 === "" ? "0" : m2); });
+  showTab(curTab);
+  $("demandModal").style.display = "none";
+  $("demandFileSetup").style.display = "none";
+  demandRowsFile = null;
+}
+</script>
+</body>
+</html>
