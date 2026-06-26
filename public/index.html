@@ -2160,6 +2160,135 @@ function applyDemandFile() {
   $("demandFileSetup").style.display = "none";
   demandRowsFile = null;
 }
+
+/* ================================================================
+ *  STARTUP — fetch dataset from /api/data, seed state, wire UI
+ * ================================================================ */
+const SHEET_ID = '1PDvEjSHOqrn902Y6vIpRvVwlkw3B5HpwP4w6_Stl58o';
+const GS_TABS = { skuMaster:'SKU Master', rmBom:'RM BOM', pmBom:'PM BOM', drr:'DRR', rmFirm:'RM Firm', rmMoq:'RM MOQ' };
+
+async function gvizFetch(tabName) {
+  const url = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID +
+    '/gviz/tq?tqx=out:csv&sheet=' + encodeURIComponent(tabName);
+  const res = await fetch(url);
+  const text = await res.text();
+  if (!res.ok || text.startsWith('<!') || text.startsWith('<html')) return null;
+  return text;
+}
+
+function gvizCsvToObjects(text) {
+  if (!text) return [];
+  const rows = [];
+  let row = [], field = '', i = 0, q = false;
+  text = text.replace(/^\uFEFF/, '');
+  while (i < text.length) {
+    const c = text[i];
+    if (q) {
+      if (c === '"') { if (text[i+1] === '"') { field += '"'; i++; } else q = false; }
+      else field += c;
+    } else {
+      if (c === '"') q = true;
+      else if (c === ',') { row.push(field); field = ''; }
+      else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+      else if (c !== '\r') field += c;
+    }
+    i++;
+  }
+  if (field || row.length) { row.push(field); rows.push(row); }
+  const data = rows.filter(r => r.some(c => String(c).trim() !== ''));
+  if (data.length < 2) return [];
+  const headers = data[0].map(h => h.trim().toLowerCase());
+  return data.slice(1).map(r => {
+    const obj = {};
+    headers.forEach((h, i) => { obj[h] = String(r[i] ?? '').trim(); });
+    return obj;
+  });
+}
+
+function pick(row, ...keys) {
+  for (const k of keys) {
+    const v = row[k] ?? row[k.replace(/ /g,'_')] ?? row[k.replace(/_/g,' ')];
+    if (v != null && v !== '') return v;
+  }
+  return '';
+}
+
+async function fetchDataClientSide() {
+  const [skuT, rmT, pmT, drrT, firmT, moqT] = await Promise.all([
+    gvizFetch(GS_TABS.skuMaster), gvizFetch(GS_TABS.rmBom), gvizFetch(GS_TABS.pmBom),
+    gvizFetch(GS_TABS.drr), gvizFetch(GS_TABS.rmFirm), gvizFetch(GS_TABS.rmMoq)
+  ]);
+  const sku_master = gvizCsvToObjects(skuT).map(r => ({
+    sku_code: pick(r,'sku_code','sku code','sku','code'),
+    fg_name:  pick(r,'fg_name','fg name','product name','name','product'),
+    pack_size_g: pick(r,'pack_size_g','pack size (g)','pack_size','pack size','pack'),
+  })).filter(r => r.sku_code);
+  const bom_rm = gvizCsvToObjects(rmT).map(r => ({
+    sku_code: pick(r,'sku_code','sku code','sku'),
+    rm_name:  pick(r,'rm_name','rm name','raw material','name'),
+    rm_pct:   pick(r,'rm_pct','rm %','rm percent','pct','percent','%'),
+  })).filter(r => r.sku_code && r.rm_name);
+  const bom_pm = gvizCsvToObjects(pmT).map(r => ({
+    sku_code:        pick(r,'sku_code','sku code','sku'),
+    pm_name:         pick(r,'pm_name','pm name','packaging material','name'),
+    pm_qty_per_unit: pick(r,'pm_qty_per_unit','qty per unit','qty/unit','qty','quantity')||'1',
+    pm_code:         pick(r,'pm_code','pm code','code')||'',
+  })).filter(r => r.sku_code && r.pm_name);
+  const drr = {};
+  gvizCsvToObjects(drrT).forEach(r => {
+    const sku = pick(r,'sku_code','sku code','sku');
+    const val = pick(r,'drr','units/day','units per day','daily run rate');
+    if (sku) drr[sku] = parseFloat(val)||0;
+  });
+  const rm_firm = gvizCsvToObjects(firmT).map(r => ({
+    name:   pick(r,'name','rm_name','rm name','material'),
+    code:   pick(r,'code','rm_code','rm code'),
+    stock:  pick(r,'stock','current stock','stock (kg)'),
+    supply: pick(r,'supply','supply_m1','expected supply','supply (kg)'),
+  })).filter(r => r.name);
+  const rm_moq = gvizCsvToObjects(moqT).map(r => ({
+    name: pick(r,'name','rm_name','rm name','material'),
+    moq:  pick(r,'moq','moq (kg)','minimum order qty'),
+  })).filter(r => r.name);
+  return { sku_master, bom_rm, bom_pm, drr, rm_firm, rm_moq };
+}
+
+async function init() {
+  wire();
+  showTab('demand');
+  const st = $('dataStatus');
+  try {
+    let d = null;
+    // Try serverless API first
+    try {
+      const res = await fetch('/api/data');
+      if (res.ok) {
+        const j = await res.json();
+        if (!j.error && j.sku_master && j.sku_master.length > 0) d = j;
+      }
+    } catch (_) { /* fall through to client-side fetch */ }
+
+    // Client-side gviz fallback (browser can reach Google, Lambda often blocked)
+    if (!d || !d.sku_master || d.sku_master.length === 0) {
+      st.textContent = 'Loading dataset (direct)…';
+      d = await fetchDataClientSide();
+    }
+
+    if (!d.sku_master || d.sku_master.length === 0) {
+      st.textContent = '⚠ No SKUs loaded — upload your CSVs to continue.';
+      return;
+    }
+    loadDataset(d);
+    st.textContent = 'Dataset loaded ✓ — ' + d.sku_master.length + ' SKUs';
+    showTab('demand');
+  } catch (e) {
+    st.textContent = '⚠ Could not load dataset: ' + (e && e.message ? e.message : e) + '. Upload CSVs to continue.';
+    console.error('init error', e);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', init);
+
 </script>
 </body>
 </html>
