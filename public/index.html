@@ -1450,6 +1450,7 @@ function renderInventory() {
         const tot = tr.querySelector("[data-tot]");
         if (tot) tot.textContent = fmt(stockTotal(e.kind, e.key), dp);
         updateInvKpis();
+        broadcastStockUpdate();
       });
       inp.style.width = "84px";
       td.appendChild(inp); tr.appendChild(td);
@@ -2279,12 +2280,42 @@ async function init() {
       return;
     }
     loadDataset(d);
+    broadcastStockUpdate();
     st.textContent = 'Dataset loaded ✓ — ' + d.sku_master.length + ' SKUs';
     showTab('demand');
   } catch (e) {
     st.textContent = '⚠ Could not load dataset: ' + (e && e.message ? e.message : e) + '. Upload CSVs to continue.';
     console.error('init error', e);
   }
+}
+
+function broadcastStockUpdate() {
+  if (!MATLIST || !MATLIST.length) return;
+  try {
+    const skuNames = {}, packSizes = {};
+    SKU.forEach(s => { skuNames[s.sku_code] = s.fg_name; packSizes[s.sku_code] = s.pack_size_g; });
+
+    const rmStock = {}, pmStock = {};
+    MATLIST.forEach(e => {
+      if (e.kind === 'rm') rmStock[e.key] = stockTotal('rm', e.key);
+      else                 pmStock[e.key] = stockTotal('pm', e.key);
+    });
+
+    const rmBom = {}, pmBom = {};
+    RM.forEach(r => {
+      const c = r.sku_code; if (!rmBom[c]) rmBom[c] = [];
+      rmBom[c].push({ key: normKey(r.rm_name), pct: r.rm_pct });
+    });
+    PM.forEach(r => {
+      const c = r.sku_code; if (!pmBom[c]) pmBom[c] = [];
+      pmBom[c].push({ key: normKey(r.pm_name), qty: r.pm_qty_per_unit || 1 });
+    });
+
+    window.parent.postMessage({
+      type: 'MRP_STOCK_UPDATE',
+      skuNames, packSizes, rmStock, pmStock, rmBom, pmBom
+    }, '*');
+  } catch(e) { console.warn('broadcastStockUpdate:', e); }
 }
 
 document.addEventListener('DOMContentLoaded', init);
