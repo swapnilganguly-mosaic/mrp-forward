@@ -2113,10 +2113,15 @@ const GS_TABS = { skuMaster:'SKU Master', rmBom:'RM BOM', pmBom:'PM BOM', drr:'D
 async function gvizFetch(tabName) {
   const url = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID +
     '/gviz/tq?tqx=out:csv&sheet=' + encodeURIComponent(tabName);
-  const res = await fetch(url);
-  const text = await res.text();
-  if (!res.ok || text.startsWith('<!') || text.startsWith('<html')) return null;
-  return text;
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 5000);
+    const res = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(timer);
+    const text = await res.text();
+    if (!res.ok || text.startsWith('<!') || text.startsWith('<html')) return null;
+    return text;
+  } catch(e) { return null; }
 }
 
 function gvizCsvToObjects(text) {
@@ -2204,7 +2209,10 @@ async function init() {
     let d = null;
     // Try serverless API first
     try {
-      const res = await fetch('/api/data');
+      const ctrl2 = new AbortController();
+      const t2 = setTimeout(() => ctrl2.abort(), 5000);
+      const res = await fetch('/api/data', { signal: ctrl2.signal });
+      clearTimeout(t2);
       if (res.ok) {
         const j = await res.json();
         if (!j.error && j.sku_master && j.sku_master.length > 0) d = j;
