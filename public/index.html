@@ -133,9 +133,8 @@
     <div class="tab active" data-tab="demand">1 · Supply Entry</div>
     <div class="tab" data-tab="rm">2 · Consolidated RM</div>
     <div class="tab" data-tab="pm">3 · Consolidated PM</div>
-    <div class="tab" data-tab="sku">4 · Per-SKU Breakdown</div>
-    <div class="tab" data-tab="master">5 · Material Master</div>
-    <div class="tab" data-tab="inv">6 · Live Inventory</div>
+    <div class="tab" data-tab="master">4 · Material Master</div>
+    <div class="tab" data-tab="inv">5 · Live Inventory</div>
   </div>
 
   <!-- ============ TAB 1: DEMAND ENTRY ============ -->
@@ -269,66 +268,9 @@
     <div class="hint"><b>Forward planning</b>: <b>Required qty</b> (per month, units) = Σ(pm_qty_per_unit × month demand). M1→M2 carry-forward: closing M1 stock = current stock − required M1 (may be negative). PM has no expected-supply feed. <b>Desired quantity</b> = max(0, REQ − available). <b>Actual Quantity</b> floors at MOQ. Click a row for per-SKU details. <b>Verify before raising any PO.</b></div>
   </section>
 
-  <!-- ============ TAB 4: PER-SKU BREAKDOWN ============ -->
-  <section class="panel" id="panel-sku">
-    <div class="toolbar">
-      <div class="field">
-        <label>Choose a SKU</label>
-        <select class="sku" id="skuPicker"></select>
-      </div>
-      <div class="field">
-        <label>Supply M1 (units)</label>
-        <input class="cell" id="skuDemand" type="number" min="0" step="1" />
-      </div>
-      <div class="field">
-        <label>Supply M2 (units)</label>
-        <input class="cell" id="skuDemand2" type="number" min="0" step="1" />
-      </div>
-      <div class="field">
-        <label>Pack size (g)</label>
-        <input class="cell" id="skuPack" type="number" min="0" step="1" />
-      </div>
-      <div class="spacer"></div>
-      <div class="field" style="justify-content:flex-end"><button class="btn primary" id="exportSku">Export this SKU</button></div>
-    </div>
-    <div id="skuBanner"></div>
+  
 
-    <h2 style="font-size:15px;margin:18px 0 8px;">Raw Materials</h2>
-    <table>
-      <thead>
-        <tr>
-          <th style="width:48%">Raw Material</th>
-          <th class="num">RM % in FG</th>
-          <th class="num">g / unit</th>
-          <th class="num">Required (kg)</th>
-        </tr>
-      </thead>
-      <tbody id="skuRmRows"></tbody>
-      <tfoot><tr>
-        <td>Total</td>
-        <td class="num" id="skuPctTotal">0</td>
-        <td class="num muted" id="skuGramsTotal">0</td>
-        <td class="num req" id="skuKgTotal">0.000</td>
-      </tr></tfoot>
-    </table>
-
-    <h2 style="font-size:15px;margin:22px 0 8px;">Packaging Materials</h2>
-    <table>
-      <thead>
-        <tr>
-          <th style="width:60%">Packaging Material</th>
-          <th class="num">Qty / unit</th>
-          <th class="num">Required (units)</th>
-        </tr>
-      </thead>
-      <tbody id="skuPmRows"></tbody>
-      <tfoot><tr><td>Total</td><td class="num" id="skuPmQtyTotal">0</td><td class="num req" id="skuPmUnitsTotal">0</td></tr></tfoot>
-    </table>
-    <div class="hint">RM % and qty per unit are editable here and feed straight into the consolidated tabs.
-      A per-SKU RM % that does not sum to 100% is flagged but never blocks calculation.</div>
-  </section>
-
-  <!-- ============ TAB 5: MATERIAL MASTER ============ -->
+  <!-- ============ TAB 4: MATERIAL MASTER ============ -->
   <section class="panel" id="panel-master">
     <div class="grand">
       <div class="kpi"><b id="mmRm">0</b><span>Raw materials</span></div>
@@ -361,7 +303,7 @@
       per-co-packer code mapping.</div>
   </section>
 
-  <!-- ============ TAB 6: LIVE INVENTORY ============ -->
+  <!-- ============ TAB 5: LIVE INVENTORY ============ -->
   <section class="panel" id="panel-inv">
     <div class="grand">
       <div class="kpi"><b id="invTotalRm">0.000</b><span>Total RM stock (kg)</span></div>
