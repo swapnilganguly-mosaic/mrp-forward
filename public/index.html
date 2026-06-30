@@ -2205,7 +2205,7 @@ async function fetchDataClientSide() {
 }
 
 async function init() {
-  wire();
+  try { wire(); } catch(e) { console.warn('wire init error:', e.message); }
   showTab('demand');
   const st = $('dataStatus');
   try {
