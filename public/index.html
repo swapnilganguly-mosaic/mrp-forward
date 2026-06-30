@@ -1869,7 +1869,7 @@ function wire() {
     } catch (err) { alert("Error reading file: " + err.message); }
   });
 
-  $("exportSku").addEventListener("click", exportSku);
+  if ($("exportSku")) $("exportSku").addEventListener("click", exportSku);
   $("exportMaster").addEventListener("click", exportMaster);
   $("exportInv").addEventListener("click", exportInventory);
 
