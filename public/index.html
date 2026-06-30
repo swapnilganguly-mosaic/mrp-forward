@@ -1769,10 +1769,12 @@ function wire() {
   $("planDays").addEventListener("input", e => { planDays = e.target.value; if (curTab === "rm" || curTab === "pm") showTab(curTab); });
 
   // Per-SKU controls
+  if ($("skuPicker")) {
   $("skuPicker").addEventListener("change", e => renderSkuDetail(e.target.value));
   $("skuDemand").addEventListener("input", e => { const c = $("skuPicker").value; demand[c] = e.target.value; renderSkuDetail(c); });
   $("skuDemand2").addEventListener("input", e => { const c = $("skuPicker").value; demandM2[c] = e.target.value; renderSkuDetail(c); });
-  $("skuPack").addEventListener("input", e => { const c = $("skuPicker").value; skuIndex[c].pack_size_g = e.target.value; renderSkuDetail(c); });
+  $("skuPack").addEventListener("input", e => { const c = $("skuPicker").value; skuIndex[c].pack_size_g = e.target.value; renderSkuDetail(c); });  }
+
 
   // Exports
   $("btnExportForNovaCore").addEventListener("click", exportForNovaCore);
