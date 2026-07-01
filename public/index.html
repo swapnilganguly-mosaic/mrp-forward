@@ -990,7 +990,7 @@ function renderRM() {
       [supM1, supM2] = fwdSupplySplit(supply);
       const availM1 = stock + supM1;
       oM1 = fwdOrder(reqM1, availM1, moq);
-      const stockIntoM2 = stock + supM1 - reqM1;   // carry-forward (may be negative)
+      const stockIntoM2 = Math.max(0, stock + supM1 - reqM1)   // carry-forward (may be negative)
       const availM2 = stockIntoM2 + supM2;
       oM2 = fwdOrder(reqM2, availM2, moq);
     }
@@ -1104,7 +1104,7 @@ function renderPM() {
     const moq = num(pmMoq[k], true);
     const stock = stockTotal("pm", k);
     const oM1 = fwdOrder(reqM1, stock, moq);
-    const stockIntoM2 = stock - reqM1;
+    const stockIntoM2 = Math.max(0, stock - reqM1)
     const oM2 = fwdOrder(reqM2, stockIntoM2, moq);
     return { k, name: ov.name, reqM1, reqM2, moq, stock, oM1, oM2 };
   });
