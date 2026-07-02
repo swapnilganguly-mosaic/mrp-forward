@@ -2351,37 +2351,47 @@ function renderSkuDoc() {
   function fmtDoc(d) { return d == null ? '—' : d.toFixed(1) + ' d'; }
 
   function getMats(skuCode) {
-    var s = skuIndex[skuCode]; if (!s) return {rm:[],pm:[],dem1:0,skuName:''};
+    var s = skuIndex[skuCode]; if (!s) return {rm:[],pm:[],dem1:0,dem2:0,skuName:''};
     var packG = num(s.pack_size_g, true);
     var dem1 = num(demand[skuCode], true);
+    var dem2 = num(demandM2[skuCode], true);
     var rm = STATIC_BOM.bom_rm.filter(function(r){return r.sku_code===skuCode&&r.rm_name;}).map(function(r){
       var nk=normKey(r.rm_name); var pct=num(r.rm_pct,true);
       var req1=pct/100*packG*dem1/1000;
+      var req2=pct/100*packG*dem2/1000;
       var f=rmFirm[nk]; var stock=f?f.stock:null; var moq=num(rmMoq[nk],true);
-      var doc=(stock!=null&&req1>0)?stock*30/req1:null;
-      return {code:f?f.code:'',name:r.rm_name,stock:stock,moq:moq,req1:req1,doc:doc};
+      var docM1=(stock!=null&&req1>0)?stock*30/req1:null;
+      var docM2=(stock!=null&&req2>0)?stock*30/req2:null;
+      return {code:f?f.code:'',name:r.rm_name,stock:stock,moq:moq,req1:req1,req2:req2,docM1:docM1,docM2:docM2};
     });
     var pm = STATIC_BOM.bom_pm.filter(function(r){return r.sku_code===skuCode;}).map(function(r){
       var nk=normKey(r.pm_name); var qpu=num(r.pm_qty_per_unit,true);
       var req1=qpu*dem1;
+      var req2=qpu*dem2;
       var stock=stockTotal('pm',nk); var moq=num(pmMoq[nk],true);
-      var doc=(stock!=null&&req1>0)?stock*30/req1:null;
-      return {code:r.pm_code||'',name:r.pm_name,stock:stock,moq:moq,req1:req1,doc:doc};
+      var docM1=(stock!=null&&req1>0)?stock*30/req1:null;
+      var docM2=(stock!=null&&req2>0)?stock*30/req2:null;
+      return {code:r.pm_code||'',name:r.pm_name,stock:stock,moq:moq,req1:req1,req2:req2,docM1:docM1,docM2:docM2};
     });
-    return {rm:rm,pm:pm,dem1:dem1,skuName:s.fg_name||skuCode};
+    return {rm:rm,pm:pm,dem1:dem1,dem2:dem2,skuName:s.fg_name||skuCode};
   }
 
   if (!sel) {
     if(info) info.textContent='';
     var tbl=document.createElement('table');
     tbl.style.cssText='width:100%;border-collapse:collapse;font-size:0.9em';
-    tbl.innerHTML='<thead><tr style="background:#f0f0f0;text-align:left"><th style="padding:6px 8px">SKU Name</th><th style="padding:6px 8px;text-align:right">Demand M1</th><th style="padding:6px 8px;text-align:center">Min RM DOC</th><th style="padding:6px 8px">Bottleneck RM</th><th style="padding:6px 8px;text-align:center">Min PM DOC</th><th style="padding:6px 8px">Bottleneck PM</th></tr></thead>';
+    tbl.innerHTML='<thead><tr style="background:#f0f0f0;text-align:left"><th style="padding:6px 8px">SKU Name</th><th style="padding:6px 8px;text-align:center">Min RM DOC M1</th><th style="padding:6px 8px;text-align:center">Min RM DOC M2</th><th style="padding:6px 8px">Bottleneck RM</th><th style="padding:6px 8px;text-align:center">Min PM DOC M1</th><th style="padding:6px 8px;text-align:center">Min PM DOC M2</th><th style="padding:6px 8px">Bottleneck PM</th></tr></thead>';
     var tbody=document.createElement('tbody');
     var allSkus=Object.keys(skuIndex).sort(function(a,b){return (skuIndex[a].fg_name||'').localeCompare(skuIndex[b].fg_name||'');});
     allSkus.forEach(function(sku){
       var d=getMats(sku);
-      var minRm=d.rm.filter(function(r){return r.doc!=null;}).sort(function(a,b){return a.doc-b.doc;})[0];
-      var minPm=d.pm.filter(function(r){return r.doc!=null;}).sort(function(a,b){return a.doc-b.doc;})[0];
+      var rmByM1=d.rm.filter(function(r){return r.docM1!=null;}).sort(function(a,b){return a.docM1-b.docM1;});
+      var rmByM2=d.rm.filter(function(r){return r.docM2!=null;}).sort(function(a,b){return a.docM2-b.docM2;});
+      var pmByM1=d.pm.filter(function(r){return r.docM1!=null;}).sort(function(a,b){return a.docM1-b.docM1;});
+      var pmByM2=d.pm.filter(function(r){return r.docM2!=null;}).sort(function(a,b){return a.docM2-b.docM2;});
+      var minRmM1=rmByM1[0]||null; var minRmM2=rmByM2[0]||null;
+      var minPmM1=pmByM1[0]||null; var minPmM2=pmByM2[0]||null;
+      var rmBot=(minRmM1||minRmM2); var pmBot=(minPmM1||minPmM2);
       var tr=document.createElement('tr');
       var td0=document.createElement('td');
       td0.textContent=d.skuName; td0.style.cssText='padding:5px 8px;border-bottom:1px solid #eee;cursor:pointer;color:#1a73e8;text-decoration:underline';
@@ -2389,31 +2399,38 @@ function renderSkuDoc() {
       td0.addEventListener('click',function(){picker.value=this.dataset.sku;renderSkuDoc();});
       tr.appendChild(td0);
       tr.innerHTML+=
-        '<td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:right">'+d.dem1+'</td>'+
-        '<td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:center;'+(minRm?docBg(minRm.doc):'')+'">'+fmtDoc(minRm?minRm.doc:null)+'</td>'+
-        '<td style="padding:5px 8px;border-bottom:1px solid #eee;font-size:0.85em;color:#555">'+escapeHtml(minRm?minRm.name:'—')+'</td>'+
-        '<td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:center;'+(minPm?docBg(minPm.doc):'')+'">'+fmtDoc(minPm?minPm.doc:null)+'</td>'+
-        '<td style="padding:5px 8px;border-bottom:1px solid #eee;font-size:0.85em;color:#555">'+escapeHtml(minPm?minPm.name:'—')+'</td>';
+        '<td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:center;'+(minRmM1?docBg(minRmM1.docM1):'')+'">'+ fmtDoc(minRmM1?minRmM1.docM1:null)+'</td>'+
+        '<td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:center;'+(minRmM2?docBg(minRmM2.docM2):'')+'">'+ fmtDoc(minRmM2?minRmM2.docM2:null)+'</td>'+
+        '<td style="padding:5px 8px;border-bottom:1px solid #eee;font-size:0.85em;color:#555">'+ escapeHtml(rmBot?rmBot.name:'—')+'</td>'+
+        '<td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:center;'+(minPmM1?docBg(minPmM1.docM1):'')+'">'+ fmtDoc(minPmM1?minPmM1.docM1:null)+'</td>'+
+        '<td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:center;'+(minPmM2?docBg(minPmM2.docM2):'')+'">'+ fmtDoc(minPmM2?minPmM2.docM2:null)+'</td>'+
+        '<td style="padding:5px 8px;border-bottom:1px solid #eee;font-size:0.85em;color:#555">'+ escapeHtml(pmBot?pmBot.name:'—')+'</td>';
       tbody.appendChild(tr);
     });
     tbl.appendChild(tbody); body.appendChild(tbl);
   } else {
     var d2=getMats(sel);
-    if(info) info.textContent=d2.skuName+' — Demand M1: '+d2.dem1+' units';
-    var rmDocs2=d2.rm.filter(function(r){return r.doc!=null;}).map(function(r){return r.doc;});
-    var pmDocs2=d2.pm.filter(function(r){return r.doc!=null;}).map(function(r){return r.doc;});
-    var rmMin2=rmDocs2.length?Math.min.apply(null,rmDocs2):null;
-    var pmMin2=pmDocs2.length?Math.min.apply(null,pmDocs2):null;
+    if(info) info.textContent=d2.skuName+' — M1: '+d2.dem1+' | M2: '+d2.dem2+' units';
+    var minFn=function(r){return Math.min(r.docM1!=null?r.docM1:Infinity,r.docM2!=null?r.docM2:Infinity);};
+    var rmMins=d2.rm.map(minFn).filter(function(v){return v!==Infinity;});
+    var pmMins=d2.pm.map(minFn).filter(function(v){return v!==Infinity;});
+    var rmMin2=rmMins.length?Math.min.apply(null,rmMins):null;
+    var pmMin2=pmMins.length?Math.min.apply(null,pmMins):null;
     var makeMatTable=function(rows,title,minDoc,unit) {
       var wrap=document.createElement('div'); wrap.style.marginBottom='28px';
       var h3=document.createElement('h3'); h3.textContent=title;
       h3.style.cssText='margin:0 0 8px;font-size:1em;font-weight:600;color:#444;border-bottom:2px solid #e0e0e0;padding-bottom:4px';
       wrap.appendChild(h3);
       var t=document.createElement('table'); t.style.cssText='width:100%;border-collapse:collapse;font-size:0.88em';
-      t.innerHTML='<thead><tr style="background:#f5f5f5"><th style="text-align:left;padding:6px 8px">Code</th><th style="text-align:left;padding:6px 8px">Material Name</th><th style="padding:6px 8px;text-align:right">MOQ</th><th style="padding:6px 8px;text-align:right">Stock ('+unit+')</th><th style="padding:6px 8px;text-align:right">Req M1 ('+unit+')</th><th style="padding:6px 8px;text-align:center">DOC</th><th style="padding:6px 8px;text-align:center">Flag</th></tr></thead>';
+      t.innerHTML='<thead><tr style="background:#f5f5f5"><th style="text-align:left;padding:6px 8px">Code</th><th style="text-align:left;padding:6px 8px">Material Name</th><th style="padding:6px 8px;text-align:right">MOQ</th><th style="padding:6px 8px;text-align:right">Stock ('+unit+')</th><th style="padding:6px 8px;text-align:right">Req M1 ('+unit+')</th><th style="padding:6px 8px;text-align:center">DOC M1</th><th style="padding:6px 8px;text-align:right">Req M2 ('+unit+')</th><th style="padding:6px 8px;text-align:center">DOC M2</th><th style="padding:6px 8px;text-align:center">Flag</th></tr></thead>';
       var tb=document.createElement('tbody');
-      rows.slice().sort(function(a,b){return (a.doc!=null?a.doc:Infinity)-(b.doc!=null?b.doc:Infinity);}).forEach(function(r){
-        var isMin=r.doc!=null&&r.doc===minDoc;
+      rows.slice().sort(function(a,b){
+        var am=Math.min(a.docM1!=null?a.docM1:Infinity,a.docM2!=null?a.docM2:Infinity);
+        var bm=Math.min(b.docM1!=null?b.docM1:Infinity,b.docM2!=null?b.docM2:Infinity);
+        return am-bm;
+      }).forEach(function(r){
+        var rMin=Math.min(r.docM1!=null?r.docM1:Infinity,r.docM2!=null?r.docM2:Infinity);
+        var isMin=rMin!==Infinity&&rMin===minDoc;
         var tr2=document.createElement('tr');
         if(isMin) tr2.style.fontWeight='600';
         tr2.innerHTML=
@@ -2422,7 +2439,9 @@ function renderSkuDoc() {
           '<td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:right">'+r.moq+'</td>'+
           '<td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:right">'+fmt(r.stock,unit==='kg'?3:0)+'</td>'+
           '<td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:right">'+(!d2.dem1?'—':fmt(r.req1,unit==='kg'?3:0))+'</td>'+
-          '<td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:center;'+docBg(r.doc)+'">'+(!d2.dem1?'Set demand':fmtDoc(r.doc))+'</td>'+
+          '<td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:center;'+docBg(r.docM1)+'">'+(! d2.dem1?'Set demand':fmtDoc(r.docM1))+'</td>'+
+          '<td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:right">'+(!d2.dem2?'—':fmt(r.req2,unit==='kg'?3:0))+'</td>'+
+          '<td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:center;'+docBg(r.docM2)+'">'+(! d2.dem2?'Set demand':fmtDoc(r.docM2))+'</td>'+
           '<td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:center;font-size:1.1em">'+(isMin?'⚠ MIN':'')+'</td>';
         tb.appendChild(tr2);
       });
