@@ -198,13 +198,13 @@
           <th rowspan="2" class="num">Current stock (kg)</th>
           <th rowspan="2" class="num">Exp. supply M1</th>
           <th rowspan="2" class="num">Exp. supply M2</th>
-          <th colspan="5" class="grp">Month 1 (0–30 d)</th>
-          <th colspan="5" class="grp">Month 2 (31–60 d)</th>
+          <th colspan="6" class="grp">Month 1 (0–30 d)</th>
+          <th colspan="6" class="grp">Month 2 (31–60 d)</th>
           <th rowspan="2" style="width:80px"></th>
         </tr>
         <tr>
-          <th class="num">Required qty</th><th class="num">Desired qty</th><th class="num">Actual Qty</th><th class="num">Diff</th><th>Status</th>
-          <th class="num">Required qty</th><th class="num">Desired qty</th><th class="num">Actual Qty</th><th class="num">Diff</th><th>Status</th>
+          <th class="num">Required qty</th><th class="num">RM DOC</th><th class="num">Desired qty</th><th class="num">Actual Qty</th><th class="num">Diff</th><th>Status</th>
+          <th class="num">Required qty</th><th class="num">RM DOC</th><th class="num">Desired qty</th><th class="num">Actual Qty</th><th class="num">Diff</th><th>Status</th>
         </tr>
       </thead>
       <tbody id="rmRows"></tbody>
@@ -246,13 +246,13 @@
           <th rowspan="2">Packaging Material</th>
           <th rowspan="2" class="num">MOQ (units)</th>
           <th rowspan="2" class="num">Stock in hand (units)</th>
-          <th colspan="5" class="grp">Month 1 (0–30 d)</th>
-          <th colspan="5" class="grp">Month 2 (31–60 d)</th>
+          <th colspan="6" class="grp">Month 1 (0–30 d)</th>
+          <th colspan="6" class="grp">Month 2 (31–60 d)</th>
           <th rowspan="2" style="width:90px"></th>
         </tr>
         <tr>
-          <th class="num">Required qty</th><th class="num">Desired quantity</th><th class="num">Actual Quantity</th><th class="num">Diff</th><th>Status</th>
-          <th class="num">Required qty</th><th class="num">Desired quantity</th><th class="num">Actual Quantity</th><th class="num">Diff</th><th>Status</th>
+          <th class="num">Required qty</th><th class="num">PM DOC</th><th class="num">Desired quantity</th><th class="num">Actual Quantity</th><th class="num">Diff</th><th>Status</th>
+          <th class="num">Required qty</th><th class="num">PM DOC</th><th class="num">Desired quantity</th><th class="num">Actual Quantity</th><th class="num">Diff</th><th>Status</th>
         </tr>
       </thead>
       <tbody id="pmRows"></tbody>
@@ -1017,8 +1017,8 @@ function renderRM() {
         '<td class="num">' + NA + '</td>' +
         '<td class="num"><span class="muted">—</span></td>' +
         '<td class="num"><span class="muted">—</span></td>' +
-        '<td class="num">' + fmt(r.reqM1, 1) + '</td><td class="num">NA</td><td class="num">NA</td><td class="num">NA</td><td><span class="tag none">no stock feed</span></td>' +
-        '<td class="num">' + fmt(r.reqM2, 1) + '</td><td class="num">NA</td><td class="num">NA</td><td class="num">NA</td><td><span class="tag none">no stock feed</span></td>' +
+        '<td class="num">' + fmt(r.reqM1, 1) + '</td>' + '<td class="num">' + (r.stock != null && r.reqM1 > 0 ? (r.stock * 30 / r.reqM1).toFixed(1) : '—') + '<td class="num">NA</td><td class="num">NA</td><td class="num">NA</td><td><span class="tag none">no stock feed</span></td>' +
+        '<td class="num">' + fmt(r.reqM2, 1) + '</td>' + '<td class="num">' + (r.stock != null && r.reqM2 > 0 ? (r.stock * 30 / r.reqM2).toFixed(1) : '—') + '<td class="num">NA</td><td class="num">NA</td><td class="num">NA</td><td><span class="tag none">no stock feed</span></td>' +
         '<td class="num"></td>';
     } else {
       stockTot += r.stock; supplyTot += r.supply; supM1Tot += r.supM1; supM2Tot += r.supM2;
@@ -1031,8 +1031,8 @@ function renderRM() {
         '<td class="num req">' + fmt(r.stock, 3) + '</td>' +
         '<td class="num">' + fmt(r.supM1, 3) + '</td>' +
         '<td class="num">' + fmt(r.supM2, 3) + '</td>' +
-        '<td class="num">' + fmt(r.reqM1, 1) + '</td><td class="num req">' + fmt(r.oM1.oq, 1) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM1.oq, r.moq), 1) + '</td>' + diffCell(r.oM1.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM1) + '</td>' +
-        '<td class="num">' + fmt(r.reqM2, 1) + '</td><td class="num req">' + fmt(r.oM2.oq, 1) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM2.oq, r.moq), 1) + '</td>' + diffCell(r.oM2.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM2) + '</td>' +
+        '<td class="num">' + fmt(r.reqM1, 1) + '</td>' + '<td class="num">' + (r.stock != null && r.reqM1 > 0 ? (r.stock * 30 / r.reqM1).toFixed(1) : '—') + '<td class="num req">' + fmt(r.oM1.oq, 1) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM1.oq, r.moq), 1) + '</td>' + diffCell(r.oM1.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM1) + '</td>' +
+        '<td class="num">' + fmt(r.reqM2, 1) + '</td>' + '<td class="num">' + (r.stock != null && r.reqM2 > 0 ? (r.stock * 30 / r.reqM2).toFixed(1) : '—') + '<td class="num req">' + fmt(r.oM2.oq, 1) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM2.oq, r.moq), 1) + '</td>' + diffCell(r.oM2.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM2) + '</td>' +
         '<td class="num"></td>';
     }
     tbody.appendChild(tr);
@@ -1124,8 +1124,8 @@ function renderPM() {
       '<td>' + escapeHtml(r.name) + '</td>' +
       '<td class="num">' + moqIn + '</td>' +
       '<td class="num req">' + fmt(r.stock, 0) + '</td>' +
-      '<td class="num">' + fmt(r.reqM1, 0) + '</td><td class="num req">' + fmt(r.oM1.oq, 0) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM1.oq, r.moq), 0) + '</td>' + diffCell(r.oM1.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM1) + '</td>' +
-      '<td class="num">' + fmt(r.reqM2, 0) + '</td><td class="num req">' + fmt(r.oM2.oq, 0) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM2.oq, r.moq), 0) + '</td>' + diffCell(r.oM2.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM2) + '</td>' +
+      '<td class="num">' + fmt(r.reqM1, 0) + '</td>' + '<td class="num">' + (r.stock != null && r.reqM1 > 0 ? (r.stock * 30 / r.reqM1).toFixed(1) : '—') + '<td class="num req">' + fmt(r.oM1.oq, 0) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM1.oq, r.moq), 0) + '</td>' + diffCell(r.oM1.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM1) + '</td>' +
+      '<td class="num">' + fmt(r.reqM2, 0) + '</td>' + '<td class="num">' + (r.stock != null && r.reqM2 > 0 ? (r.stock * 30 / r.reqM2).toFixed(1) : '—') + '<td class="num req">' + fmt(r.oM2.oq, 0) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM2.oq, r.moq), 0) + '</td>' + diffCell(r.oM2.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM2) + '</td>' +
       '<td class="num"></td>';
     tbody.appendChild(tr);
     const inp = tr.querySelector("input.cell");
