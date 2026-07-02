@@ -135,6 +135,7 @@
     <div class="tab" data-tab="pm">3 · Consolidated PM</div>
     <div class="tab" data-tab="master">4 · Material Master</div>
     <div class="tab" data-tab="inv">5 · Live Inventory</div>
+    <div class="tab" data-tab="skudoc">6 · SKU DOC</div>
   </div>
 
   <!-- ============ TAB 1: DEMAND ENTRY ============ -->
@@ -336,6 +337,17 @@
       Matched materials have their Sapiens stock replaced; the columns are auto-detected. This stock is what the
       Consolidated RM/PM tabs consume as “stock in hand”. Edit any cell inline to simulate.
       <b>Plan / day</b> = total required ÷ plan horizon (the plan-implied daily draw per material); enter a demand plan (Tab 1) for it to be meaningful.</div>
+  </section>
+
+  <section class="panel" id="panel-skudoc">
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;flex-wrap:wrap">
+      <label style="font-weight:600">SKU:</label>
+      <select id="skuDocPicker" style="padding:5px 10px;border-radius:4px;border:1px solid #ccc;min-width:240px;font-size:0.95em">
+        <option value="">— All SKUs (summary) —</option>
+      </select>
+      <span id="skuDocInfo" style="color:#888;font-size:0.85em;margin-left:8px"></span>
+    </div>
+    <div id="skuDocBody"></div>
   </section>
 
 </div>
@@ -971,9 +983,31 @@ function renderRM() {
   if ($("btnClearReqRm")) $("btnClearReqRm").style.display = hasOverride ? "" : "none";
 
   if (!hasOverride) {
-    $("rmRows").innerHTML = '<tr><td colspan="17" style="text-align:center;padding:32px;color:#888;font-style:italic">Click <b>Import Req Qty</b> above to load required quantities from Excel/CSV.</td></tr>';
-    ["rmDistinct","rmDistinct2","rmStockTot","rmSupplyTot","rmOrderM1","rmOrderM2","rmAtRisk"].forEach(id => { const el = $(id); if (el) el.textContent = "0"; });
-    ["rmFootStock","rmFootSupplyM1","rmFootSupplyM2","rmFootReqM1","rmFootReqM2","rmFootM1","rmFootM2","rmFootAdjM1","rmFootAdjM2"].forEach(id => { const el = $(id); if (el) el.textContent = "0"; });
+    ['rmDistinct','rmDistinct2','rmStockTot','rmSupplyTot','rmOrderM1','rmOrderM2','rmAtRisk'].forEach(id => { const el = $(id); if (el) el.textContent = 0; });
+    ['rmFootStock','rmFootSupplyM1','rmFootSupplyM2','rmFootReqM1','rmFootReqM2','rmFootM1','rmFootM2','rmFootAdjM1','rmFootAdjM2'].forEach(id => { const el = $(id); if (el) el.textContent = 0; });
+    const _nm = new Map();
+    STATIC_BOM.bom_rm.forEach(r => { const nk = normKey(r.rm_name); if (!_nm.has(nk)) _nm.set(nk, r.rm_name); });
+    const _ni = [..._nm.entries()].map(([k,name]) => {
+      const f = rmFirm[k]; const moq = num(rmMoq[k],true); const code = f ? f.code : '';
+      let stock=null, supM1=0, supM2=0;
+      if (f) { stock=f.stock; const sp=fwdSupplySplit(f.supply||0); supM1=sp[0]; supM2=sp[1]; }
+      return {k,name,matched:!!f,moq,code,stock,supM1,supM2};
+    });
+    _ni.sort((a,b)=>a.name.localeCompare(b.name));
+    const _tb=$('rmRows'); _tb.innerHTML='';
+    const _d='<span class="muted">\u2014</span>';
+    const _qc=Array(13).fill('<td class="num">'+_d+'</td>').join('');
+    _ni.forEach(r=>{
+      const tr=document.createElement('tr');
+      const mv=rmMoq[r.k]!=null?rmMoq[r.k]:'';
+      const mi='<input class="cell" type="number" min="0" step="25" value="'+escapeHtml(String(mv))+'" data-k="'+escapeHtml(r.k)+'">';
+      tr.innerHTML='<td class="sku-code">'+escapeHtml(r.code||'\u2014')+'</td><td>'+escapeHtml(r.name)+'</td><td class="num">'+mi+'</td>'+
+        (r.matched?'<td class="num req">'+fmt(r.stock,3)+'</td><td class="num">'+fmt(r.supM1,3)+'</td><td class="num">'+fmt(r.supM2,3)+'</td>'
+                  :'<td class="num"><span class="muted">NA</span></td><td class="num">'+_d+'</td><td class="num">'+_d+'</td>')+_qc;
+      const inp=tr.querySelector('input.cell');
+      if(inp){inp.addEventListener('click',ev=>ev.stopPropagation());inp.addEventListener('change',()=>{rmMoq[inp.getAttribute('data-k')]=inp.value;renderRM();});}
+      _tb.appendChild(tr);
+    });
     return;
   }
 
@@ -1095,6 +1129,25 @@ function renderPM() {
     $("pmRows").innerHTML = '<tr><td colspan="14" style="text-align:center;padding:32px;color:#888;font-style:italic">Click <b>Import Req Qty</b> above to load required quantities from Excel/CSV.</td></tr>';
     ["pmDistinct","pmDistinct2","pmStockTot","pmOrderM1","pmOrderM2","pmAtRisk"].forEach(id => { const el = $(id); if (el) el.textContent = "0"; });
     ["pmFootStock","pmFootReqM1","pmFootReqM2","pmFootM1","pmFootM2","pmFootAdjM1","pmFootAdjM2"].forEach(id => { const el = $(id); if (el) el.textContent = "0"; });
+    const _pm = new Map();
+    STATIC_BOM.bom_pm.forEach(r => { const nk = normKey(r.pm_name); if (!_pm.has(nk)) _pm.set(nk, r.pm_name); });
+    const _pi = [..._pm.entries()].map(([k,name]) => {
+      const stock = stockTotal('pm', k); const moq = num(pmMoq[k],true);
+      return {k, name, stock: stock||0, moq};
+    });
+    _pi.sort((a,b)=>a.name.localeCompare(b.name));
+    const _ptb=$('pmRows'); _ptb.innerHTML='';
+    const _d2='<span class="muted">\u2014</span>';
+    const _qc2=Array(13).fill('<td class="num">'+_d2+'</td>').join('');
+    _pi.forEach(r=>{
+      const tr=document.createElement('tr');
+      const mv=pmMoq[r.k]!=null?pmMoq[r.k]:'';
+      const mi='<input class="cell" type="number" min="0" step="25" value="'+escapeHtml(String(mv))+'" data-k="'+escapeHtml(r.k)+'">';
+      tr.innerHTML='<td>'+escapeHtml(r.name)+'</td><td class="num">'+mi+'</td><td class="num req">'+fmt(r.stock,0)+'</td>'+_qc2;
+      const inp=tr.querySelector('input.cell');
+      if(inp){inp.addEventListener('click',ev=>ev.stopPropagation());inp.addEventListener('change',()=>{pmMoq[inp.getAttribute('data-k')]=inp.value;renderPM();});}
+      _ptb.appendChild(tr);
+    });
     return;
   }
 
@@ -1759,6 +1812,7 @@ function showTab(name) {
   if (name === "sku") renderSkuDetail($("skuPicker").value || (SKU[0] && SKU[0].sku_code));
   if (name === "master") renderMaster();
   if (name === "inv") renderInventory();
+  if (name === "skudoc") renderSkuDoc();
 }
 
 function wire() {
@@ -2275,6 +2329,107 @@ function broadcastStockUpdate() {
 
 document.addEventListener('DOMContentLoaded', init);
 
+
+function renderSkuDoc() {
+  const picker = $('skuDocPicker');
+  if (!picker) return;
+  if (picker.options.length <= 1) {
+    const skus = Object.keys(skuIndex).sort((a,b)=>(skuIndex[a].fg_name||'').localeCompare(skuIndex[b].fg_name||''));
+    skus.forEach(sku => {
+      const o = document.createElement('option');
+      o.value = sku; o.textContent = skuIndex[sku].fg_name || sku;
+      picker.appendChild(o);
+    });
+  }
+  picker.onchange = () => renderSkuDoc();
+  const body = $('skuDocBody');
+  if (!body) return;
+  body.innerHTML = '';
+  const sel = picker.value;
+  const info = $('skuDocInfo');
+  const DOC_BG = d => d == null ? '' : d < 15 ? 'background:#ffd6d6' : d < 30 ? 'background:#fff3cd' : 'background:#d4edda';
+  const fmtDoc = d => d == null ? '\u2014' : d.toFixed(1) + ' d';
+
+  function getMats(skuCode) {
+    const s = skuIndex[skuCode]; if (!s) return {rm:[],pm:[],dem1:0};
+    const packG = num(s.pack_size_g, true);
+    const dem1 = num(demand[skuCode], true);
+    const rm = STATIC_BOM.bom_rm.filter(r=>r.sku_code===skuCode).map(r=>{
+      const nk=normKey(r.rm_name); const pct=num(r.rm_pct,true);
+      const req1=pct/100*packG*dem1/1000;
+      const f=rmFirm[nk]; const stock=f?f.stock:null; const moq=num(rmMoq[nk],true);
+      const doc=(stock!=null&&req1>0)?stock*30/req1:null;
+      return {code:f?f.code:'',name:r.rm_name,stock,moq,req1,doc};
+    });
+    const pm = STATIC_BOM.bom_pm.filter(r=>r.sku_code===skuCode).map(r=>{
+      const nk=normKey(r.pm_name); const qpu=num(r.pm_qty_per_unit,true);
+      const req1=qpu*dem1;
+      const stock=stockTotal('pm',nk); const moq=num(pmMoq[nk],true);
+      const doc=(stock!=null&&req1>0)?stock*30/req1:null;
+      return {code:r.pm_code||'',name:r.pm_name,stock,moq,req1,doc};
+    });
+    return {rm,pm,dem1,skuName:s.fg_name||skuCode};
+  }
+
+  if (!sel) {
+    if(info) info.textContent='';
+    const tbl=document.createElement('table');
+    tbl.style.cssText='width:100%;border-collapse:collapse;font-size:0.9em';
+    tbl.innerHTML='<thead><tr style="background:#f0f0f0;text-align:left"><th style="padding:6px 8px">SKU Name</th><th class="num" style="padding:6px 8px">Demand M1</th><th class="num" style="padding:6px 8px;text-align:center">Min RM DOC</th><th style="padding:6px 8px">Bottleneck RM</th><th class="num" style="padding:6px 8px;text-align:center">Min PM DOC</th><th style="padding:6px 8px">Bottleneck PM</th></tr></thead>';
+    const tbody=document.createElement('tbody');
+    const skus=Object.keys(skuIndex).sort((a,b)=>(skuIndex[a].fg_name||'').localeCompare(skuIndex[b].fg_name||''));
+    skus.forEach(sku=>{
+      const {rm,pm,dem1,skuName}=getMats(sku);
+      const minRm=rm.filter(r=>r.doc!=null).sort((a,b)=>a.doc-b.doc)[0];
+      const minPm=pm.filter(r=>r.doc!=null).sort((a,b)=>a.doc-b.doc)[0];
+      const tr=document.createElement('tr');
+      const skuEsc=escapeHtml(sku);
+      tr.innerHTML=
+        '<td style="padding:5px 8px;border-bottom:1px solid #eee;cursor:pointer;color:#1a73e8;text-decoration:underline" onclick="document.getElementById('skuDocPicker').value=''+skuEsc+'';renderSkuDoc()">'+escapeHtml(skuName)+'</td>'+
+        '<td class="num" style="padding:5px 8px;border-bottom:1px solid #eee">'+dem1+'</td>'+
+        '<td class="num" style="padding:5px 8px;border-bottom:1px solid #eee;text-align:center;'+(minRm?DOC_BG(minRm.doc):'')+'">'+fmtDoc(minRm?minRm.doc:null)+'</td>'+
+        '<td style="padding:5px 8px;border-bottom:1px solid #eee;font-size:0.85em;color:#555">'+escapeHtml(minRm?minRm.name:'\u2014')+'</td>'+
+        '<td class="num" style="padding:5px 8px;border-bottom:1px solid #eee;text-align:center;'+(minPm?DOC_BG(minPm.doc):'')+'">'+fmtDoc(minPm?minPm.doc:null)+'</td>'+
+        '<td style="padding:5px 8px;border-bottom:1px solid #eee;font-size:0.85em;color:#555">'+escapeHtml(minPm?minPm.name:'\u2014')+'</td>';
+      tbody.appendChild(tr);
+    });
+    tbl.appendChild(tbody);
+    body.appendChild(tbl);
+  } else {
+    const {rm,pm,dem1,skuName}=getMats(sel);
+    if(info) info.textContent=skuName+' — Demand M1: '+dem1+' units';
+    const rmDocs=rm.filter(r=>r.doc!=null).map(r=>r.doc);
+    const pmDocs=pm.filter(r=>r.doc!=null).map(r=>r.doc);
+    const rmMinDoc=rmDocs.length?Math.min(...rmDocs):null;
+    const pmMinDoc=pmDocs.length?Math.min(...pmDocs):null;
+
+    function makeMatTable(rows,title,minDoc,unit) {
+      const wrap=document.createElement('div'); wrap.style.marginBottom='28px';
+      wrap.innerHTML='<h3 style="margin:0 0 8px;font-size:1em;font-weight:600;color:#444;border-bottom:2px solid #e0e0e0;padding-bottom:4px">'+title+'</h3>';
+      const tbl=document.createElement('table');
+      tbl.style.cssText='width:100%;border-collapse:collapse;font-size:0.88em';
+      tbl.innerHTML='<thead><tr style="background:#f5f5f5"><th style="text-align:left;padding:6px 8px">Code</th><th style="text-align:left;padding:6px 8px">Material Name</th><th class="num" style="padding:6px 8px">MOQ</th><th class="num" style="padding:6px 8px">Stock ('+unit+')</th><th class="num" style="padding:6px 8px">Req M1 ('+unit+')</th><th class="num" style="padding:6px 8px">DOC</th><th style="padding:6px 8px;text-align:center">Flag</th></tr></thead>';
+      const tbody=document.createElement('tbody');
+      rows.slice().sort((a,b)=>(a.doc??Infinity)-(b.doc??Infinity)).forEach(r=>{
+        const isMin=r.doc!=null&&r.doc===minDoc;
+        const tr=document.createElement('tr');
+        if(isMin) tr.style.fontWeight='600';
+        tr.innerHTML=
+          '<td style="padding:5px 8px;border-bottom:1px solid #eee;color:#888;font-size:0.9em">'+escapeHtml(r.code||'\u2014')+'</td>'+
+          '<td style="padding:5px 8px;border-bottom:1px solid #eee">'+escapeHtml(r.name)+'</td>'+
+          '<td class="num" style="padding:5px 8px;border-bottom:1px solid #eee">'+r.moq+'</td>'+
+          '<td class="num" style="padding:5px 8px;border-bottom:1px solid #eee">'+fmt(r.stock,unit==='kg'?3:0)+'</td>'+
+          '<td class="num" style="padding:5px 8px;border-bottom:1px solid #eee">'+(!dem1?'\u2014':fmt(r.req1,unit==='kg'?3:0))+'</td>'+
+          '<td class="num" style="padding:5px 8px;border-bottom:1px solid #eee;'+DOC_BG(r.doc)+'">'+(!dem1?'Set demand':fmtDoc(r.doc))+'</td>'+
+          '<td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:center;font-size:1.1em">'+(isMin?'\ud83d\udea8':'')+'</td>';
+        tbody.appendChild(tr);
+      });
+      tbl.appendChild(tbody); wrap.appendChild(tbl); return wrap;
+    }
+    body.appendChild(makeMatTable(rm,'Raw Materials (RM)',rmMinDoc,'kg'));
+    body.appendChild(makeMatTable(pm,'Packaging Materials (PM)',pmMinDoc,'units'));
+  }
+}
 </script>
 </body>
 </html>
