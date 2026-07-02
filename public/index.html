@@ -986,14 +986,14 @@ function renderRM() {
     ['rmDistinct','rmDistinct2','rmStockTot','rmSupplyTot','rmOrderM1','rmOrderM2','rmAtRisk'].forEach(id => { const el = $(id); if (el) el.textContent = 0; });
     ['rmFootStock','rmFootSupplyM1','rmFootSupplyM2','rmFootReqM1','rmFootReqM2','rmFootM1','rmFootM2','rmFootAdjM1','rmFootAdjM2'].forEach(id => { const el = $(id); if (el) el.textContent = 0; });
     const _nm = new Map();
-    STATIC_BOM.bom_rm.forEach(r => { const nk = normKey(r.rm_name); if (!_nm.has(nk)) _nm.set(nk, r.rm_name); });
+    STATIC_BOM.bom_rm.forEach(r => { if (!r.rm_name) return; const nk = normKey(r.rm_name); if (!_nm.has(nk)) _nm.set(nk, r.rm_name); });
     const _ni = [..._nm.entries()].map(([k,name]) => {
       const f = rmFirm[k]; const moq = num(rmMoq[k],true); const code = f ? f.code : '';
       let stock=null, supM1=0, supM2=0;
       if (f) { stock=f.stock; const sp=fwdSupplySplit(f.supply||0); supM1=sp[0]; supM2=sp[1]; }
       return {k,name,matched:!!f,moq,code,stock,supM1,supM2};
     });
-    _ni.sort((a,b)=>a.name.localeCompare(b.name));
+    _ni.sort((a,b)=>(a.name||"").localeCompare(b.name||""));
     const _tb=$('rmRows'); _tb.innerHTML='';
     const _d='<span class="muted">\u2014</span>';
     const _qc=Array(13).fill('<td class="num">'+_d+'</td>').join('');
@@ -2354,7 +2354,7 @@ function renderSkuDoc() {
     var s = skuIndex[skuCode]; if (!s) return {rm:[],pm:[],dem1:0,skuName:''};
     var packG = num(s.pack_size_g, true);
     var dem1 = num(demand[skuCode], true);
-    var rm = STATIC_BOM.bom_rm.filter(function(r){return r.sku_code===skuCode;}).map(function(r){
+    var rm = STATIC_BOM.bom_rm.filter(function(r){return r.sku_code===skuCode&&r.rm_name;}).map(function(r){
       var nk=normKey(r.rm_name); var pct=num(r.rm_pct,true);
       var req1=pct/100*packG*dem1/1000;
       var f=rmFirm[nk]; var stock=f?f.stock:null; var moq=num(rmMoq[nk],true);
