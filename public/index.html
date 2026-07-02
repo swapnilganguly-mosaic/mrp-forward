@@ -2292,9 +2292,45 @@ async function init() {
     broadcastStockUpdate();
     st.textContent = 'Dataset loaded ✓ – ' + d.sku_master.length + ' SKUs';
     showTab('demand');
+    fetchGSheetStock();
   } catch (e) {
     st.textContent = '⚠ Could not load dataset: ' + (e && e.message ? e.message : e) + '. Upload CSVs to continue.';
     console.error('init error', e);
+  }
+}
+
+async function fetchGSheetStock() {
+  var SHID = '1PDvEjSHOqrn902Y6vIpRvVwlkw3B5HpwP4w6_Stl58o';
+  var base = 'https://docs.google.com/spreadsheets/d/' + SHID + '/gviz/tq?tqx=out:csv&sheet=';
+  var st = $('dataStatus');
+  st.textContent = 'Fetching stock…';
+  st.style.color = '';
+  try {
+    var parseCSV2 = function(txt) {
+      return txt.trim().split('\n').slice(1).map(function(line) {
+        var m = line.match(/^"([^"]*)",[ ]*"([^"]*)"/);
+        return m ? {name: m[1].trim(), val: parseFloat(m[2]) || 0} : null;
+      }).filter(Boolean);
+    };
+    var rmRows = parseCSV2(await (await fetch(base + 'rm+stock')).text());
+    var pmRows = parseCSV2(await (await fetch(base + 'pm+stock')).text());
+    var rmUpd = 0, pmUpd = 0;
+    rmRows.forEach(function(r) {
+      var k = normKey(r.name);
+      if (rmFirm[k]) { rmFirm[k].stock = r.val; rmUpd++; }
+      if (rmStockF['SAP'] && rmStockF['SAP'][k] !== undefined) rmStockF['SAP'][k] = String(r.val);
+    });
+    pmRows.forEach(function(r) {
+      var k = normKey(r.name);
+      if (pmStockF['SAP'] && pmStockF['SAP'][k] !== undefined) { pmStockF['SAP'][k] = String(r.val); pmUpd++; }
+    });
+    renderRM(); renderPM();
+    if (typeof renderSkuDoc === 'function') renderSkuDoc();
+    st.textContent = 'Stock updated ✓ – ' + rmUpd + ' RM, ' + pmUpd + ' PM';
+    st.style.color = '#155724';
+  } catch(e) {
+    st.textContent = 'GSheet stock fetch failed: ' + e.message;
+    st.style.color = '#721c24';
   }
 }
 
