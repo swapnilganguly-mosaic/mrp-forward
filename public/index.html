@@ -245,6 +245,7 @@
       <thead>
         <tr>
           <th rowspan="2">Packaging Material</th>
+          <th rowspan="2">Code</th>
           <th rowspan="2" class="num">MOQ (units)</th>
           <th rowspan="2" class="num">Stock in hand (units)</th>
           <th colspan="6" class="grp">Month 1 (0–30 d)</th>
@@ -1175,6 +1176,7 @@ function renderPM() {
       '" data-k="' + escapeHtml(r.k) + '" style="width:80px" title="MOQ (editable)">';
     tr.innerHTML =
       '<td>' + escapeHtml(r.name) + '</td>' +
+      '<td class="sku-code">' + escapeHtml((matMaster[normKey(r.name)] && matMaster[normKey(r.name)].code) || '') + '</td>' +
       '<td class="num">' + moqIn + '</td>' +
       '<td class="num req">' + fmt(r.stock, 0) + '</td>' +
       '<td class="num">' + fmt(r.reqM1, 0) + '</td>' + '<td class="num">' + (r.stock != null && r.reqM1 > 0 ? (r.stock * 30 / r.reqM1).toFixed(1) : '—') + '<td class="num req">' + fmt(r.oM1.oq, 0) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM1.oq, r.moq), 0) + '</td>' + diffCell(r.oM1.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM1) + '</td>' +
