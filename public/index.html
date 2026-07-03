@@ -1144,7 +1144,7 @@ function renderPM() {
       const tr=document.createElement('tr');
       const mv=pmMoq[r.k]!=null?pmMoq[r.k]:'';
       const mi='<input class="cell" type="number" min="0" step="25" value="'+escapeHtml(String(mv))+'" data-k="'+escapeHtml(r.k)+'">';
-      tr.innerHTML='<td>'+escapeHtml(r.name)+'</td><td class="num">'+mi+'</td><td class="num req">'+fmt(r.stock,0)+'</td>'+_qc2;
+      tr.innerHTML='<td>'+escapeHtml(r.name)+'</td><td class="sku-code">'+escapeHtml((matMaster[normKey(r.name)]&&matMaster[normKey(r.name)].code)||'')+'</td><td class="num">'+mi+'</td><td class="num req">'+fmt(r.stock,0)+'</td>'+_qc2;
       const inp=tr.querySelector('input.cell');
       if(inp){inp.addEventListener('click',ev=>ev.stopPropagation());inp.addEventListener('change',()=>{pmMoq[inp.getAttribute('data-k')]=inp.value;renderPM();});}
       _ptb.appendChild(tr);
@@ -1176,7 +1176,6 @@ function renderPM() {
       '" data-k="' + escapeHtml(r.k) + '" style="width:80px" title="MOQ (editable)">';
     tr.innerHTML =
       '<td>' + escapeHtml(r.name) + '</td>' +
-      '<td class="sku-code">' + escapeHtml((matMaster[normKey(r.name)] && matMaster[normKey(r.name)].code) || '') + '</td>' +
       '<td class="num">' + moqIn + '</td>' +
       '<td class="num req">' + fmt(r.stock, 0) + '</td>' +
       '<td class="num">' + fmt(r.reqM1, 0) + '</td>' + '<td class="num">' + (r.stock != null && r.reqM1 > 0 ? (r.stock * 30 / r.reqM1).toFixed(1) : '—') + '<td class="num req">' + fmt(r.oM1.oq, 0) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM1.oq, r.moq), 0) + '</td>' + diffCell(r.oM1.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM1) + '</td>' +
