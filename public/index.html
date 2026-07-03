@@ -2289,6 +2289,7 @@ async function init() {
       return;
     }
     loadDataset(d);
+    applyOfficialCodes();
     broadcastStockUpdate();
     st.textContent = 'Dataset loaded ✓ – ' + d.sku_master.length + ' SKUs';
     showTab('demand');
@@ -2332,6 +2333,20 @@ async function fetchGSheetStock() {
     st.textContent = 'GSheet stock fetch failed: ' + e.message;
     st.style.color = '#721c24';
   }
+}
+
+const STATIC_RM_CODES = {"almonds powder":"RMNT0001","amalyse":"RMAC0001","aquamin tg":"RMTP0001","aquamin tg®":"RMTP0001","ascorbic acid":"RMPV0001","astarea l":"RMTP0002","astareal":"RMTP0002","astaxanthin":"RMTP0003","badam flavour":"RMFL0001","bajra powder":"RMNT0002","baking powder":"RMFL0002","baking soda":"RMFL0003","banana powder":"RMNT0003","beetroot powder":"RMNT0004","beetroot powder - sensient":"RMNT0005","belgian chocolate flavour (flavoroma)":"RMFL0004","beta carotene 10%":"RMAC0002","brown rice protein":"RMPV0002","calcium carbonate":"RMFL0005","calcium d-pantothenate":"RMFL0006","cellulalse":"RMAC0003","cereal extract powder":"RMNT0006","chia seeds":"RMNT0007","chocolate chips":"RMFL0007","chocolate flv-(rv-675-100-05)":"RMFL0008","chocolate hazelnut flavour":"RMFL0009","citric acid":"RMFL0010","cocoa powder (bc705-11)":"RMNT0008","cocoa powder (dh673p)":"RMNT0009","cocoa powder (eu201)":"RMNT0010","cocoa powder (new grade kp manish)":"RMNT0011","cocoa powder (pancake)":"RMNT0012","cookies and cream (givaudan)":"RMNT0013","corn dextrin":"RMFL0011","creatine monohydrate":"RMAC0004","curcuwin":"RMTP0004","custard vanilla flv ps- symrise":"RMFL0012","dha (docosahexaenoic acid)":"RMAC0005","dha 20% (docosahexaenoic acid)":"RMAC0006","dairy boost":"RMPV0003","dates powder":"RMNT0014","digesist mos 01 - advance enzyme":"RMAC0007","digezyme":"RMAC0008","double chocolate flv":"RMFL0013","fortium tr30 liquid":"RMTP0005","fos (fructooligosaccharide)":"RMAC0009","flavoroma dark chocolate 3340":"RMFL0014","flax seeds":"RMNT0015","herbs":"RMNT0016","inulin (chicory root)":"RMAC0010","jaggery powder":"RMNT0017","jowar flour (roasted)":"RMNT0018","jowar powder":"RMNT0019","kanegrade rocou ext powder":"RMNT0020","kangegrade curcumin":"RMAC0011","keva - creamy vanilla":"RMFL0015","kleancreatinine":"RMTP0006","kulfi flavour":"RMFL0016","lactose":"RMFL0017","lemon rods":"RMNT0021","mpc 70 (milk protein concentrate)":"RMPV0004","mpc 85 (milk protein concentrate)":"RMPV0005","mpp (milk permeate powder)":"RMPV0006","magnesium oxide":"RMPV0007","makhana powder saipro":"RMNT0022","malt":"RMNT0023","mango flavour":"RMFL0018","mango powder":"RMNT0024","mango powder - food & ints":"RMNT0025","maple vanilla flv - scope":"RMFL0019","mayo inositol":"RMNT0026","milk chocolate flv – d-122278":"RMFL0020","milk chocolate flv - d-122278":"RMFL0020","monk fruit 15%":"RMAC0012","monk fruit 25%":"RMAC0013","moong dal protein":"RMPV0008","ni evospray vanilla custard flavour (code: 308932)":"RMFL0021","ni guava flavour ind 808303":"RMFL0022","natural banana sd flavor - nf31162":"RMFL0023","natural chocolate dm 16 - nf45415":"RMFL0024","natural chocolate flv - flavaroma":"RMFL0025","natural guava chilli flavour ind 1136810":"RMFL0026","natural lemon lime":"RMNT0027","natural mixed fruit flavour":"RMFL0027","natural sugar enhancer - keva fl76933":"RMAC0014","natural sugar enhancer - keva fl82378":"RMAC0015","natural vanilla dm flavor - nf44044":"RMFL0028","oats flour (roasted)":"RMNT0028","oats fiber":"RMNT0029","orange flavour sd":"RMFL0029","pea protein isolate":"RMPV0009","peach flavour":"RMFL0030","polydextrose":"RMFL0031","potassium chloride":"RMPV0010","potassium iodide":"RMPV0011","premix 13+":"RMPV0012","premix 2+ 7+":"RMPV0013","premix 2+ 7+ (42%)":"RMPV0014","premix 2+ 7+ (uae)":"RMPV0015","premix mother":"RMPV0016","probiotics":"RMAC0016","prova ni chocolate flv p4034p":"RMFL0032","rice dextrin":"RMFL0033","ragi flour (roasted)":"RMNT0030","ragi powder":"RMNT0031","smp (skimmed milk protein)":"RMPV0017","salt":"RMFL0034","sodium chloride":"RMPV0018","sodium citrate":"RMPV0019","soy protein isolate supro - 620 ip":"RMPV0020","soya lecithin":"RMFL0035","stevia 97%":"RMAC0017","steviol glycosides alpha":"RMAC0018","strawberry flv":"RMFL0036","sucralose":"RMNT0032","sweetease":"RMNT0033","sweetness modifier - ff -200-205-8":"RMAC0019","tata salt":"RMFL0037","thaumatin":"RMAC0020","tri calcium phosphate":"RMFL0038","true pineapple color sensient - ic1891":"RMFL0039","vanilla flavour (symrise)":"RMFL0040","vanilla flv":"RMFL0041","vanilla powder":"RMFL0042","vitamin b1 (thiamin)":"RMPV0021","vitamin b12 (cyanocobalamin)":"RMPV0022","vitamin b2 (riboflavin)":"RMPV0023","vitamin b3 (niacinamide)":"RMPV0024","vitamin b6 (pyridoxin)":"RMPV0025","vitamin b7 (d-biotin)":"RMPV0026","wmp (whole milk protein)":"RMPV0027","wpi (whey protein isolate)":"RMPV0028","walnut powder":"RMNT0034","xanthan gum":"RMNT0035"};
+
+function applyOfficialCodes() {
+  if (typeof STATIC_RM_CODES === 'undefined') return;
+  Object.keys(matMaster).forEach(function(k) {
+    if (matMaster[k].kind !== 'rm') return;
+    var c = STATIC_RM_CODES[k];
+    if (!c) return;
+    matMaster[k].code = c;
+    rmCodeReal[k] = c;
+    if (rmFirm[k]) { rmFirm[k].code = c; } else { rmFirm[k] = {code:c, stock:null, supply:0}; }
+  });
 }
 
 function broadcastStockUpdate() {
