@@ -109,7 +109,13 @@
   .modal h3 { margin:0 0 6px; }
   .row-flex { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
   .count-tag { font-size:12px; color:var(--muted); }
-</style>
+
+  .sched-sub-btn{padding:6px 16px;border-radius:6px;border:1px solid var(--border);background:var(--card);cursor:pointer;font-size:.92em;transition:background .15s,color .15s}
+  .sched-sub-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+  #schedTable th{white-space:nowrap;font-size:.78em;padding:4px 6px;vertical-align:top}
+  #schedTable td{font-size:.8em;padding:3px 5px}
+  #schedTable input.cell{width:68px}
+  #schedTable select.cell{width:55px;padding:2px}</style>
 </head>
 <body>
 <div class="wrap">
@@ -136,6 +142,7 @@
     <div class="tab" data-tab="master">4 · Material Master</div>
     <div class="tab" data-tab="inv">5 · Live Inventory</div>
     <div class="tab" data-tab="skudoc">6 · SKU DOC</div>
+    <div class="tab" data-tab="scheduler">7 · Scheduler</div>
   </div>
 
   <!-- ============ TAB 1: DEMAND ENTRY ============ -->
@@ -349,6 +356,74 @@
       <span id="skuDocInfo" style="color:#888;font-size:0.85em;margin-left:8px"></span>
     </div>
     <div id="skuDocBody"></div>
+  </section>
+
+  <!-- ============ TAB 7: SCHEDULER ============ -->
+  <section class="panel" id="panel-scheduler">
+    <div style="display:flex;gap:8px;margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid var(--border)">
+      <button class="sched-sub-btn active" id="schedBtnInput" onclick="schedShowSub('input')">1 · Input</button>
+      <button class="sched-sub-btn" id="schedBtnTable" onclick="schedShowSub('table')">2 · Scheduler</button>
+    </div>
+    <div id="panel-sched-input">
+      <div class="hint" style="margin-bottom:12px">Enter production plan for M1 and M2. <b>Tonnage</b> = (Pack size g × Units) ÷ 10⁶ metric tonnes (MT).</div>
+      <table>
+        <thead><tr>
+          <th>SKU Code</th><th>SKU Name</th>
+          <th class="num">Pack Size (g)</th>
+          <th class="num">Prod Plan M1 (units)</th>
+          <th class="num">Tonnage M1 (MT)</th>
+          <th class="num">Prod Plan M2 (units)</th>
+          <th class="num">Tonnage M2 (MT)</th>
+        </tr></thead>
+        <tbody id="schedInputRows"></tbody>
+        <tfoot><tr>
+          <td colspan="3"><b>Total</b></td>
+          <td class="num req" id="schedTotalM1U">—</td>
+          <td class="num req" id="schedTotalM1T">—</td>
+          <td class="num req" id="schedTotalM2U">—</td>
+          <td class="num req" id="schedTotalM2T">—</td>
+        </tr></tfoot>
+      </table>
+    </div>
+    <div id="panel-sched-table" style="display:none">
+      <details style="margin-bottom:12px">
+        <summary style="cursor:pointer;font-weight:600;color:var(--accent);padding:4px 0">▸ S Weight (I) — Class × Priority reference</summary>
+        <table style="width:auto;margin-top:6px;font-size:.88em">
+          <thead><tr><th>Class</th><th>P0</th><th>P1</th><th>P2</th><th>P3</th></tr></thead>
+          <tbody>
+            <tr><td>A</td><td class="num muted">—</td><td class="num">1.0</td><td class="num">1.2</td><td class="num">1.5</td></tr>
+            <tr><td>B</td><td class="num muted">—</td><td class="num">0.7</td><td class="num">0.9</td><td class="num">1.1</td></tr>
+            <tr><td>C</td><td class="num muted">—</td><td class="num">0.4</td><td class="num">0.5</td><td class="num">0.6</td></tr>
+          </tbody>
+        </table>
+      </details>
+      <div class="hint" style="margin-bottom:10px">Sorted by <b>H × I × K</b> descending = highest priority first. Edit Urgency (H), Class, Priority, FG Stock, Target DOC, Caps and Monthly Plan directly.</div>
+      <div style="overflow-x:auto">
+      <table id="schedTable">
+        <thead><tr>
+          <th style="min-width:130px">A<br>SKU Code</th>
+          <th style="min-width:160px">B<br>SKU Name</th>
+          <th style="min-width:55px">C<br>Class</th>
+          <th style="min-width:65px">D<br>Priority</th>
+          <th class="num" style="min-width:80px">E<br>FG Stock</th>
+          <th class="num" style="min-width:60px">F<br>DRR</th>
+          <th class="num" style="min-width:60px">G<br>FG DOC</th>
+          <th class="num" style="min-width:75px">H<br>Urgency</th>
+          <th class="num" style="min-width:50px">I<br>S Wt</th>
+          <th class="num" style="min-width:85px">J<br>Min Mat DOC</th>
+          <th class="num" style="min-width:90px">K<br>RM Conf<br><small>(Target DOC)</small></th>
+          <th class="num" style="min-width:70px;background:rgba(59,130,246,.08)">L<br>H×I×K</th>
+          <th class="num" style="min-width:80px">M<br>Line Cap</th>
+          <th class="num" style="min-width:70px">N<br>Min Cap</th>
+          <th class="num" style="min-width:70px">O<br>Max Cap</th>
+          <th class="num" style="min-width:100px">P<br>Target Run QTY</th>
+          <th class="num" style="min-width:100px">Q<br>Monthly Plan</th>
+          <th class="num" style="min-width:80px">R<br>Balance</th>
+        </tr></thead>
+        <tbody id="schedTableRows"></tbody>
+      </table>
+      </div>
+    </div>
   </section>
 
 </div>
@@ -636,7 +711,20 @@ let rmMoq      = {}; // normKey(rm_name) -> MOQ (kg) string, user-entered (no so
 let pmMoq      = {}; // normKey(pm_name) -> MOQ (units) string — DUMMY seed, editable (no source feed yet)
 let rmReqOverride = {}; // normKey(rm_name) -> {name, m1, m2} kg — set by "Import Req Qty"
 let pmReqOverride = {}; // normKey(pm_name) -> {name, m1, m2} units — set by "Import Req Qty"
-let curTab = "demand";
+let curTab = "demand"
+// ===== SCHEDULER STATE =====
+let schedProdPlan   = {};
+let schedProdPlanM2 = {};
+let schedFgStock    = {};
+let schedUrgency    = {};
+let schedSkuClass   = {};
+let schedPriority   = {};
+let schedTargetDoc  = {};
+let schedLineCap    = {};
+let schedMinCap     = {};
+let schedMaxCap     = {};
+let schedMonthPlan  = {};
+let schedSubTab     = "input";;
 let demandFilter = "";
 let planDays = "30";   // demand-plan horizon (days); converts total requirement -> daily rate for DOH
 
@@ -1814,6 +1902,7 @@ function showTab(name) {
   if (name === "master") renderMaster();
   if (name === "inv") renderInventory();
   if (name === "skudoc") renderSkuDoc();
+  if (name === "scheduler") schedShowSub(schedSubTab);
 }
 
 function wire() {
@@ -2512,6 +2601,207 @@ function renderSkuDoc() {
     body.appendChild(makeMatTable(d2.rm,'Raw Materials (RM)',rmMin2,'kg'));
     body.appendChild(makeMatTable(d2.pm,'Packaging Materials (PM)',pmMin2,'units'));
   }
+}
+
+
+/* ==================================================================
+ *  TAB 7 — SCHEDULER
+ * ================================================================== */
+function schedShowSub(sub) {
+  schedSubTab = sub;
+  var inp = document.getElementById("panel-sched-input");
+  var tbl = document.getElementById("panel-sched-table");
+  var bI  = document.getElementById("schedBtnInput");
+  var bT  = document.getElementById("schedBtnTable");
+  if (!inp) return;
+  inp.style.display = sub === "input"  ? "" : "none";
+  tbl.style.display = sub === "table"  ? "" : "none";
+  bI.classList.toggle("active", sub === "input");
+  bT.classList.toggle("active", sub === "table");
+  if (sub === "input")  renderSchedulerInput();
+  if (sub === "table")  renderSchedulerTable();
+}
+
+function schedMinMatDoc(skuCode) {
+  var s = skuIndex[skuCode]; if (!s) return null;
+  var pack = num(s.pack_size_g, true);
+  var drr  = num(drrBySku[skuCode], true);
+  if (drr <= 0) return null;
+  var minDoc = Infinity;
+  RM.filter(function(r){ return r.sku_code === skuCode; }).forEach(function(r){
+    var k = normKey(r.rm_name);
+    var stock = stockTotal("rm", k);
+    var dailyKg = (num(r.rm_pct) / 100) * pack * drr / 1000;
+    if (dailyKg > 0) minDoc = Math.min(minDoc, stock / dailyKg);
+  });
+  PM.filter(function(r){ return r.sku_code === skuCode; }).forEach(function(r){
+    var k = normKey(r.pm_name);
+    var stock = stockTotal("pm", k);
+    var dailyUnits = num(r.pm_qty_per_unit) * drr;
+    if (dailyUnits > 0) minDoc = Math.min(minDoc, stock / dailyUnits);
+  });
+  return minDoc === Infinity ? null : minDoc;
+}
+
+function schedSWt(cls, pri) {
+  var tbl = {A:{P1:1.0,P2:1.2,P3:1.5},B:{P1:0.7,P2:0.9,P3:1.1},C:{P1:0.4,P2:0.5,P3:0.6}};
+  return (tbl[cls] || {})[pri] || 0;
+}
+
+function renderSchedulerInput() {
+  var tb = $("schedInputRows"); tb.innerHTML = "";
+  var totM1u = 0, totM1t = 0, totM2u = 0, totM2t = 0;
+  SKU.forEach(function(s){
+    var pack = num(s.pack_size_g, true);
+    var m1   = num(schedProdPlan[s.sku_code], true);
+    var m2   = num(schedProdPlanM2[s.sku_code], true);
+    var t1 = pack * m1 / 1e6;
+    var t2 = pack * m2 / 1e6;
+    totM1u += m1; totM1t += t1; totM2u += m2; totM2t += t2;
+    var tr = document.createElement("tr");
+    var tdA = document.createElement("td");
+    tdA.innerHTML = '<span class="sku-code">' + escapeHtml(s.sku_code) + '</span>';
+    var tdB = document.createElement("td"); tdB.textContent = s.fg_name;
+    var tdC = document.createElement("td"); tdC.className = "num"; tdC.textContent = fmt(pack, 0);
+    var tdD = document.createElement("td");
+    var inD = mkNum(schedProdPlan[s.sku_code] || "", function(v){ schedProdPlan[s.sku_code] = v; renderSchedulerInput(); });
+    tdD.appendChild(inD);
+    var tdE = document.createElement("td"); tdE.className = "num"; tdE.textContent = t1 > 0 ? fmt(t1, 4) : "—";
+    var tdF = document.createElement("td");
+    var inF = mkNum(schedProdPlanM2[s.sku_code] || "", function(v){ schedProdPlanM2[s.sku_code] = v; renderSchedulerInput(); });
+    tdF.appendChild(inF);
+    var tdG = document.createElement("td"); tdG.className = "num"; tdG.textContent = t2 > 0 ? fmt(t2, 4) : "—";
+    tr.append(tdA, tdB, tdC, tdD, tdE, tdF, tdG);
+    tb.appendChild(tr);
+  });
+  $("schedTotalM1U").textContent = totM1u > 0 ? fmt(totM1u, 0) : "—";
+  $("schedTotalM1T").textContent = totM1t > 0 ? fmt(totM1t, 4) : "—";
+  $("schedTotalM2U").textContent = totM2u > 0 ? fmt(totM2u, 0) : "—";
+  $("schedTotalM2T").textContent = totM2t > 0 ? fmt(totM2t, 4) : "—";
+}
+
+function renderSchedulerTable() {
+  var tb = $("schedTableRows"); tb.innerHTML = "";
+  var rows = SKU.map(function(s){
+    var drr     = num(drrBySku[s.sku_code], true);
+    var fgStock = num(schedFgStock[s.sku_code], true);
+    var fgDoc   = drr > 0 ? fgStock / drr : null;
+    var urgency = schedUrgency[s.sku_code] !== undefined && schedUrgency[s.sku_code] !== ""
+                  ? num(schedUrgency[s.sku_code], true)
+                  : (fgDoc != null ? fgDoc : 0);
+    var cls  = schedSkuClass[s.sku_code]  || "";
+    var pri  = schedPriority[s.sku_code]  || "";
+    var sWt  = schedSWt(cls, pri);
+    var minDoc  = schedMinMatDoc(s.sku_code);
+    var tgtDoc  = num(schedTargetDoc[s.sku_code], true) || 30;
+    var rmConf  = (minDoc != null && tgtDoc > 0) ? Math.min(minDoc / tgtDoc, 1) : null;
+    var score   = (sWt > 0 && rmConf != null) ? urgency * sWt * rmConf : null;
+    var tgtQty  = (pri === "P0" || pri === "P3") ? drr * 10 :
+                  (pri === "P1" || pri === "P2") ? drr * 15 : null;
+    var mthPlan = num(schedMonthPlan[s.sku_code], true);
+    var balance = (tgtQty != null && mthPlan > 0) ? mthPlan - tgtQty : null;
+    return {s:s, drr:drr, fgDoc:fgDoc, urgency:urgency, cls:cls, pri:pri, sWt:sWt,
+            minDoc:minDoc, tgtDoc:tgtDoc, rmConf:rmConf, score:score,
+            tgtQty:tgtQty, mthPlan:mthPlan, balance:balance};
+  }).sort(function(a,b){ return (b.score != null ? b.score : -Infinity) - (a.score != null ? a.score : -Infinity); });
+
+  rows.forEach(function(r){
+    var s = r.s;
+    var tr = document.createElement("tr");
+    var tdA = document.createElement("td");
+    tdA.innerHTML = '<span class="sku-code">' + escapeHtml(s.sku_code) + '</span>';
+    var tdB = document.createElement("td"); tdB.textContent = s.fg_name;
+
+    var tdC = document.createElement("td");
+    var selC = document.createElement("select"); selC.className = "cell";
+    ["","A","B","C"].forEach(function(v){
+      var o = document.createElement("option"); o.value = v; o.textContent = v || "—";
+      if ((r.cls || "") === v) o.selected = true; selC.appendChild(o);
+    });
+    selC.addEventListener("change", function(e){ schedSkuClass[s.sku_code] = e.target.value; renderSchedulerTable(); });
+    tdC.appendChild(selC);
+
+    var tdD = document.createElement("td");
+    var selD = document.createElement("select"); selD.className = "cell";
+    ["","P0","P1","P2","P3"].forEach(function(v){
+      var o = document.createElement("option"); o.value = v; o.textContent = v || "—";
+      if ((r.pri || "") === v) o.selected = true; selD.appendChild(o);
+    });
+    selD.addEventListener("change", function(e){ schedPriority[s.sku_code] = e.target.value; renderSchedulerTable(); });
+    tdD.appendChild(selD);
+
+    var tdE = document.createElement("td");
+    var inE = mkNum(schedFgStock[s.sku_code] || "", function(v){ schedFgStock[s.sku_code] = v; renderSchedulerTable(); });
+    tdE.appendChild(inE);
+
+    var tdF = document.createElement("td"); tdF.className = "num";
+    tdF.textContent = r.drr > 0 ? fmt(r.drr, 1) : "—";
+
+    var tdG = document.createElement("td"); tdG.className = "num";
+    tdG.textContent = r.fgDoc != null ? fmt(r.fgDoc, 1) : "—";
+
+    var tdH = document.createElement("td");
+    var hVal = schedUrgency[s.sku_code] !== undefined && schedUrgency[s.sku_code] !== ""
+               ? schedUrgency[s.sku_code]
+               : (r.fgDoc != null ? String(Math.round(r.fgDoc * 10) / 10) : "");
+    var inH = mkNum(hVal, function(v){ schedUrgency[s.sku_code] = v; renderSchedulerTable(); });
+    inH.title = "Urgency (auto-filled from FG DOC, override as needed)";
+    tdH.appendChild(inH);
+
+    var tdI = document.createElement("td"); tdI.className = "num";
+    tdI.textContent = r.sWt > 0 ? r.sWt.toFixed(1) : "—";
+
+    var tdJ = document.createElement("td"); tdJ.className = "num";
+    if (r.minDoc != null) {
+      tdJ.textContent = fmt(r.minDoc, 1);
+      if (r.minDoc < 7) tdJ.style.color = "var(--red,#e53935)";
+      else if (r.minDoc < 14) tdJ.style.color = "var(--amber,#f59e0b)";
+    } else { tdJ.innerHTML = '<span class="muted">—</span>'; }
+
+    var tdK = document.createElement("td"); tdK.className = "num";
+    var kSpan = document.createElement("span");
+    var kPct = r.rmConf != null ? Math.round(r.rmConf * 100) + "%" : "—";
+    kSpan.textContent = kPct + " ";
+    if (r.rmConf != null) {
+      if (r.rmConf < 0.5) kSpan.style.color = "var(--red,#e53935)";
+      else if (r.rmConf < 0.8) kSpan.style.color = "var(--amber,#f59e0b)";
+    }
+    var inK = mkNum(schedTargetDoc[s.sku_code] || "30", function(v){ schedTargetDoc[s.sku_code] = v; renderSchedulerTable(); });
+    inK.style.width = "42px"; inK.title = "Target DOC (days)";
+    tdK.append(kSpan, inK);
+
+    var tdL = document.createElement("td"); tdL.className = "num";
+    tdL.style.background = "rgba(59,130,246,.08)";
+    tdL.innerHTML = r.score != null ? '<b>' + fmt(r.score, 2) + '</b>' : '<span class="muted">—</span>';
+
+    var tdM = document.createElement("td");
+    var inM = mkNum(schedLineCap[s.sku_code] !== undefined ? schedLineCap[s.sku_code] : "10000", function(v){ schedLineCap[s.sku_code] = v; });
+    tdM.appendChild(inM);
+
+    var tdN = document.createElement("td");
+    var inN = mkNum(schedMinCap[s.sku_code] !== undefined ? schedMinCap[s.sku_code] : "1000", function(v){ schedMinCap[s.sku_code] = v; });
+    tdN.appendChild(inN);
+
+    var tdO = document.createElement("td");
+    var inO = mkNum(schedMaxCap[s.sku_code] !== undefined ? schedMaxCap[s.sku_code] : "10000", function(v){ schedMaxCap[s.sku_code] = v; });
+    tdO.appendChild(inO);
+
+    var tdP = document.createElement("td"); tdP.className = "num";
+    tdP.textContent = r.tgtQty != null ? fmt(r.tgtQty, 0) : "—";
+
+    var tdQ = document.createElement("td");
+    var inQ = mkNum(schedMonthPlan[s.sku_code] || "", function(v){ schedMonthPlan[s.sku_code] = v; renderSchedulerTable(); });
+    tdQ.appendChild(inQ);
+
+    var tdR = document.createElement("td"); tdR.className = "num";
+    if (r.balance != null) {
+      tdR.textContent = fmt(r.balance, 0);
+      if (r.balance < 0) tdR.style.color = "var(--red,#e53935)";
+    } else { tdR.innerHTML = '<span class="muted">—</span>'; }
+
+    tr.append(tdA,tdB,tdC,tdD,tdE,tdF,tdG,tdH,tdI,tdJ,tdK,tdL,tdM,tdN,tdO,tdP,tdQ,tdR);
+    tb.appendChild(tr);
+  });
 }
 </script>
 </body>
