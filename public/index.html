@@ -189,12 +189,15 @@
       <div class="kpi"><b id="rmAtRisk">0</b><span>M1 orders needed</span></div>
       <div class="spacer"></div>
       <div class="field" style="justify-content:flex-end;gap:8px">
+        <button class="btn sm" id="btnImportStockRm" title="Import a CSV/Excel with columns: RM Name (or RM Code), Current Stock (kg). Matched by name/code and applied to Current stock (kg).">Import Current Stock</button>
         <button class="btn sm" id="btnImportReqRm" title="Import a CSV/Excel with columns: RM Name (or RM Code), Required M1 (kg), Required M2 (kg)">Import Req Qty</button>
         <button class="btn sm" id="btnClearReqRm" style="display:none" title="Remove imported required qty overrides and revert to BOM-calculated values">Clear override</button>
         <button class="btn primary" id="exportRm">Export RM CSV</button>
       </div>
     </div>
+    <div id="rmStockImportMsg" class="hint" style="margin:-6px 0 10px;display:none"></div>
     <div id="rmCfg" class="hint" style="margin-bottom:10px"></div>
+    <input type="file" id="fileStockRm" accept=".xlsx,.csv" style="display:none" />
     <input type="file" id="fileReqRm" accept=".xlsx,.csv" style="display:none" />
     <div style="overflow-x:auto">
     <table>
@@ -240,12 +243,15 @@
       <div class="kpi"><b id="pmAtRisk">0</b><span>M1 orders needed</span></div>
       <div class="spacer"></div>
       <div class="field" style="justify-content:flex-end;gap:8px">
+        <button class="btn sm" id="btnImportStockPm" title="Import a CSV/Excel with columns: PM Name (or PM Code), Current Stock (units). Matched by name/code and applied to Stock in hand (units).">Import Current Stock</button>
         <button class="btn sm" id="btnImportReqPm" title="Import a CSV/Excel with columns: PM Name, Required M1 (units), Required M2 (units)">Import Req Qty</button>
         <button class="btn sm" id="btnClearReqPm" style="display:none" title="Remove imported required qty and revert to empty">Clear override</button>
         <button class="btn primary" id="exportPm">Export PM CSV</button>
       </div>
     </div>
+    <div id="pmStockImportMsg" class="hint" style="margin:-6px 0 10px;display:none"></div>
     <div id="pmCfg" class="hint" style="margin-bottom:10px"></div>
+    <input type="file" id="fileStockPm" accept=".xlsx,.csv" style="display:none" />
     <input type="file" id="fileReqPm" accept=".xlsx,.csv" style="display:none" />
     <div style="overflow-x:auto">
     <table>
@@ -1653,6 +1659,50 @@ function applyInventoryRows(rows, factoryCode) {
   });
   return { matched, unmatched };
 }
+/* Import current stock for a single kind ("rm" or "pm") — used by the Consolidated
+ * RM/PM tabs' "Import Current Stock" button. Matched by Mosaic code or material name
+ * (same auto-detected id/qty columns as the Inventory tab importer). Writes into
+ * rmStockF/pmStockF for the single co-packer (SAP), and for RM also creates/updates
+ * an rmFirm entry so the Consolidated RM tab and SKU Doc tab (which gate the stock
+ * column display on rmFirm being matched) pick the value up. */
+function applyStockRows(rows, kind) {
+  const byCode = {}, byName = {};
+  MATLIST.forEach(e => { if (e.kind !== kind) return; byCode[e.code.toLowerCase()] = e; byName[e.key] = e; });
+  const width = rows.reduce((w, r) => Math.max(w, r.length), 0);
+  const cell = (r, c) => String(r[c] == null ? "" : r[c]).trim();
+  let idCol = 0, idHits = -1;
+  for (let c = 0; c < width; c++) {
+    let hits = 0;
+    rows.forEach(r => { const v = cell(r, c); if (v && (byCode[v.toLowerCase()] || byName[normKey(v)])) hits++; });
+    if (hits > idHits) { idHits = hits; idCol = c; }
+  }
+  let qtyCol = -1, qHits = -1;
+  for (let c = 0; c < width; c++) {
+    if (c === idCol) continue;
+    let hits = 0;
+    rows.forEach(r => { const s = cell(r, c); if (s !== "" && isFinite(parseFloat(s))) hits++; });
+    if (hits > qHits) { qHits = hits; qtyCol = c; }
+  }
+  const SAP = FACTORIES[0].code;
+  let matched = 0; const unmatched = [];
+  rows.forEach(r => {
+    const qs = qtyCol >= 0 ? cell(r, qtyCol) : "";
+    if (qs === "" || !isFinite(parseFloat(qs))) return;     // skip header / non-data rows
+    const raw = cell(r, idCol);
+    if (!raw) return;
+    const e = byCode[raw.toLowerCase()] || byName[normKey(raw)];
+    if (!e) { unmatched.push(raw); return; }
+    const store = kind === "rm" ? rmStockF : pmStockF;
+    store[SAP][e.key] = qs;
+    if (kind === "rm") {
+      const stockNum = num(qs, true);
+      if (rmFirm[e.key]) rmFirm[e.key].stock = stockNum;
+      else rmFirm[e.key] = { code: rmCodeReal[e.key] || e.code || "", stock: stockNum, supply: rmSupply[e.key] || 0 };
+    }
+    matched++;
+  });
+  return { matched, unmatched };
+}
 function updateInvKpis() {
   let rm = 0, pm = 0;
   MATLIST.forEach(e => {
@@ -2038,6 +2088,56 @@ function wire() {
       alert('Loaded ' + loaded + ' PM(s). Click [Clear override] to remove.');
       renderPM();
     } catch (err) { alert("Error reading file: " + err.message); }
+  });
+
+  // Import Current Stock (RM tab) — matched by RM name/code, applied to Current stock (kg).
+  $("btnImportStockRm").addEventListener("click", () => $("fileStockRm").click());
+  $("fileStockRm").addEventListener("change", async e => {
+    const file = e.target.files[0]; if (!file) return;
+    e.target.value = "";
+    const msg = $("rmStockImportMsg");
+    msg.style.display = "block"; msg.style.color = "";
+    try {
+      let rows;
+      if (/\.csv$/i.test(file.name)) rows = parseCSV(await file.text());
+      else if (/\.xlsx$/i.test(file.name)) rows = await readXlsx(await file.arrayBuffer());
+      else throw new Error("Unsupported file type. Use .xlsx or .csv (not the older .xls).");
+      rows = trimLeadingBlank(rows || []);
+      if (!rows.length) throw new Error("The file has no rows.");
+      const res = applyStockRows(rows, "rm");
+      msg.innerHTML = "Imported current stock for <b>" + res.matched + "</b> RM(s)" +
+        (res.unmatched.length ? "; <span class='miss-badge'>unmatched:</span> " +
+          escapeHtml(res.unmatched.slice(0, 6).join(", ")) + (res.unmatched.length > 6 ? " …" : "") : "") + ".";
+      renderRM();
+    } catch (err) {
+      msg.style.color = "var(--warn)";
+      msg.textContent = "⚠ " + (err && err.message ? err.message : "Could not read this file.");
+    }
+  });
+
+  // Import Current Stock (PM tab) — matched by PM name/code, applied to Stock in hand (units).
+  $("btnImportStockPm").addEventListener("click", () => $("fileStockPm").click());
+  $("fileStockPm").addEventListener("change", async e => {
+    const file = e.target.files[0]; if (!file) return;
+    e.target.value = "";
+    const msg = $("pmStockImportMsg");
+    msg.style.display = "block"; msg.style.color = "";
+    try {
+      let rows;
+      if (/\.csv$/i.test(file.name)) rows = parseCSV(await file.text());
+      else if (/\.xlsx$/i.test(file.name)) rows = await readXlsx(await file.arrayBuffer());
+      else throw new Error("Unsupported file type. Use .xlsx or .csv (not the older .xls).");
+      rows = trimLeadingBlank(rows || []);
+      if (!rows.length) throw new Error("The file has no rows.");
+      const res = applyStockRows(rows, "pm");
+      msg.innerHTML = "Imported current stock for <b>" + res.matched + "</b> PM(s)" +
+        (res.unmatched.length ? "; <span class='miss-badge'>unmatched:</span> " +
+          escapeHtml(res.unmatched.slice(0, 6).join(", ")) + (res.unmatched.length > 6 ? " …" : "") : "") + ".";
+      renderPM();
+    } catch (err) {
+      msg.style.color = "var(--warn)";
+      msg.textContent = "⚠ " + (err && err.message ? err.message : "Could not read this file.");
+    }
   });
 
   if ($("exportSku")) $("exportSku").addEventListener("click", exportSku);
