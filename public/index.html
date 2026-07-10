@@ -238,6 +238,7 @@
     <div class="grand">
       <div class="kpi"><b id="pmDistinct">0</b><span>Distinct packaging materials</span></div>
       <div class="kpi"><b id="pmStockTot">0</b><span>Stock in hand (units)</span></div>
+      <div class="kpi"><b id="pmSupplyTot">0</b><span>Expected supply (units)</span></div>
       <div class="kpi"><b id="pmOrderM1">0</b><span>Order — M1 (units)</span></div>
       <div class="kpi"><b id="pmOrderM2">0</b><span>Order — M2 (units)</span></div>
       <div class="kpi"><b id="pmAtRisk">0</b><span>M1 orders needed</span></div>
@@ -261,6 +262,8 @@
           <th rowspan="2">Code</th>
           <th rowspan="2" class="num">MOQ (units)</th>
           <th rowspan="2" class="num">Stock in hand (units)</th>
+          <th rowspan="2" class="num">Exp. supply M1</th>
+          <th rowspan="2" class="num">Exp. supply M2</th>
           <th colspan="6" class="grp">Month 1 (0–30 d)</th>
           <th colspan="6" class="grp">Month 2 (31–60 d)</th>
           <th rowspan="2" style="width:90px"></th>
@@ -274,13 +277,15 @@
       <tfoot><tr>
         <td colspan="2">Grand total · <span id="pmDistinct2">0</span> PM</td>
         <td class="num req" id="pmFootStock">0</td>
+        <td class="num req" id="pmFootSupplyM1">0</td>
+        <td class="num req" id="pmFootSupplyM2">0</td>
         <td class="num req" id="pmFootReqM1">0</td><td class="num req" id="pmFootM1">0</td><td class="num req" id="pmFootAdjM1">0</td><td></td><td></td>
         <td class="num req" id="pmFootReqM2">0</td><td class="num req" id="pmFootM2">0</td><td class="num req" id="pmFootAdjM2">0</td><td></td><td></td>
         <td></td>
       </tr></tfoot>
     </table>
     </div>
-    <div class="hint"><b>Forward planning</b>: <b>Required qty</b> (per month, units) = Σ(pm_qty_per_unit × month demand). M1→M2 carry-forward: closing M1 stock = current stock − required M1 (may be negative). PM has no expected-supply feed. <b>Desired quantity</b> = max(0, REQ − available). <b>Actual Quantity</b> floors at MOQ. Click a row for per-SKU details. <b>Verify before raising any PO.</b></div>
+    <div class="hint"><b>Forward planning</b>: <b>Required qty</b> (per month, units) = Σ(pm_qty_per_unit × month demand). M1→M2 carry-forward: closing M1 stock = current stock + supply M1 − required M1 (may be negative). <b>Exp. supply</b> (units) is entered manually per material — editable, no automated feed yet — and split across M1/M2 the same way as RM. <b>Desired quantity</b> = max(0, REQ − available). <b>Actual Quantity</b> floors at MOQ. Click a row for per-SKU details. <b>Verify before raising any PO.</b></div>
   </section>
 
   
@@ -715,6 +720,7 @@ let rmSupply   = {}; // normKey(rm_name) -> expected supply (kg), Firm sheet col
 let rmCodeReal = {}; // normKey(rm_name) -> real RM code, Firm sheet col F (matched only)
 let rmMoq      = {}; // normKey(rm_name) -> MOQ (kg) string, user-entered (no source feed yet)
 let pmMoq      = {}; // normKey(pm_name) -> MOQ (units) string — DUMMY seed, editable (no source feed yet)
+let pmSupply   = {}; // normKey(pm_name) -> expected supply (units) from open POs — editable (no real feed yet)
 let rmReqOverride = {}; // normKey(rm_name) -> {name, m1, m2} kg — set by "Import Req Qty"
 let pmReqOverride = {}; // normKey(pm_name) -> {name, m1, m2} units — set by "Import Req Qty"
 let curTab = "demand"
@@ -1248,26 +1254,31 @@ function renderPM() {
   if ($("btnClearReqPm")) $("btnClearReqPm").style.display = hasOverride ? "" : "none";
 
   if (!hasOverride) {
-    $("pmRows").innerHTML = '<tr><td colspan="14" style="text-align:center;padding:32px;color:#888;font-style:italic">Click <b>Import Req Qty</b> above to load required quantities from Excel/CSV.</td></tr>';
-    ["pmDistinct","pmDistinct2","pmStockTot","pmOrderM1","pmOrderM2","pmAtRisk"].forEach(id => { const el = $(id); if (el) el.textContent = "0"; });
-    ["pmFootStock","pmFootReqM1","pmFootReqM2","pmFootM1","pmFootM2","pmFootAdjM1","pmFootAdjM2"].forEach(id => { const el = $(id); if (el) el.textContent = "0"; });
+    $("pmRows").innerHTML = '<tr><td colspan="16" style="text-align:center;padding:32px;color:#888;font-style:italic">Click <b>Import Req Qty</b> above to load required quantities from Excel/CSV.</td></tr>';
+    ["pmDistinct","pmDistinct2","pmStockTot","pmSupplyTot","pmOrderM1","pmOrderM2","pmAtRisk"].forEach(id => { const el = $(id); if (el) el.textContent = "0"; });
+    ["pmFootStock","pmFootSupplyM1","pmFootSupplyM2","pmFootReqM1","pmFootReqM2","pmFootM1","pmFootM2","pmFootAdjM1","pmFootAdjM2"].forEach(id => { const el = $(id); if (el) el.textContent = "0"; });
     const _pm = new Map();
     STATIC_BOM.bom_pm.forEach(r => { const nk = normKey(r.pm_name); if (!_pm.has(nk)) _pm.set(nk, r.pm_name); });
     const _pi = [..._pm.entries()].map(([k,name]) => {
       const stock = stockTotal('pm', k); const moq = num(pmMoq[k],true);
-      return {k, name, stock: stock||0, moq};
+      const supply = num(pmSupply[k],true); const [supM1, supM2] = fwdSupplySplit(supply);
+      return {k, name, stock: stock||0, moq, supply, supM1, supM2};
     });
     _pi.sort((a,b)=>a.name.localeCompare(b.name));
     const _ptb=$('pmRows'); _ptb.innerHTML='';
     const _d2='<span class="muted">\u2014</span>';
-    const _qc2=Array(13).fill('<td class="num">'+_d2+'</td>').join('');
+    const _qc2=Array(11).fill('<td class="num">'+_d2+'</td>').join('');
     _pi.forEach(r=>{
       const tr=document.createElement('tr');
       const mv=pmMoq[r.k]!=null?pmMoq[r.k]:'';
       const mi='<input class="cell" type="number" min="0" step="25" value="'+escapeHtml(String(mv))+'" data-k="'+escapeHtml(r.k)+'">';
-      tr.innerHTML='<td>'+escapeHtml(r.name)+'</td><td class="sku-code">'+escapeHtml((matMaster[normKey(r.name)]&&matMaster[normKey(r.name)].code)||'')+'</td><td class="num">'+mi+'</td><td class="num req">'+fmt(r.stock,0)+'</td>'+_qc2;
-      const inp=tr.querySelector('input.cell');
+      const sv=pmSupply[r.k]!=null?pmSupply[r.k]:'';
+      const si='<input class="cell" type="number" min="0" step="50" value="'+escapeHtml(String(sv))+'" data-sk="'+escapeHtml(r.k)+'" title="Expected supply (units) — editable, split M1/M2 same as RM">';
+      tr.innerHTML='<td>'+escapeHtml(r.name)+'</td><td class="sku-code">'+escapeHtml((matMaster[normKey(r.name)]&&matMaster[normKey(r.name)].code)||'')+'</td><td class="num">'+mi+'</td><td class="num req">'+fmt(r.stock,0)+'</td><td class="num">'+si+'</td><td class="num">'+fmt(r.supM2,0)+'</td>'+_qc2;
+      const inp=tr.querySelector('input.cell[data-k]');
       if(inp){inp.addEventListener('click',ev=>ev.stopPropagation());inp.addEventListener('change',()=>{pmMoq[inp.getAttribute('data-k')]=inp.value;renderPM();});}
+      const sInp=tr.querySelector('input.cell[data-sk]');
+      if(sInp){sInp.addEventListener('click',ev=>ev.stopPropagation());sInp.addEventListener('change',()=>{pmSupply[sInp.getAttribute('data-sk')]=sInp.value;renderPM();});}
       _ptb.appendChild(tr);
     });
     return;
@@ -1275,46 +1286,62 @@ function renderPM() {
 
   const items = Object.entries(pmReqOverride).map(([k, ov]) => {
     if (pmMoq[k] == null) pmMoq[k] = "0";
+    if (pmSupply[k] == null) pmSupply[k] = "0";
     const reqM1 = ov.m1 || 0, reqM2 = ov.m2 || 0;
     const moq = num(pmMoq[k], true);
     const stock = stockTotal("pm", k);
-    const oM1 = fwdOrder(reqM1, stock, moq);
-    const stockIntoM2 = Math.max(0, stock + moqAdjOrder(oM1.oq, moq) - reqM1)
-    const oM2 = fwdOrder(reqM2, stockIntoM2, moq);
-    return { k, name: ov.name, reqM1, reqM2, moq, stock, oM1, oM2 };
+    const supply = num(pmSupply[k], true);
+    const [supM1, supM2] = fwdSupplySplit(supply);
+    const availM1 = stock + supM1;
+    const oM1 = fwdOrder(reqM1, availM1, moq);
+    const stockIntoM2 = Math.max(0, stock + supM1 + moqAdjOrder(oM1.oq, moq) - reqM1)   // carry-forward (may be negative)
+    const availM2 = stockIntoM2 + supM2;
+    const oM2 = fwdOrder(reqM2, availM2, moq);
+    return { k, name: ov.name, reqM1, reqM2, moq, stock, supply, supM1, supM2, oM1, oM2 };
   });
   items.sort((a, b) => b.reqM1 - a.reqM1);
 
   const tbody = $("pmRows"); tbody.innerHTML = "";
-  let stockTot = 0, m1Tot = 0, m2Tot = 0, adjM1Tot = 0, adjM2Tot = 0, reqM1Tot = 0, reqM2Tot = 0, ordersNeeded = 0;
+  let stockTot = 0, supplyTot = 0, supM1Tot = 0, supM2Tot = 0, m1Tot = 0, m2Tot = 0, adjM1Tot = 0, adjM2Tot = 0, reqM1Tot = 0, reqM2Tot = 0, ordersNeeded = 0;
   items.forEach(r => {
-    stockTot += r.stock; m1Tot += r.oM1.oq; m2Tot += r.oM2.oq;
+    stockTot += r.stock; supplyTot += r.supply; supM1Tot += r.supM1; supM2Tot += r.supM2;
+    m1Tot += r.oM1.oq; m2Tot += r.oM2.oq;
     adjM1Tot += moqAdjOrder(r.oM1.oq, r.moq); adjM2Tot += moqAdjOrder(r.oM2.oq, r.moq);
     reqM1Tot += r.reqM1; reqM2Tot += r.reqM2;
     if (r.oM1.oq > 0) ordersNeeded++;
     const tr = document.createElement("tr"); tr.className = "clickable";
     const moqIn = '<input class="cell" type="number" min="0" step="50" value="' + r.moq +
       '" data-k="' + escapeHtml(r.k) + '" style="width:80px" title="MOQ (editable)">';
+    const supIn = '<input class="cell" type="number" min="0" step="50" value="' + r.supply +
+      '" data-sk="' + escapeHtml(r.k) + '" style="width:80px" title="Expected supply (units) — editable, split M1/M2 same as RM">';
     tr.innerHTML =
       '<td>' + escapeHtml(r.name) + '</td>' +
       '<td class="num">' + moqIn + '</td>' +
       '<td class="num req">' + fmt(r.stock, 0) + '</td>' +
+      '<td class="num">' + supIn + '</td>' +
+      '<td class="num">' + fmt(r.supM2, 0) + '</td>' +
       '<td class="num">' + fmt(r.reqM1, 0) + '</td>' + '<td class="num">' + (r.stock != null && r.reqM1 > 0 ? (r.stock * 30 / r.reqM1).toFixed(1) : '—') + '<td class="num req">' + fmt(r.oM1.oq, 0) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM1.oq, r.moq), 0) + '</td>' + diffCell(r.oM1.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM1) + '</td>' +
       '<td class="num">' + fmt(r.reqM2, 0) + '</td>' + '<td class="num">' + (r.stock != null && r.reqM2 > 0 ? (r.stock * 30 / r.reqM2).toFixed(1) : '—') + '<td class="num req">' + fmt(r.oM2.oq, 0) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM2.oq, r.moq), 0) + '</td>' + diffCell(r.oM2.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM2) + '</td>' +
       '<td class="num"></td>';
     tbody.appendChild(tr);
-    const inp = tr.querySelector("input.cell");
+    const inp = tr.querySelector("input.cell[data-k]");
     inp.addEventListener("click", ev => ev.stopPropagation());
     inp.addEventListener("change", () => { pmMoq[inp.getAttribute("data-k")] = inp.value; renderPM(); });
+    const sInp = tr.querySelector("input.cell[data-sk]");
+    sInp.addEventListener("click", ev => ev.stopPropagation());
+    sInp.addEventListener("change", () => { pmSupply[sInp.getAttribute("data-sk")] = sInp.value; renderPM(); });
   });
 
   $("pmDistinct").textContent = items.length;
   $("pmDistinct2").textContent = items.length;
   $("pmStockTot").textContent = fmt(stockTot, 0);
+  $("pmSupplyTot").textContent = fmt(supplyTot, 0);
   $("pmOrderM1").textContent = fmt(m1Tot, 0);
   $("pmOrderM2").textContent = fmt(m2Tot, 0);
   $("pmAtRisk").textContent = ordersNeeded;
   $("pmFootStock").textContent = fmt(stockTot, 0);
+  $("pmFootSupplyM1").textContent = fmt(supM1Tot, 0);
+  $("pmFootSupplyM2").textContent = fmt(supM2Tot, 0);
   $("pmFootReqM1").textContent = fmt(reqM1Tot, 0);
   $("pmFootReqM2").textContent = fmt(reqM2Tot, 0);
   $("pmFootM1").textContent = fmt(m1Tot, 0);
