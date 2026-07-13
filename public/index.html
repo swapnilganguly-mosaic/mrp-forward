@@ -997,6 +997,19 @@ function buildMaster() {
   }
   RM.forEach(r => add(r.rm_name, "rm"));
   PM.forEach(r => add(r.pm_name, "pm"));
+  // Also register every material that has an official Mosaic code mapping (STATIC_RM_CODES /
+  // STATIC_PM_CODES) even if it isn't in the current BOM extract — NovaCore's Req Qty exports
+  // routinely reference materials (premix components, generic actives, etc.) that never show up
+  // in the simplified BOM list. Without this, such a material is never "known" to the app, so
+  // Current Stock/Expected Supply imports can't match it and it always shows NA regardless of
+  // upload order.
+  const titleCase = s => s.replace(/\b\w/g, c => c.toUpperCase());
+  if (typeof STATIC_RM_CODES !== 'undefined') {
+    Object.keys(STATIC_RM_CODES).forEach(k => { if (!matMaster[k]) add(titleCase(k), "rm"); });
+  }
+  if (typeof STATIC_PM_CODES !== 'undefined') {
+    Object.keys(STATIC_PM_CODES).forEach(k => { if (!matMaster[k]) add(titleCase(k), "pm"); });
+  }
   // # distinct SKUs using each material (in BOM, regardless of demand)
   const cnt = {};
   RM.forEach(r => { const k = normKey(r.rm_name); (cnt[k] = cnt[k] || new Set()).add(r.sku_code); });
