@@ -269,7 +269,7 @@
         <tr>
           <th rowspan="2" style="width:44px">#</th>
           <th rowspan="2">Packaging Material</th>
-          <th rowspan="2">Code</th>
+          <th rowspan="2">Mosaic Code</th>
           <th rowspan="2">Sapiens PM Code</th>
           <th rowspan="2" class="num">MOQ (units)</th>
           <th rowspan="2" class="num">Stock in hand (units)</th>
@@ -744,6 +744,7 @@ let drrBySku   = {}; // sku_code -> Product DRR (Stock Matrix Base 'Main' col AR
 let rmFirm     = {}; // normKey(rm_name) -> {code, stock, supply} from Sapiens "PM-RM Planing"
 let rmSupply   = {}; // normKey(rm_name) -> expected supply (kg), Firm sheet col P (matched only)
 let rmCodeReal = {}; // normKey(rm_name) -> real RM code, Firm sheet col F (matched only)
+let pmCodeReal = {}; // normKey(pm_name) -> genuine Mosaic PM code sourced from the BOM file's own PM code column (first non-blank wins), NOT the internal dummy placeholder
 let rmSubGroups   = {}; // normKey(app rm_name) -> [{code, name}] sub-RMs mapped to this Mosaic RM (from "RMs mapping newer.xlsx")
 let rmSubCodeIndex = {}; // sapiens sub-RM code (lowercased) -> normKey(app rm_name)
 let rmSubNameIndex = {}; // normKey(sub-RM name) -> normKey(app rm_name)
@@ -828,6 +829,8 @@ function loadDataset(d) {
     // pm_qty_per_unit default 1 when blank.
     pm_qty_per_unit: (r.pm_qty_per_unit === "" || r.pm_qty_per_unit == null) ? "1" : String(r.pm_qty_per_unit)
   }));
+  pmCodeReal = {};
+  PM.forEach(r => { const k = normKey(r.pm_name); if (r.pm_code && !pmCodeReal[k]) pmCodeReal[k] = r.pm_code; });
   skuIndex = {}; SKU.forEach(s => skuIndex[s.sku_code] = s);
   demand = {}; demandM2 = {}; SKU.forEach(s => { demand[s.sku_code] = "0"; demandM2[s.sku_code] = "0"; });
 
@@ -1166,10 +1169,14 @@ function fwdCfgHtml() {
 /* Comma-joined Sapiens RM code(s) mapped to this app-level RM, for display in the
  * Consolidated RM tab (e.g. "RM0331, RM0332, RM0383" for Jaggery Powder's 3 sub-RMs). */
 function officialRmCode(k) {
-  return rmCodeReal[k] || (matMaster[k] ? matMaster[k].code : "") || (typeof STATIC_RM_CODES !== 'undefined' ? (STATIC_RM_CODES[k] || "") : "");
+  // Never returns the internal dummy "RM-0001"-style placeholder buildMaster() seeds —
+  // only a code sourced from an actual feed (Sapiens Firm sheet / STATIC_RM_CODES mapping).
+  return (typeof STATIC_RM_CODES !== 'undefined' ? STATIC_RM_CODES[k] : "") || rmCodeReal[k] || "";
 }
 function officialPmCode(k) {
-  return (matMaster[k] ? matMaster[k].code : "") || (typeof STATIC_PM_CODES !== 'undefined' ? (STATIC_PM_CODES[k] || "") : "");
+  // Same idea for PM: prefer the curated STATIC_PM_CODES mapping, then the BOM file's own
+  // PM code column (pmCodeReal) — never the internal dummy "PM-0001"-style placeholder.
+  return (typeof STATIC_PM_CODES !== 'undefined' ? STATIC_PM_CODES[k] : "") || pmCodeReal[k] || "";
 }
 function sapiensCodesLabel(k) {
   const subs = rmSubGroups[k];
@@ -1369,7 +1376,7 @@ function renderPM() {
       const mi='<input class="cell" type="number" min="0" step="25" value="'+escapeHtml(String(mv))+'" data-k="'+escapeHtml(r.k)+'">';
       const sv=pmSupply[r.k]!=null?pmSupply[r.k]:'';
       const si='<input class="cell" type="number" min="0" step="50" value="'+escapeHtml(String(sv))+'" data-sk="'+escapeHtml(r.k)+'" title="Expected supply (units) — editable, split M1/M2 same as RM">';
-      tr.innerHTML='<td class="num">'+(idx+1)+'</td><td>'+escapeHtml(r.name)+'</td><td class="sku-code">'+escapeHtml((matMaster[normKey(r.name)]&&matMaster[normKey(r.name)].code)||officialPmCode(normKey(r.name))||'')+'</td><td class="sku-code" style="font-size:0.85em">'+escapeHtml(sapiensPmCodesLabel(r.k))+'</td><td class="num">'+mi+'</td><td class="num req">'+fmt(r.stock,1)+'</td><td class="num">'+si+'</td><td class="num">'+fmt(r.supM2,1)+'</td>'+_qc2;
+      tr.innerHTML='<td class="num">'+(idx+1)+'</td><td>'+escapeHtml(r.name)+'</td><td class="sku-code">'+escapeHtml(officialPmCode(normKey(r.name))||'')+'</td><td class="sku-code" style="font-size:0.85em">'+escapeHtml(sapiensPmCodesLabel(r.k))+'</td><td class="num">'+mi+'</td><td class="num req">'+fmt(r.stock,1)+'</td><td class="num">'+si+'</td><td class="num">'+fmt(r.supM2,1)+'</td>'+_qc2;
       const inp=tr.querySelector('input.cell[data-k]');
       if(inp){inp.addEventListener('click',ev=>ev.stopPropagation());inp.addEventListener('change',()=>{pmMoq[inp.getAttribute('data-k')]=inp.value;renderPM();});}
       const sInp=tr.querySelector('input.cell[data-sk]');
@@ -1412,7 +1419,7 @@ function renderPM() {
     tr.innerHTML =
       '<td class="num">' + (idx + 1) + '</td>' +
       '<td>' + escapeHtml(r.name) + '</td>' +
-      '<td class="sku-code">' + escapeHtml((matMaster[r.k] && matMaster[r.k].code) || officialPmCode(r.k) || '') + '</td>' +
+      '<td class="sku-code">' + escapeHtml(officialPmCode(r.k) || '') + '</td>' +
       '<td class="sku-code" style="font-size:0.85em">' + escapeHtml(sapiensPmCodesLabel(r.k)) + '</td>' +
       '<td class="num">' + moqIn + '</td>' +
       '<td class="num req">' + fmt(r.stock,1) + '</td>' +
