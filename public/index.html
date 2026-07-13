@@ -1205,10 +1205,14 @@ function renderRM() {
     const _nm = new Map();
     STATIC_BOM.bom_rm.forEach(r => { if (!r.rm_name) return; const nk = normKey(r.rm_name); if (!_nm.has(nk)) _nm.set(nk, r.rm_name); });
     const _ni = [..._nm.entries()].map(([k,name]) => {
-      const f = rmFirm[k]; const moq = num(rmMoq[k],true); const code = (f && f.code) || officialRmCode(k);
-      let stock=null, supM1=0, supM2=0;
-      if (f) { stock=f.stock; const sp=fwdSupplySplit(f.supply||0); supM1=sp[0]; supM2=sp[1]; }
-      return {k,name,matched:!!f,moq,code,stock,supM1,supM2};
+      const moq = num(rmMoq[k],true); const code = officialRmCode(k);
+      // Stock/supply come straight from the live import stores (stockTotal/rmSupply), not the
+      // legacy Sapiens Firm-sheet dataset — so a material shows real numbers whenever Current
+      // Stock/Expected Supply have actually been imported for it, regardless of whether it was
+      // ever part of the older Firm-sheet seed.
+      const stock = stockTotal('rm', k);
+      const [supM1, supM2] = fwdSupplySplit(num(rmSupply[k], true));
+      return {k,name,matched:true,moq,code,stock,supM1,supM2};
     });
     _ni.sort((a,b)=>(a.name||"").localeCompare(b.name||""));
     const _tb=$('rmRows'); _tb.innerHTML='';
@@ -1229,7 +1233,7 @@ function renderRM() {
   }
 
   const items = Object.entries(rmReqOverride).map(([k, ov]) => {
-    const matched = !!rmFirm[k];
+    const matched = !!matMaster[k]; // known to the system (in BOM / has a Mosaic code) — not gated on the legacy Sapiens Firm-sheet feed
     const reqM1 = ov.m1 || 0;
     const reqM2 = ov.m2 || 0;
     const moq = num(rmMoq[k], true);
@@ -1784,6 +1788,23 @@ function resolveMatIdentifier(raw, byCode, byName) {
   if (pmSubK && matMaster[pmSubK]) return { key: pmSubK, kind: "pm" };
   return null;
 }
+function makeResolver(kind) {
+  const byCode = {}, byName = {};
+  MATLIST.forEach(e => { if (e.kind !== kind) return; byCode[e.code.toLowerCase()] = e; byName[e.key] = e; });
+  return function resolve(raw) {
+    const rawL = raw.toLowerCase(), rawN = normKey(raw);
+    const e = byCode[rawL] || byName[rawN];
+    if (e) return e.key;
+    if (kind === "rm") {
+      const subK = rmSubCodeIndex[rawL] || rmSubNameIndex[rawN];
+      if (subK && matMaster[subK] && matMaster[subK].kind === "rm") return subK;
+    } else {
+      const subK = pmSubCodeIndex[rawL] || pmSubNameIndex[rawN];
+      if (subK && matMaster[subK] && matMaster[subK].kind === "pm") return subK;
+    }
+    return null;
+  };
+}
 function applyInventoryRows(rows, factoryCode) {
   const byCode = {}, byName = {};
   MATLIST.forEach(e => { byCode[e.code.toLowerCase()] = e; byName[e.key] = e; });
@@ -1839,21 +1860,7 @@ function applyInventoryRows(rows, factoryCode) {
  * an rmFirm entry so the Consolidated RM tab and SKU Doc tab (which gate the stock
  * column display on rmFirm being matched) pick the value up. */
 function applyStockRows(rows, kind) {
-  const byCode = {}, byName = {};
-  MATLIST.forEach(e => { if (e.kind !== kind) return; byCode[e.code.toLowerCase()] = e; byName[e.key] = e; });
-  const resolve = (raw) => {
-    const rawL = raw.toLowerCase(), rawN = normKey(raw);
-    const e = byCode[rawL] || byName[rawN];
-    if (e) return e.key;
-    if (kind === "rm") {
-      const subK = rmSubCodeIndex[rawL] || rmSubNameIndex[rawN];
-      if (subK && matMaster[subK] && matMaster[subK].kind === "rm") return subK;
-    } else {
-      const subK = pmSubCodeIndex[rawL] || pmSubNameIndex[rawN];
-      if (subK && matMaster[subK] && matMaster[subK].kind === "pm") return subK;
-    }
-    return null;
-  };
+  const resolve = makeResolver(kind);
   const width = rows.reduce((w, r) => Math.max(w, r.length), 0);
   const cell = (r, c) => String(r[c] == null ? "" : r[c]).trim();
   let idCol = 0, idHits = -1;
@@ -1910,21 +1917,7 @@ function applyStockRows(rows, kind) {
  * had no stock feed match yet, so it still counts as "matched" for the RM tab/SKU Doc).
  * For PM this writes into the existing editable pmSupply map. */
 function applySupplyRows(rows, kind) {
-  const byCode = {}, byName = {};
-  MATLIST.forEach(e => { if (e.kind !== kind) return; byCode[e.code.toLowerCase()] = e; byName[e.key] = e; });
-  const resolve = (raw) => {
-    const rawL = raw.toLowerCase(), rawN = normKey(raw);
-    const e = byCode[rawL] || byName[rawN];
-    if (e) return e.key;
-    if (kind === "rm") {
-      const subK = rmSubCodeIndex[rawL] || rmSubNameIndex[rawN];
-      if (subK && matMaster[subK] && matMaster[subK].kind === "rm") return subK;
-    } else {
-      const subK = pmSubCodeIndex[rawL] || pmSubNameIndex[rawN];
-      if (subK && matMaster[subK] && matMaster[subK].kind === "pm") return subK;
-    }
-    return null;
-  };
+  const resolve = makeResolver(kind);
   const width = rows.reduce((w, r) => Math.max(w, r.length), 0);
   const cell = (r, c) => String(r[c] == null ? "" : r[c]).trim();
   let idCol = 0, idHits = -1;
@@ -2013,7 +2006,7 @@ function exportRM() {
     "M2 Required qty,M2 Desired quantity,M2 Actual Quantity,M2 Diff,M2 Status"];
   agg.forEach(e => {
     const k = normKey(e.name);
-    const matched = !!rmFirm[k];
+    const matched = !!matMaster[k]; // known to the system (in BOM / has a Mosaic code) — not gated on the legacy Sapiens Firm-sheet feed
     const reqM1 = e.reqM1Kg, reqM2 = e.reqM2Kg;
     const moq = num(rmMoq[k], true);
     const moqStr = (rmMoq[k] == null || rmMoq[k] === "") ? "" : String(rmMoq[k]);
@@ -2027,8 +2020,8 @@ function exportRM() {
     const [supM1, supM2] = fwdSupplySplit(supply);
     const availM1 = stock + supM1;
     const o1 = fwdOrder(reqM1, availM1, moq);
-    const stockIntoM2 = stock + supM1 - reqM1;
-    const availM2 = stockIntoM2 + supM2;
+    const openM2 = Math.max(0, stock + supM1 + moqAdjOrder(o1.oq, moq) - reqM1);   // opening stock M2 = carry-forward from M1 (floored at 0), matching the on-screen Opening Stock M2 column
+    const availM2 = openM2 + supM2;
     const o2 = fwdOrder(reqM2, availM2, moq);
     L.push([csvField(code), csvField(e.name), moqStr, stock.toFixed(3), supM1.toFixed(3), supM2.toFixed(3),
       reqM1.toFixed(1), o1.oq.toFixed(1), moqAdjOrder(o1.oq, moq).toFixed(1), (moqDiff(o1.oq, moq) * 100).toFixed(1) + "%", o1.status,
@@ -2298,6 +2291,7 @@ function wire() {
 
       let loaded = 0;
       rmReqOverride = {};
+      const resolveRm = makeResolver("rm");
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
         const nameRaw = (row[colName] || "").trim();
@@ -2305,7 +2299,11 @@ function wire() {
         const m1 = parseFloat((row[colM1] || "").toString().replace(/,/g, ""));
         const m2 = colM2 >= 0 ? parseFloat((row[colM2] || "").toString().replace(/,/g, "")) : 0;
         if (isNaN(m1)) continue;
-        rmReqOverride[normKey(nameRaw)] = { name: nameRaw, m1: m1, m2: isNaN(m2) ? 0 : m2 };
+        // Resolve via Mosaic code / RM name / Sapiens sub-code / sub-RM name so this lines up with
+        // whatever key Current Stock / Expected Supply already used for the same material — a
+        // slightly different spelling in this file no longer disconnects it from imported stock.
+        const key = resolveRm(nameRaw) || normKey(nameRaw);
+        rmReqOverride[key] = { name: nameRaw, m1: m1, m2: isNaN(m2) ? 0 : m2 };
         loaded++;
       }
       if (!loaded) { alert("No valid rows found. Expected columns: RM NAME, REQ QUANTITY M1 (KGS), REQ QUANTITY M2 (KGS)"); return; }
@@ -2342,6 +2340,7 @@ function wire() {
 
       let loaded = 0;
       pmReqOverride = {};
+      const resolvePm = makeResolver("pm");
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
         const nameRaw = (row[colName] || "").trim();
@@ -2349,7 +2348,9 @@ function wire() {
         const m1 = parseFloat((row[colM1] || "").toString().replace(/,/g, ""));
         const m2 = colM2 >= 0 ? parseFloat((row[colM2] || "").toString().replace(/,/g, "")) : 0;
         if (isNaN(m1)) continue;
-        pmReqOverride[normKey(nameRaw)] = { name: nameRaw, m1: m1, m2: isNaN(m2) ? 0 : m2 };
+        // Resolve via Mosaic code / PM name / Sapiens sub-code / sub-PM name — same reasoning as RM above.
+        const key = resolvePm(nameRaw) || normKey(nameRaw);
+        pmReqOverride[key] = { name: nameRaw, m1: m1, m2: isNaN(m2) ? 0 : m2 };
         loaded++;
       }
       if (!loaded) { alert("No valid rows found. Expected columns: PM NAME, REQ QUANTITY M1, REQ QUANTITY M2"); return; }
