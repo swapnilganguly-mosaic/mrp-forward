@@ -190,6 +190,7 @@
       <div class="spacer"></div>
       <div class="field" style="justify-content:flex-end;gap:8px">
         <button class="btn sm" id="btnImportStockRm" title="Import a CSV/Excel with columns: RM Name (or RM Code, or Sapiens RM Code / sub-RM name), Current Stock (kg). Sub-RMs mapped to the same Mosaic RM code (e.g. Jaggery Powder's 7Dinam/Dhampure/Shivalik) are summed into that one RM's stock.">Import Current Stock</button>
+        <button class="btn sm" id="btnImportSupplyRm" title="Import a CSV/Excel with columns: identifier (Sapiens RM Code, Mosaic RM Code, RM name, or sub-RM name — any of these), Expected supply (kg). Sub-RMs mapped to the same Mosaic RM code are summed into that one RM's expected supply.">Import Expected Supply</button>
         <button class="btn sm" id="btnImportReqRm" title="Import a CSV/Excel with columns: RM Name (or RM Code), Required M1 (kg), Required M2 (kg)">Import Req Qty</button>
         <button class="btn sm" id="btnClearReqRm" style="display:none" title="Remove imported required qty overrides and revert to BOM-calculated values">Clear override</button>
         <button class="btn primary" id="exportRm">Export RM CSV</button>
@@ -198,6 +199,7 @@
     <div id="rmStockImportMsg" class="hint" style="margin:-6px 0 10px;display:none"></div>
     <div id="rmCfg" class="hint" style="margin-bottom:10px"></div>
     <input type="file" id="fileStockRm" accept=".xlsx,.csv" style="display:none" />
+    <input type="file" id="fileSupplyRm" accept=".xlsx,.csv" style="display:none" />
     <input type="file" id="fileReqRm" accept=".xlsx,.csv" style="display:none" />
     <div style="overflow-x:auto">
     <table>
@@ -246,6 +248,7 @@
       <div class="spacer"></div>
       <div class="field" style="justify-content:flex-end;gap:8px">
         <button class="btn sm" id="btnImportStockPm" title="Import a CSV/Excel with columns: PM Name (or PM Code, or Sapiens PM Code / sub-PM name), Current Stock (units). Sub-PMs mapped to the same Mosaic PM code are summed into that one PM's stock.">Import Current Stock</button>
+        <button class="btn sm" id="btnImportSupplyPm" title="Import a CSV/Excel with columns: identifier (Sapiens PM Code, Mosaic PM Code, PM name, or sub-PM name — any of these), Expected supply (units). Sub-PMs mapped to the same Mosaic PM code are summed into that one PM's expected supply.">Import Expected Supply</button>
         <button class="btn sm" id="btnImportReqPm" title="Import a CSV/Excel with columns: PM Name, Required M1 (units), Required M2 (units)">Import Req Qty</button>
         <button class="btn sm" id="btnClearReqPm" style="display:none" title="Remove imported required qty and revert to empty">Clear override</button>
         <button class="btn primary" id="exportPm">Export PM CSV</button>
@@ -254,6 +257,7 @@
     <div id="pmStockImportMsg" class="hint" style="margin:-6px 0 10px;display:none"></div>
     <div id="pmCfg" class="hint" style="margin-bottom:10px"></div>
     <input type="file" id="fileStockPm" accept=".xlsx,.csv" style="display:none" />
+    <input type="file" id="fileSupplyPm" accept=".xlsx,.csv" style="display:none" />
     <input type="file" id="fileReqPm" accept=".xlsx,.csv" style="display:none" />
     <div style="overflow-x:auto">
     <table>
@@ -1865,6 +1869,75 @@ function applyStockRows(rows, kind) {
   });
   return { matched: Object.keys(sums).length, unmatched };
 }
+/* Import expected supply (kg for RM, units for PM) for a single kind — used by the
+ * Consolidated RM/PM tabs' "Import Expected Supply" button. The identifier column can
+ * be ANY of: Mosaic code, RM/PM name, Sapiens sub-code, or sub-RM/PM name — same
+ * flexible resolution as applyStockRows. Rows resolving to the same app-level material
+ * (e.g. several sub-RMs under one Mosaic RM code) are summed. For RM this writes into
+ * rmSupply (and rmFirm[key].supply, plus creates a minimal rmFirm entry if the material
+ * had no stock feed match yet, so it still counts as "matched" for the RM tab/SKU Doc).
+ * For PM this writes into the existing editable pmSupply map. */
+function applySupplyRows(rows, kind) {
+  const byCode = {}, byName = {};
+  MATLIST.forEach(e => { if (e.kind !== kind) return; byCode[e.code.toLowerCase()] = e; byName[e.key] = e; });
+  const resolve = (raw) => {
+    const rawL = raw.toLowerCase(), rawN = normKey(raw);
+    const e = byCode[rawL] || byName[rawN];
+    if (e) return e.key;
+    if (kind === "rm") {
+      const subK = rmSubCodeIndex[rawL] || rmSubNameIndex[rawN];
+      if (subK && matMaster[subK] && matMaster[subK].kind === "rm") return subK;
+    } else {
+      const subK = pmSubCodeIndex[rawL] || pmSubNameIndex[rawN];
+      if (subK && matMaster[subK] && matMaster[subK].kind === "pm") return subK;
+    }
+    return null;
+  };
+  const width = rows.reduce((w, r) => Math.max(w, r.length), 0);
+  const cell = (r, c) => String(r[c] == null ? "" : r[c]).trim();
+  let idCol = 0, idHits = -1;
+  for (let c = 0; c < width; c++) {
+    let hits = 0;
+    rows.forEach(r => { const v = cell(r, c); if (v && resolve(v)) hits++; });
+    if (hits > idHits) { idHits = hits; idCol = c; }
+  }
+  let qtyCol = -1, qHits = -1;
+  for (let c = 0; c < width; c++) {
+    if (c === idCol) continue;
+    let hits = 0;
+    rows.forEach(r => { const s = cell(r, c); if (s !== "" && isFinite(parseFloat(s))) hits++; });
+    if (hits > qHits) { qHits = hits; qtyCol = c; }
+  }
+  const sums = {}; const unmatched = []; // [{identifier, reason}]
+  rows.forEach(r => {
+    const raw = cell(r, idCol);
+    if (!raw) return;
+    const qs = qtyCol >= 0 ? cell(r, qtyCol) : "";
+    if (qs === "" || !isFinite(parseFloat(qs))) {
+      unmatched.push({ identifier: raw, reason: "No numeric quantity found in this row" });
+      return;
+    }
+    const key = resolve(raw);
+    if (!key) {
+      unmatched.push({ identifier: raw, reason: kind === "rm"
+        ? "Not recognized as a known RM code, RM name, Sapiens sub-code, or sub-RM name"
+        : "Not recognized as a known PM code, PM name, Sapiens sub-code, or sub-PM name" });
+      return;
+    }
+    sums[key] = (sums[key] || 0) + num(qs, true);
+  });
+  Object.keys(sums).forEach(key => {
+    const total = sums[key];
+    if (kind === "rm") {
+      rmSupply[key] = total;
+      if (rmFirm[key]) rmFirm[key].supply = total;
+      else rmFirm[key] = { code: rmCodeReal[key] || (matMaster[key] ? matMaster[key].code : "") || "", stock: null, supply: total };
+    } else {
+      pmSupply[key] = String(total);
+    }
+  });
+  return { matched: Object.keys(sums).length, unmatched };
+}
 function updateInvKpis() {
   let rm = 0, pm = 0;
   MATLIST.forEach(e => {
@@ -2295,6 +2368,58 @@ function wire() {
       msg.innerHTML = "Imported current stock for <b>" + res.matched + "</b> PM(s)" +
         (res.unmatched.length ? "; <span class='miss-badge'>" + res.unmatched.length + " row(s) could not be mapped</span> — see popup" : "") + ".";
       showUnmatchedModal("Import Current Stock (PM) — unmatched rows", res.unmatched);
+      renderPM();
+    } catch (err) {
+      msg.style.color = "var(--warn)";
+      msg.textContent = "⚠ " + (err && err.message ? err.message : "Could not read this file.");
+    }
+  });
+
+  // Import Expected Supply (RM tab) — identifier can be Mosaic code, RM name, Sapiens
+  // sub-code, or sub-RM name; matching rows are summed into that RM's expected supply.
+  $("btnImportSupplyRm").addEventListener("click", () => $("fileSupplyRm").click());
+  $("fileSupplyRm").addEventListener("change", async e => {
+    const file = e.target.files[0]; if (!file) return;
+    e.target.value = "";
+    const msg = $("rmStockImportMsg");
+    msg.style.display = "block"; msg.style.color = "";
+    try {
+      let rows;
+      if (/\.csv$/i.test(file.name)) rows = parseCSV(await file.text());
+      else if (/\.xlsx$/i.test(file.name)) rows = await readXlsx(await file.arrayBuffer());
+      else throw new Error("Unsupported file type. Use .xlsx or .csv (not the older .xls).");
+      rows = trimLeadingBlank(rows || []);
+      if (!rows.length) throw new Error("The file has no rows.");
+      const res = applySupplyRows(rows, "rm");
+      msg.innerHTML = "Imported expected supply for <b>" + res.matched + "</b> RM(s)" +
+        (res.unmatched.length ? "; <span class='miss-badge'>" + res.unmatched.length + " row(s) could not be mapped</span> — see popup" : "") + ".";
+      showUnmatchedModal("Import Expected Supply (RM) — unmatched rows", res.unmatched);
+      renderRM();
+    } catch (err) {
+      msg.style.color = "var(--warn)";
+      msg.textContent = "⚠ " + (err && err.message ? err.message : "Could not read this file.");
+    }
+  });
+
+  // Import Expected Supply (PM tab) — identifier can be Mosaic code, PM name, Sapiens
+  // sub-code, or sub-PM name; matching rows are summed into that PM's expected supply.
+  $("btnImportSupplyPm").addEventListener("click", () => $("fileSupplyPm").click());
+  $("fileSupplyPm").addEventListener("change", async e => {
+    const file = e.target.files[0]; if (!file) return;
+    e.target.value = "";
+    const msg = $("pmStockImportMsg");
+    msg.style.display = "block"; msg.style.color = "";
+    try {
+      let rows;
+      if (/\.csv$/i.test(file.name)) rows = parseCSV(await file.text());
+      else if (/\.xlsx$/i.test(file.name)) rows = await readXlsx(await file.arrayBuffer());
+      else throw new Error("Unsupported file type. Use .xlsx or .csv (not the older .xls).");
+      rows = trimLeadingBlank(rows || []);
+      if (!rows.length) throw new Error("The file has no rows.");
+      const res = applySupplyRows(rows, "pm");
+      msg.innerHTML = "Imported expected supply for <b>" + res.matched + "</b> PM(s)" +
+        (res.unmatched.length ? "; <span class='miss-badge'>" + res.unmatched.length + " row(s) could not be mapped</span> — see popup" : "") + ".";
+      showUnmatchedModal("Import Expected Supply (PM) — unmatched rows", res.unmatched);
       renderPM();
     } catch (err) {
       msg.style.color = "var(--warn)";
