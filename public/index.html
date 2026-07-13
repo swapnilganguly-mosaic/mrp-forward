@@ -1790,7 +1790,18 @@ function resolveMatIdentifier(raw, byCode, byName) {
 }
 function makeResolver(kind) {
   const byCode = {}, byName = {};
-  MATLIST.forEach(e => { if (e.kind !== kind) return; byCode[e.code.toLowerCase()] = e; byName[e.key] = e; });
+  // mosaic code (lowercased) -> matMaster key, so an alias name that only exists in
+  // STATIC_RM_CODES/STATIC_PM_CODES (e.g. "Soy Protein Isolate" as a short alias for the
+  // BOM's full "Soy Protein Isolate Supro - 620 IP") still resolves to the real BOM material,
+  // instead of being treated as a brand-new/unrecognized one.
+  const byMosaicCode = {};
+  MATLIST.forEach(e => {
+    if (e.kind !== kind) return;
+    byCode[e.code.toLowerCase()] = e; byName[e.key] = e;
+    const official = matMaster[e.key] && matMaster[e.key].code;
+    if (official) byMosaicCode[official.toLowerCase()] = e;
+  });
+  const ALIAS = kind === "rm" ? (typeof STATIC_RM_CODES !== 'undefined' ? STATIC_RM_CODES : {}) : (typeof STATIC_PM_CODES !== 'undefined' ? STATIC_PM_CODES : {});
   return function resolve(raw) {
     const rawL = raw.toLowerCase(), rawN = normKey(raw);
     const e = byCode[rawL] || byName[rawN];
@@ -1801,6 +1812,13 @@ function makeResolver(kind) {
     } else {
       const subK = pmSubCodeIndex[rawL] || pmSubNameIndex[rawN];
       if (subK && matMaster[subK] && matMaster[subK].kind === "pm") return subK;
+    }
+    // Alias fallback: raw name isn't itself a BOM material, but it IS a known alias whose
+    // mosaic code matches a BOM material that goes by a different (longer/fuller) name.
+    const aliasCode = ALIAS[rawN];
+    if (aliasCode) {
+      const viaCode = byMosaicCode[String(aliasCode).toLowerCase()];
+      if (viaCode) return viaCode.key;
     }
     return null;
   };
