@@ -43,6 +43,8 @@
   th, td { padding:9px 12px; border-bottom:1px solid var(--border); vertical-align:middle; }
   thead th { background:#f1f5f9; text-align:left; font-size:11.5px; text-transform:uppercase;
     letter-spacing:.4px; color:var(--muted); cursor:default; }
+  .sticky-table thead tr:nth-child(1) th { position:sticky; top:0; z-index:6; }
+  .sticky-table thead tr:nth-child(2) th { position:sticky; top:34px; z-index:6; }
   th.num, td.num { text-align:right; font-variant-numeric:tabular-nums; }
   tbody tr:last-child td { border-bottom:none; }
   tfoot td { background:#f8fafc; font-weight:700; }
@@ -202,7 +204,7 @@
     <input type="file" id="fileSupplyRm" accept=".xlsx,.csv" style="display:none" />
     <input type="file" id="fileReqRm" accept=".xlsx,.csv" style="display:none" />
     <div style="overflow-x:auto">
-    <table>
+    <table class="sticky-table">
       <thead>
         <tr>
           <th rowspan="2">RM Code</th>
@@ -260,7 +262,7 @@
     <input type="file" id="fileSupplyPm" accept=".xlsx,.csv" style="display:none" />
     <input type="file" id="fileReqPm" accept=".xlsx,.csv" style="display:none" />
     <div style="overflow-x:auto">
-    <table>
+    <table class="sticky-table">
       <thead>
         <tr>
           <th rowspan="2">Packaging Material</th>
@@ -1192,7 +1194,7 @@ function renderRM() {
       const mv=rmMoq[r.k]!=null?rmMoq[r.k]:'';
       const mi='<input class="cell" type="number" min="0" step="25" value="'+escapeHtml(String(mv))+'" data-k="'+escapeHtml(r.k)+'">';
       tr.innerHTML='<td class="sku-code">'+escapeHtml(r.code||'\u2014')+'</td><td>'+escapeHtml(r.name)+'</td><td class="sku-code" style="font-size:0.85em">'+escapeHtml(sapiensCodesLabel(r.k))+'</td><td class="num">'+mi+'</td>'+
-        (r.matched?'<td class="num req">'+fmt(r.stock,3)+'</td><td class="num">'+fmt(r.supM1,3)+'</td><td class="num">'+fmt(r.supM2,3)+'</td>'
+        (r.matched?'<td class="num req">'+fmt(r.stock,1)+'</td><td class="num">'+fmt(r.supM1,1)+'</td><td class="num">'+fmt(r.supM2,1)+'</td>'
                   :'<td class="num"><span class="muted">NA</span></td><td class="num">'+_d+'</td><td class="num">'+_d+'</td>')+_qc;
       const inp=tr.querySelector('input.cell');
       if(inp){inp.addEventListener('click',ev=>ev.stopPropagation());inp.addEventListener('change',()=>{rmMoq[inp.getAttribute('data-k')]=inp.value;renderRM();});}
@@ -1254,9 +1256,9 @@ function renderRM() {
         '<td class="sku-code">' + escapeHtml(r.code || "—") + '</td><td>' + escapeHtml(r.name) + '</td>' +
         '<td class="sku-code" style="font-size:0.85em">' + escapeHtml(sapiensCodesLabel(r.k)) + '</td>' +
         '<td class="num">' + moqIn + '</td>' +
-        '<td class="num req">' + fmt(r.stock, 3) + '</td>' +
-        '<td class="num">' + fmt(r.supM1, 3) + '</td>' +
-        '<td class="num">' + fmt(r.supM2, 3) + '</td>' +
+        '<td class="num req">' + fmt(r.stock,1) + '</td>' +
+        '<td class="num">' + fmt(r.supM1,1) + '</td>' +
+        '<td class="num">' + fmt(r.supM2,1) + '</td>' +
         '<td class="num">' + fmt(r.reqM1, 1) + '</td>' + '<td class="num">' + (r.stock != null && r.reqM1 > 0 ? (r.stock * 30 / r.reqM1).toFixed(1) : '—') + '<td class="num req">' + fmt(r.oM1.oq, 1) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM1.oq, r.moq), 1) + '</td>' + diffCell(r.oM1.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM1) + '</td>' +
         '<td class="num">' + fmt(r.reqM2, 1) + '</td>' + '<td class="num">' + (r.stock != null && r.reqM2 > 0 ? (r.stock * 30 / r.reqM2).toFixed(1) : '—') + '<td class="num req">' + fmt(r.oM2.oq, 1) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM2.oq, r.moq), 1) + '</td>' + diffCell(r.oM2.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM2) + '</td>' +
         '<td class="num"></td>';
@@ -1269,14 +1271,14 @@ function renderRM() {
 
   $("rmDistinct").textContent = items.length;
   $("rmDistinct2").textContent = items.length + (na ? " (" + na + " NA)" : "");
-  $("rmStockTot").textContent = fmt(stockTot, 3);
-  $("rmSupplyTot").textContent = fmt(supplyTot, 3);
+  $("rmStockTot").textContent = fmt(stockTot,1);
+  $("rmSupplyTot").textContent = fmt(supplyTot,1);
   $("rmOrderM1").textContent = fmt(m1Tot, 1);
   $("rmOrderM2").textContent = fmt(m2Tot, 1);
   $("rmAtRisk").textContent = ordersNeeded;
-  $("rmFootStock").textContent = fmt(stockTot, 3);
-  $("rmFootSupplyM1").textContent = fmt(supM1Tot, 3);
-  $("rmFootSupplyM2").textContent = fmt(supM2Tot, 3);
+  $("rmFootStock").textContent = fmt(stockTot,1);
+  $("rmFootSupplyM1").textContent = fmt(supM1Tot,1);
+  $("rmFootSupplyM2").textContent = fmt(supM2Tot,1);
   $("rmFootReqM1").textContent = fmt(reqM1Tot, 1);
   $("rmFootReqM2").textContent = fmt(reqM2Tot, 1);
   $("rmFootM1").textContent = fmt(m1Tot, 1);
@@ -1346,7 +1348,7 @@ function renderPM() {
       const mi='<input class="cell" type="number" min="0" step="25" value="'+escapeHtml(String(mv))+'" data-k="'+escapeHtml(r.k)+'">';
       const sv=pmSupply[r.k]!=null?pmSupply[r.k]:'';
       const si='<input class="cell" type="number" min="0" step="50" value="'+escapeHtml(String(sv))+'" data-sk="'+escapeHtml(r.k)+'" title="Expected supply (units) — editable, split M1/M2 same as RM">';
-      tr.innerHTML='<td>'+escapeHtml(r.name)+'</td><td class="sku-code">'+escapeHtml((matMaster[normKey(r.name)]&&matMaster[normKey(r.name)].code)||'')+'</td><td class="sku-code" style="font-size:0.85em">'+escapeHtml(sapiensPmCodesLabel(r.k))+'</td><td class="num">'+mi+'</td><td class="num req">'+fmt(r.stock,0)+'</td><td class="num">'+si+'</td><td class="num">'+fmt(r.supM2,0)+'</td>'+_qc2;
+      tr.innerHTML='<td>'+escapeHtml(r.name)+'</td><td class="sku-code">'+escapeHtml((matMaster[normKey(r.name)]&&matMaster[normKey(r.name)].code)||'')+'</td><td class="sku-code" style="font-size:0.85em">'+escapeHtml(sapiensPmCodesLabel(r.k))+'</td><td class="num">'+mi+'</td><td class="num req">'+fmt(r.stock,1)+'</td><td class="num">'+si+'</td><td class="num">'+fmt(r.supM2,1)+'</td>'+_qc2;
       const inp=tr.querySelector('input.cell[data-k]');
       if(inp){inp.addEventListener('click',ev=>ev.stopPropagation());inp.addEventListener('change',()=>{pmMoq[inp.getAttribute('data-k')]=inp.value;renderPM();});}
       const sInp=tr.querySelector('input.cell[data-sk]');
@@ -1391,11 +1393,11 @@ function renderPM() {
       '<td class="sku-code">' + escapeHtml((matMaster[r.k] && matMaster[r.k].code) || '') + '</td>' +
       '<td class="sku-code" style="font-size:0.85em">' + escapeHtml(sapiensPmCodesLabel(r.k)) + '</td>' +
       '<td class="num">' + moqIn + '</td>' +
-      '<td class="num req">' + fmt(r.stock, 0) + '</td>' +
+      '<td class="num req">' + fmt(r.stock,1) + '</td>' +
       '<td class="num">' + supIn + '</td>' +
-      '<td class="num">' + fmt(r.supM2, 0) + '</td>' +
-      '<td class="num">' + fmt(r.reqM1, 0) + '</td>' + '<td class="num">' + (r.stock != null && r.reqM1 > 0 ? (r.stock * 30 / r.reqM1).toFixed(1) : '—') + '<td class="num req">' + fmt(r.oM1.oq, 0) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM1.oq, r.moq), 0) + '</td>' + diffCell(r.oM1.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM1) + '</td>' +
-      '<td class="num">' + fmt(r.reqM2, 0) + '</td>' + '<td class="num">' + (r.stock != null && r.reqM2 > 0 ? (r.stock * 30 / r.reqM2).toFixed(1) : '—') + '<td class="num req">' + fmt(r.oM2.oq, 0) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM2.oq, r.moq), 0) + '</td>' + diffCell(r.oM2.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM2) + '</td>' +
+      '<td class="num">' + fmt(r.supM2,1) + '</td>' +
+      '<td class="num">' + fmt(r.reqM1,1) + '</td>' + '<td class="num">' + (r.stock != null && r.reqM1 > 0 ? (r.stock * 30 / r.reqM1).toFixed(1) : '—') + '<td class="num req">' + fmt(r.oM1.oq,1) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM1.oq, r.moq),1) + '</td>' + diffCell(r.oM1.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM1) + '</td>' +
+      '<td class="num">' + fmt(r.reqM2,1) + '</td>' + '<td class="num">' + (r.stock != null && r.reqM2 > 0 ? (r.stock * 30 / r.reqM2).toFixed(1) : '—') + '<td class="num req">' + fmt(r.oM2.oq,1) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM2.oq, r.moq),1) + '</td>' + diffCell(r.oM2.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM2) + '</td>' +
       '<td class="num"></td>';
     tbody.appendChild(tr);
     const inp = tr.querySelector("input.cell[data-k]");
@@ -1408,20 +1410,20 @@ function renderPM() {
 
   $("pmDistinct").textContent = items.length;
   $("pmDistinct2").textContent = items.length;
-  $("pmStockTot").textContent = fmt(stockTot, 0);
-  $("pmSupplyTot").textContent = fmt(supplyTot, 0);
-  $("pmOrderM1").textContent = fmt(m1Tot, 0);
-  $("pmOrderM2").textContent = fmt(m2Tot, 0);
+  $("pmStockTot").textContent = fmt(stockTot,1);
+  $("pmSupplyTot").textContent = fmt(supplyTot,1);
+  $("pmOrderM1").textContent = fmt(m1Tot,1);
+  $("pmOrderM2").textContent = fmt(m2Tot,1);
   $("pmAtRisk").textContent = ordersNeeded;
-  $("pmFootStock").textContent = fmt(stockTot, 0);
-  $("pmFootSupplyM1").textContent = fmt(supM1Tot, 0);
-  $("pmFootSupplyM2").textContent = fmt(supM2Tot, 0);
-  $("pmFootReqM1").textContent = fmt(reqM1Tot, 0);
-  $("pmFootReqM2").textContent = fmt(reqM2Tot, 0);
-  $("pmFootM1").textContent = fmt(m1Tot, 0);
-  $("pmFootM2").textContent = fmt(m2Tot, 0);
-  $("pmFootAdjM1").textContent = fmt(adjM1Tot, 0);
-  $("pmFootAdjM2").textContent = fmt(adjM2Tot, 0);
+  $("pmFootStock").textContent = fmt(stockTot,1);
+  $("pmFootSupplyM1").textContent = fmt(supM1Tot,1);
+  $("pmFootSupplyM2").textContent = fmt(supM2Tot,1);
+  $("pmFootReqM1").textContent = fmt(reqM1Tot,1);
+  $("pmFootReqM2").textContent = fmt(reqM2Tot,1);
+  $("pmFootM1").textContent = fmt(m1Tot,1);
+  $("pmFootM2").textContent = fmt(m2Tot,1);
+  $("pmFootAdjM1").textContent = fmt(adjM1Tot,1);
+  $("pmFootAdjM2").textContent = fmt(adjM2Tot,1);
 }
 function drillTablePM(e) {
   const rows = e.skus.filter(x => x.units > 0 || x.dem > 0).sort((a, b) => b.units - a.units);
