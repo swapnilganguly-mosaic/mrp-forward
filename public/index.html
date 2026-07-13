@@ -43,8 +43,9 @@
   th, td { padding:9px 12px; border-bottom:1px solid var(--border); vertical-align:middle; }
   thead th { background:#f1f5f9; text-align:left; font-size:11.5px; text-transform:uppercase;
     letter-spacing:.4px; color:var(--muted); cursor:default; }
-  .sticky-table thead tr:nth-child(1) th { position:sticky; top:0; z-index:6; }
-  .sticky-table thead tr:nth-child(2) th { position:sticky; top:34px; z-index:6; }
+  .sticky-table { overflow: visible; }
+  .sticky-table thead tr:nth-child(1) th { position:sticky; top:0; z-index:6; background:#f1f5f9; }
+  .sticky-table thead tr:nth-child(2) th { position:sticky; top:var(--sticky-row1-h,34px); z-index:6; background:#f1f5f9; }
   th.num, td.num { text-align:right; font-variant-numeric:tabular-nums; }
   tbody tr:last-child td { border-bottom:none; }
   tfoot td { background:#f8fafc; font-weight:700; }
@@ -1168,6 +1169,15 @@ function sapiensCodesLabel(k) {
   const codes = subs.map(s => s.code).filter(Boolean);
   return codes.length ? codes.join(', ') : '';
 }
+function syncStickyHeadOffsets() {
+  document.querySelectorAll('.sticky-table').forEach(t => {
+    const row1 = t.querySelector('thead tr:first-child');
+    if (!row1) return;
+    t.style.setProperty('--sticky-row1-h', row1.getBoundingClientRect().height + 'px');
+  });
+}
+window.addEventListener('resize', () => requestAnimationFrame(syncStickyHeadOffsets));
+
 function renderRM() {
   $("rmCfg").innerHTML = fwdCfgHtml();
   const NA = '<span class="muted">NA</span>';
@@ -2217,6 +2227,7 @@ function showTab(name) {
   if (name === "inv") renderInventory();
   if (name === "skudoc") renderSkuDoc();
   if (name === "scheduler") schedShowSub(schedSubTab);
+  requestAnimationFrame(syncStickyHeadOffsets);
 }
 
 function wire() {
