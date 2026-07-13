@@ -3108,23 +3108,32 @@ function schedShowSub(sub) {
   if (sub === "table")  renderSchedulerTable();
 }
 
+/* Min Mat DOC (K column bottleneck) is now the same DOC the Consolidated RM/PM tabs
+ * compute — stock * 30 / imported Required Qty M1 — read directly for every RM/PM this
+ * SKU's BOM uses, and take the smallest. This replaces an older estimate that derived a
+ * per-SKU daily draw from BOM % and DRR; that estimate silently went to 0/skipped for any
+ * material without a BOM %, which is now most materials since Required Qty is imported
+ * from NovaCore rather than calculated from % — it was disconnected from the real RM DOC /
+ * PM DOC numbers shown in Consolidated RM/PM. A material only contributes here once its
+ * Required Qty has actually been imported (same as those tabs); until then it's skipped,
+ * same as before.
+ */
 function schedMinMatDoc(skuCode) {
   var s = skuIndex[skuCode]; if (!s) return null;
-  var pack = num(s.pack_size_g, true);
-  var drr  = num(drrBySku[skuCode], true);
-  if (drr <= 0) return null;
   var minDoc = Infinity;
   RM.filter(function(r){ return r.sku_code === skuCode; }).forEach(function(r){
     var k = normKey(r.rm_name);
+    var ov = rmReqOverride[k];
+    if (!ov || !(ov.m1 > 0)) return;
     var stock = stockTotal("rm", k);
-    var dailyKg = (num(r.rm_pct) / 100) * pack * drr / 1000;
-    if (dailyKg > 0) minDoc = Math.min(minDoc, stock / dailyKg);
+    minDoc = Math.min(minDoc, stock * 30 / ov.m1);
   });
   PM.filter(function(r){ return r.sku_code === skuCode; }).forEach(function(r){
     var k = normKey(r.pm_name);
+    var ov = pmReqOverride[k];
+    if (!ov || !(ov.m1 > 0)) return;
     var stock = stockTotal("pm", k);
-    var dailyUnits = num(r.pm_qty_per_unit) * drr;
-    if (dailyUnits > 0) minDoc = Math.min(minDoc, stock / dailyUnits);
+    minDoc = Math.min(minDoc, stock * 30 / ov.m1);
   });
   return minDoc === Infinity ? null : minDoc;
 }
