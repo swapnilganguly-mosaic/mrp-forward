@@ -448,6 +448,21 @@
 <input type="file" id="fileDemand" accept=".xlsx,.csv" style="display:none" />
 <input type="file" id="invFile" accept=".xlsx,.csv" style="display:none" />
 
+<!-- Unmatched stock-import rows modal -->
+<div class="modal-bg" id="unmatchedModal">
+  <div class="modal" style="width:min(720px,92vw)">
+    <h3 id="unmatchedModalTitle">Unmatched rows</h3>
+    <p class="muted" style="margin-top:4px">These rows in the uploaded file could not be applied. Fix the identifier or add a mapping, then re-import.</p>
+    <div style="overflow:auto;max-height:50vh;margin-top:10px">
+      <table class="mini">
+        <thead><tr><th>Row identifier (as read from file)</th><th>Reason</th></tr></thead>
+        <tbody id="unmatchedRows"></tbody>
+      </table>
+    </div>
+    <div class="row-flex" style="margin-top:16px"><button class="btn primary" id="closeUnmatched">Close</button></div>
+  </div>
+</div>
+
 <!-- Upload modal -->
 <div class="modal-bg" id="uploadModal">
   <div class="modal">
@@ -1700,8 +1715,8 @@ async function loadInventoryFile(file, factoryCode) {
     if (fct && res.matched) fct.lastUpdated = file.name + " · " + new Date().toLocaleString();
     renderInventory();
     msg.innerHTML = "Imported <b>" + res.matched + "</b> material(s)" +
-      (res.unmatched.length ? "; <span class='miss-badge'>unmatched:</span> " +
-        escapeHtml(res.unmatched.slice(0, 6).join(", ")) + (res.unmatched.length > 6 ? " …" : "") : "") + ".";
+      (res.unmatched.length ? "; <span class='miss-badge'>" + res.unmatched.length + " row(s) could not be mapped</span> — see popup" : "") + ".";
+    showUnmatchedModal("Sapiens inventory import — unmatched rows", res.unmatched);
   } catch (e) {
     msg.style.color = "var(--warn)";
     msg.textContent = "⚠ " + (e && e.message ? e.message : "Could not read this file.");
@@ -1711,6 +1726,18 @@ async function loadInventoryFile(file, factoryCode) {
  * list first (Mosaic code / material name — covers PM always, and RM materials with
  * no sub-RM mapping), then falling back to the RM sub-RM indices (Sapiens RM code or
  * sub-RM name -> the one app-level RM that code/name rolls up into). */
+/* Show the "couldn't be mapped" popup for a stock import — items: [{identifier, reason}]. */
+function showUnmatchedModal(title, items) {
+  if (!items || !items.length) return;
+  $("unmatchedModalTitle").textContent = title;
+  const tb = $("unmatchedRows"); tb.innerHTML = "";
+  items.forEach(it => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = '<td>' + escapeHtml(it.identifier || '(blank)') + '</td><td class="muted">' + escapeHtml(it.reason) + '</td>';
+    tb.appendChild(tr);
+  });
+  $("unmatchedModal").classList.add("show");
+}
 function resolveMatIdentifier(raw, byCode, byName) {
   const rawL = raw.toLowerCase(), rawN = normKey(raw);
   const e = byCode[rawL] || byName[rawN];
@@ -1745,14 +1772,20 @@ function applyInventoryRows(rows, factoryCode) {
   // Sum matching rows per resolved material (several sub-RM rows can roll up into one
   // app-level RM, e.g. Jaggery Powder = 7Dinam + Dhampure + Shivalik Consumers).
   const sums = {}; // key -> {kind, total}
-  const unmatched = [];
+  const unmatched = []; // [{identifier, reason}] — only rows that had an identifier but failed
   rows.forEach(r => {
-    const qs = qtyCol >= 0 ? cell(r, qtyCol) : "";
-    if (qs === "" || !isFinite(parseFloat(qs))) return;     // skip header / non-data rows
     const raw = cell(r, idCol);
-    if (!raw) return;
+    if (!raw) return;                                       // no identifier at all — likely a blank/filler row, ignore silently
+    const qs = qtyCol >= 0 ? cell(r, qtyCol) : "";
+    if (qs === "" || !isFinite(parseFloat(qs))) {
+      unmatched.push({ identifier: raw, reason: "No numeric quantity found in this row" });
+      return;
+    }
     const hit = resolveMatIdentifier(raw, byCode, byName);
-    if (!hit) { unmatched.push(raw); return; }
+    if (!hit) {
+      unmatched.push({ identifier: raw, reason: "Not recognized as a known RM/PM code, name, Sapiens sub-code, or sub-material name" });
+      return;
+    }
     const entry = sums[hit.key] || (sums[hit.key] = { kind: hit.kind, total: 0 });
     entry.total += num(qs, true);
   });
@@ -1800,16 +1833,24 @@ function applyStockRows(rows, kind) {
     rows.forEach(r => { const s = cell(r, c); if (s !== "" && isFinite(parseFloat(s))) hits++; });
     if (hits > qHits) { qHits = hits; qtyCol = c; }
   }
-  // Sum matching rows per resolved material — a Mosaic RM code with several
-  // Sapiens-side sub-RMs (e.g. Jaggery Powder) gets the sum of all its sub-RM rows.
-  const sums = {}; const unmatched = [];
+  // Sum matching rows per resolved material — a Mosaic RM/PM code with several
+  // Sapiens-side sub-materials (e.g. Jaggery Powder) gets the sum of all its rows.
+  const sums = {}; const unmatched = []; // [{identifier, reason}]
   rows.forEach(r => {
-    const qs = qtyCol >= 0 ? cell(r, qtyCol) : "";
-    if (qs === "" || !isFinite(parseFloat(qs))) return;     // skip header / non-data rows
     const raw = cell(r, idCol);
-    if (!raw) return;
+    if (!raw) return;                                       // no identifier at all — likely a blank/filler row, ignore silently
+    const qs = qtyCol >= 0 ? cell(r, qtyCol) : "";
+    if (qs === "" || !isFinite(parseFloat(qs))) {
+      unmatched.push({ identifier: raw, reason: "No numeric quantity found in this row" });
+      return;
+    }
     const key = resolve(raw);
-    if (!key) { unmatched.push(raw); return; }
+    if (!key) {
+      unmatched.push({ identifier: raw, reason: kind === "rm"
+        ? "Not recognized as a known RM code, RM name, Sapiens sub-code, or sub-RM name"
+        : "Not recognized as a known PM code, PM name, Sapiens sub-code, or sub-PM name" });
+      return;
+    }
     sums[key] = (sums[key] || 0) + num(qs, true);
   });
   const SAP = FACTORIES[0].code;
@@ -2227,8 +2268,8 @@ function wire() {
       if (!rows.length) throw new Error("The file has no rows.");
       const res = applyStockRows(rows, "rm");
       msg.innerHTML = "Imported current stock for <b>" + res.matched + "</b> RM(s)" +
-        (res.unmatched.length ? "; <span class='miss-badge'>unmatched:</span> " +
-          escapeHtml(res.unmatched.slice(0, 6).join(", ")) + (res.unmatched.length > 6 ? " …" : "") : "") + ".";
+        (res.unmatched.length ? "; <span class='miss-badge'>" + res.unmatched.length + " row(s) could not be mapped</span> — see popup" : "") + ".";
+      showUnmatchedModal("Import Current Stock (RM) — unmatched rows", res.unmatched);
       renderRM();
     } catch (err) {
       msg.style.color = "var(--warn)";
@@ -2252,8 +2293,8 @@ function wire() {
       if (!rows.length) throw new Error("The file has no rows.");
       const res = applyStockRows(rows, "pm");
       msg.innerHTML = "Imported current stock for <b>" + res.matched + "</b> PM(s)" +
-        (res.unmatched.length ? "; <span class='miss-badge'>unmatched:</span> " +
-          escapeHtml(res.unmatched.slice(0, 6).join(", ")) + (res.unmatched.length > 6 ? " …" : "") : "") + ".";
+        (res.unmatched.length ? "; <span class='miss-badge'>" + res.unmatched.length + " row(s) could not be mapped</span> — see popup" : "") + ".";
+      showUnmatchedModal("Import Current Stock (PM) — unmatched rows", res.unmatched);
       renderPM();
     } catch (err) {
       msg.style.color = "var(--warn)";
@@ -2316,6 +2357,7 @@ function wire() {
   // Upload modal
   $("btnUpload").addEventListener("click", () => $("uploadModal").classList.add("show"));
   $("closeUpload").addEventListener("click", () => $("uploadModal").classList.remove("show"));
+  $("closeUnmatched").addEventListener("click", () => $("unmatchedModal").classList.remove("show"));
   $("pickSku").addEventListener("click", () => $("fileSku").click());
   $("pickRm").addEventListener("click", () => $("fileRm").click());
   $("pickPm").addEventListener("click", () => $("filePm").click());
