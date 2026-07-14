@@ -1248,7 +1248,8 @@ function renderRM() {
     return;
   }
 
-  const items = Object.entries(rmReqOverride).map(([k, ov]) => {
+  const bomKeysRM = bomRmKeySet();
+  const items = Object.entries(rmReqOverride).filter(([k]) => bomKeysRM.has(k)).map(([k, ov]) => {
     const matched = !!matMaster[k]; // known to the system (in BOM / has a Mosaic code) — not gated on the legacy Sapiens Firm-sheet feed
     const reqM1 = ov.m1 || 0;
     const reqM2 = ov.m2 || 0;
@@ -1893,6 +1894,14 @@ function applyInventoryRows(rows, factoryCode) {
  * rmStockF/pmStockF for the single co-packer (SAP), and for RM also creates/updates
  * an rmFirm entry so the Consolidated RM tab and SKU Doc tab (which gate the stock
  * column display on rmFirm being matched) pick the value up. */
+/* The set of normKey(rm_name) for every RM that actually appears in the Consolidated RM
+ * tab (i.e. the BOM's ~82 RMs) — used to keep "Import Req Qty" from adding rows for
+ * materials outside that list (e.g. a Sapiens-code match that isn't part of the BOM). */
+function bomRmKeySet() {
+  const set = new Set();
+  (STATIC_BOM.bom_rm || []).forEach(r => { if (r.rm_name) set.add(normKey(r.rm_name)); });
+  return set;
+}
 function applyStockRows(rows, kind) {
   const resolve = makeResolver(kind);
   const width = rows.reduce((w, r) => Math.max(w, r.length), 0);
@@ -2345,8 +2354,10 @@ function wire() {
       if (colName < 0 || colM1 < 0) { alert("Cannot find columns.\nExpected: RM NAME, REQ QUANTITY M1 (KGS), REQ QUANTITY M2 (KGS)"); return; }
 
       let loaded = 0;
+      const skipped = []; // rows that resolved to a real material, but one outside the 82-RM BOM list
       rmReqOverride = {};
       const resolveRm = makeResolver("rm");
+      const bomKeys = bomRmKeySet();
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
         const nameRaw = (row[colName] || "").trim();
@@ -2358,11 +2369,16 @@ function wire() {
         // whatever key Current Stock / Expected Supply already used for the same material — a
         // slightly different spelling in this file no longer disconnects it from imported stock.
         const key = resolveRm(nameRaw) || normKey(nameRaw);
+        // Only the RMs actually in the Consolidated RM tab (the 82-RM BOM) are accepted —
+        // anything else (e.g. a Sapiens code that resolves but isn't part of the BOM) is skipped.
+        if (!bomKeys.has(key)) { skipped.push(nameRaw); continue; }
         rmReqOverride[key] = { name: nameRaw, m1: m1, m2: isNaN(m2) ? 0 : m2 };
         loaded++;
       }
-      if (!loaded) { alert("No valid rows found. Expected columns: RM NAME, REQ QUANTITY M1 (KGS), REQ QUANTITY M2 (KGS)"); return; }
-      alert('Loaded ' + loaded + ' RM(s). Click [Clear override] to remove.');
+      if (!loaded) { alert("No valid rows found for the 82 RMs in the Consolidated RM tab. Expected columns: RM NAME, REQ QUANTITY M1 (KGS), REQ QUANTITY M2 (KGS)"); return; }
+      alert('Loaded ' + loaded + ' RM(s) (of the 82 in Consolidated RM).' +
+        (skipped.length ? ' Skipped ' + skipped.length + ' row(s) not in that list: ' + skipped.slice(0,8).join(', ') + (skipped.length > 8 ? ', …' : '') : '') +
+        ' Click [Clear override] to remove.');
       renderRM();
       broadcastStockUpdate();
     } catch (err) { alert("Error reading file: " + err.message); }
