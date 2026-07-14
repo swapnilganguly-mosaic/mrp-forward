@@ -1238,11 +1238,14 @@ function renderRM() {
       const tr=document.createElement('tr');
       const mv=rmMoq[r.k]!=null?rmMoq[r.k]:'';
       const mi='<input class="cell" type="number" min="0" step="25" value="'+escapeHtml(String(mv))+'" data-k="'+escapeHtml(r.k)+'">';
+      const sti='<input class="cell" type="number" min="0" step="1" value="'+escapeHtml(r.stock.toFixed(1))+'" data-stk="'+escapeHtml(r.k)+'" style="width:90px" title="Current stock (kg) \u2014 editable">';
       tr.innerHTML='<td class="num">'+(idx+1)+'</td><td class="sku-code">'+escapeHtml(r.code||'\u2014')+'</td><td>'+escapeHtml(r.name)+'</td><td class="sku-code" style="font-size:0.85em">'+escapeHtml(sapiensCodesLabel(r.k))+'</td><td class="num">'+mi+'</td>'+
-        (r.matched?'<td class="num req">'+fmt(r.stock,1)+'</td><td class="num">'+fmt(r.supM1,1)+'</td><td class="num">'+fmt(r.supM2,1)+'</td>'
+        (r.matched?'<td class="num req">'+sti+'</td><td class="num">'+fmt(r.supM1,1)+'</td><td class="num">'+fmt(r.supM2,1)+'</td>'
                   :'<td class="num"><span class="muted">NA</span></td><td class="num">'+_d+'</td><td class="num">'+_d+'</td>')+_qc;
-      const inp=tr.querySelector('input.cell');
+      const inp=tr.querySelector('input.cell[data-k]');
       if(inp){inp.addEventListener('click',ev=>ev.stopPropagation());inp.addEventListener('change',()=>{rmMoq[inp.getAttribute('data-k')]=inp.value;renderRM();});}
+      const stInp=tr.querySelector('input.cell[data-stk]');
+      if(stInp){stInp.addEventListener('click',ev=>ev.stopPropagation());stInp.addEventListener('change',()=>{rmStockF[FACTORIES[0].code][stInp.getAttribute('data-stk')]=stInp.value;broadcastStockUpdate();renderRM();});}
       _tb.appendChild(tr);
     });
     return;
@@ -1281,6 +1284,8 @@ function renderRM() {
     const moqVal = (rmMoq[r.k] == null ? "" : rmMoq[r.k]);
     const moqIn = '<input class="cell" type="number" min="0" step="25" value="' + escapeHtml(moqVal) +
       '" data-k="' + escapeHtml(r.k) + '" style="width:80px" title="MOQ kg — editable">';
+    const stockIn = r.matched ? ('<input class="cell" type="number" min="0" step="1" value="' + escapeHtml(r.stock.toFixed(1)) +
+      '" data-stk="' + escapeHtml(r.k) + '" style="width:90px" title="Current stock (kg) — editable">') : '';
     if (!r.matched) {
       na++;
       tr.innerHTML =
@@ -1304,7 +1309,7 @@ function renderRM() {
         '<td class="sku-code">' + escapeHtml(r.code || "—") + '</td><td>' + escapeHtml(r.name) + '</td>' +
         '<td class="sku-code" style="font-size:0.85em">' + escapeHtml(sapiensCodesLabel(r.k)) + '</td>' +
         '<td class="num">' + moqIn + '</td>' +
-        '<td class="num req">' + fmt(r.stock,1) + '</td>' +
+        '<td class="num req">' + stockIn + '</td>' +
         '<td class="num">' + fmt(r.supM1,1) + '</td>' +
         '<td class="num">' + fmt(r.supM2,1) + '</td>' +
         '<td class="num">' + fmt(r.reqM1, 1) + '</td>' + '<td class="num">' + (r.stock != null && r.reqM1 > 0 ? (r.stock * 30 / r.reqM1).toFixed(1) : '—') + '<td class="num req">' + fmt(r.oM1.oq, 1) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM1.oq, r.moq), 1) + '</td>' + diffCell(r.oM1.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM1) + '</td>' +
@@ -1312,9 +1317,14 @@ function renderRM() {
         '<td class="num"></td>';
     }
     tbody.appendChild(tr);
-    const inp = tr.querySelector("input.cell");
+    const inp = tr.querySelector("input.cell[data-k]");
     inp.addEventListener("click", ev => ev.stopPropagation());
     inp.addEventListener("change", () => { rmMoq[inp.getAttribute("data-k")] = inp.value; renderRM(); });
+    const stInp = tr.querySelector("input.cell[data-stk]");
+    if (stInp) {
+      stInp.addEventListener("click", ev => ev.stopPropagation());
+      stInp.addEventListener("change", () => { rmStockF[FACTORIES[0].code][stInp.getAttribute("data-stk")] = stInp.value; broadcastStockUpdate(); renderRM(); });
+    }
   });
 
   $("rmDistinct").textContent = items.length;
@@ -1397,11 +1407,14 @@ function renderPM() {
       const mi='<input class="cell" type="number" min="0" step="25" value="'+escapeHtml(String(mv))+'" data-k="'+escapeHtml(r.k)+'">';
       const sv=pmSupply[r.k]!=null?pmSupply[r.k]:'';
       const si='<input class="cell" type="number" min="0" step="50" value="'+escapeHtml(String(sv))+'" data-sk="'+escapeHtml(r.k)+'" title="Expected supply (units) — editable, split M1/M2 same as RM">';
-      tr.innerHTML='<td class="num">'+(idx+1)+'</td><td>'+escapeHtml(r.name)+'</td><td class="sku-code">'+escapeHtml(officialPmCode(normKey(r.name))||'')+'</td><td class="sku-code" style="font-size:0.85em">'+escapeHtml(sapiensPmCodesLabel(r.k))+'</td><td class="num">'+mi+'</td><td class="num req">'+fmt(r.stock,1)+'</td><td class="num">'+si+'</td><td class="num">'+fmt(r.supM2,1)+'</td>'+_qc2;
+      const sti='<input class="cell" type="number" min="0" step="1" value="'+escapeHtml(r.stock.toFixed(1))+'" data-stk="'+escapeHtml(r.k)+'" style="width:90px" title="Current stock (units) — editable">';
+      tr.innerHTML='<td class="num">'+(idx+1)+'</td><td>'+escapeHtml(r.name)+'</td><td class="sku-code">'+escapeHtml(officialPmCode(normKey(r.name))||'')+'</td><td class="sku-code" style="font-size:0.85em">'+escapeHtml(sapiensPmCodesLabel(r.k))+'</td><td class="num">'+mi+'</td><td class="num req">'+sti+'</td><td class="num">'+si+'</td><td class="num">'+fmt(r.supM2,1)+'</td>'+_qc2;
       const inp=tr.querySelector('input.cell[data-k]');
       if(inp){inp.addEventListener('click',ev=>ev.stopPropagation());inp.addEventListener('change',()=>{pmMoq[inp.getAttribute('data-k')]=inp.value;renderPM();});}
       const sInp=tr.querySelector('input.cell[data-sk]');
       if(sInp){sInp.addEventListener('click',ev=>ev.stopPropagation());sInp.addEventListener('change',()=>{pmSupply[sInp.getAttribute('data-sk')]=sInp.value;renderPM();});}
+      const stInp=tr.querySelector('input.cell[data-stk]');
+      if(stInp){stInp.addEventListener('click',ev=>ev.stopPropagation());stInp.addEventListener('change',()=>{pmStockF[FACTORIES[0].code][stInp.getAttribute('data-stk')]=stInp.value;broadcastStockUpdate();renderPM();});}
       _ptb.appendChild(tr);
     });
     return;
@@ -1437,13 +1450,15 @@ function renderPM() {
       '" data-k="' + escapeHtml(r.k) + '" style="width:80px" title="MOQ (editable)">';
     const supIn = '<input class="cell" type="number" min="0" step="50" value="' + r.supply +
       '" data-sk="' + escapeHtml(r.k) + '" style="width:80px" title="Expected supply (units) — editable, split M1/M2 same as RM">';
+    const stockIn = '<input class="cell" type="number" min="0" step="1" value="' + escapeHtml(r.stock.toFixed(1)) +
+      '" data-stk="' + escapeHtml(r.k) + '" style="width:90px" title="Current stock (units) — editable">';
     tr.innerHTML =
       '<td class="num">' + (idx + 1) + '</td>' +
       '<td>' + escapeHtml(r.name) + '</td>' +
       '<td class="sku-code">' + escapeHtml(officialPmCode(r.k) || '') + '</td>' +
       '<td class="sku-code" style="font-size:0.85em">' + escapeHtml(sapiensPmCodesLabel(r.k)) + '</td>' +
       '<td class="num">' + moqIn + '</td>' +
-      '<td class="num req">' + fmt(r.stock,1) + '</td>' +
+      '<td class="num req">' + stockIn + '</td>' +
       '<td class="num">' + supIn + '</td>' +
       '<td class="num">' + fmt(r.supM2,1) + '</td>' +
       '<td class="num">' + fmt(r.reqM1,1) + '</td>' + '<td class="num">' + (r.stock != null && r.reqM1 > 0 ? (r.stock * 30 / r.reqM1).toFixed(1) : '—') + '<td class="num req">' + fmt(r.oM1.oq,1) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM1.oq, r.moq),1) + '</td>' + diffCell(r.oM1.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM1) + '</td>' +
@@ -1456,6 +1471,9 @@ function renderPM() {
     const sInp = tr.querySelector("input.cell[data-sk]");
     sInp.addEventListener("click", ev => ev.stopPropagation());
     sInp.addEventListener("change", () => { pmSupply[sInp.getAttribute("data-sk")] = sInp.value; renderPM(); });
+    const stInp = tr.querySelector("input.cell[data-stk]");
+    stInp.addEventListener("click", ev => ev.stopPropagation());
+    stInp.addEventListener("change", () => { pmStockF[FACTORIES[0].code][stInp.getAttribute("data-stk")] = stInp.value; broadcastStockUpdate(); renderPM(); });
   });
 
   $("pmDistinct").textContent = items.length;
