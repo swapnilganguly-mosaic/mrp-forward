@@ -2301,6 +2301,7 @@ function wire() {
     rmReqOverride = {};
     $("btnClearReqRm").style.display = "none";
     renderRM();
+    broadcastStockUpdate();
   });
   $("fileReqRm").addEventListener("change", async e => {
     const file = e.target.files[0]; if (!file) return;
@@ -2341,6 +2342,7 @@ function wire() {
       if (!loaded) { alert("No valid rows found. Expected columns: RM NAME, REQ QUANTITY M1 (KGS), REQ QUANTITY M2 (KGS)"); return; }
       alert('Loaded ' + loaded + ' RM(s). Click [Clear override] to remove.');
       renderRM();
+      broadcastStockUpdate();
     } catch (err) { alert("Error reading file: " + err.message); }
   });
 
@@ -2350,6 +2352,7 @@ function wire() {
     pmReqOverride = {};
     $("btnClearReqPm").style.display = "none";
     renderPM();
+    broadcastStockUpdate();
   });
   $("fileReqPm").addEventListener("change", async e => {
     const file = e.target.files[0]; if (!file) return;
@@ -2388,6 +2391,7 @@ function wire() {
       if (!loaded) { alert("No valid rows found. Expected columns: PM NAME, REQ QUANTITY M1, REQ QUANTITY M2"); return; }
       alert('Loaded ' + loaded + ' PM(s). Click [Clear override] to remove.');
       renderPM();
+      broadcastStockUpdate();
     } catch (err) { alert("Error reading file: " + err.message); }
   });
 
@@ -2410,6 +2414,7 @@ function wire() {
         (res.unmatched.length ? "; <span class='miss-badge'>" + res.unmatched.length + " row(s) could not be mapped</span> — see popup" : "") + ".";
       showUnmatchedModal("Import Current Stock (RM) — unmatched rows", res.unmatched);
       renderRM();
+      broadcastStockUpdate();
     } catch (err) {
       msg.style.color = "var(--warn)";
       msg.textContent = "⚠ " + (err && err.message ? err.message : "Could not read this file.");
@@ -2435,6 +2440,7 @@ function wire() {
         (res.unmatched.length ? "; <span class='miss-badge'>" + res.unmatched.length + " row(s) could not be mapped</span> — see popup" : "") + ".";
       showUnmatchedModal("Import Current Stock (PM) — unmatched rows", res.unmatched);
       renderPM();
+      broadcastStockUpdate();
     } catch (err) {
       msg.style.color = "var(--warn)";
       msg.textContent = "⚠ " + (err && err.message ? err.message : "Could not read this file.");
@@ -2461,6 +2467,7 @@ function wire() {
         (res.unmatched.length ? "; <span class='miss-badge'>" + res.unmatched.length + " row(s) could not be mapped</span> — see popup" : "") + ".";
       showUnmatchedModal("Import Expected Supply (RM) — unmatched rows", res.unmatched);
       renderRM();
+      broadcastStockUpdate();
     } catch (err) {
       msg.style.color = "var(--warn)";
       msg.textContent = "⚠ " + (err && err.message ? err.message : "Could not read this file.");
@@ -2487,6 +2494,7 @@ function wire() {
         (res.unmatched.length ? "; <span class='miss-badge'>" + res.unmatched.length + " row(s) could not be mapped</span> — see popup" : "") + ".";
       showUnmatchedModal("Import Expected Supply (PM) — unmatched rows", res.unmatched);
       renderPM();
+      broadcastStockUpdate();
     } catch (err) {
       msg.style.color = "var(--warn)";
       msg.textContent = "⚠ " + (err && err.message ? err.message : "Could not read this file.");
@@ -2952,9 +2960,16 @@ function broadcastStockUpdate() {
       pmBom[c].push({ key: normKey(r.pm_name), qty: r.pm_qty_per_unit || 1 });
     });
 
+    // Real imported Required Qty M1 (per material, kg for RM / units for PM) — when present
+    // for a material, this is what the Scheduler should divide stock by (same number the
+    // SKU DOC tab uses), instead of guessing from a BOM %/qty-per-unit estimate.
+    const rmReq = {}, pmReq = {};
+    Object.keys(rmReqOverride).forEach(k => { rmReq[k] = num(rmReqOverride[k].m1, true); });
+    Object.keys(pmReqOverride).forEach(k => { pmReq[k] = num(pmReqOverride[k].m1, true); });
+
     window.parent.postMessage({
       type: 'MRP_STOCK_UPDATE',
-      skuNames, packSizes, rmStock, pmStock, rmBom, pmBom
+      skuNames, packSizes, rmStock, pmStock, rmBom, pmBom, rmReq, pmReq
     }, '*');
   } catch(e) { console.warn('broadcastStockUpdate:', e); }
 }
