@@ -743,7 +743,8 @@ let rmLead = {};  // normKey(rm_name) -> string (lead time, days) — DUMMY valu
 let pmLead = {};  // normKey(pm_name) -> string (lead time, days) — DUMMY values, editable
 let drrBySku   = {}; // sku_code -> Product DRR (Stock Matrix Base 'Main' col AR) — read-only feed
 let rmFirm     = {}; // normKey(rm_name) -> {code, stock, supply} from Sapiens "PM-RM Planing"
-let rmSupply   = {}; // normKey(rm_name) -> expected supply (kg), Firm sheet col P (matched only)
+let rmSupply   = {}; // normKey(rm_name) -> expected supply M1 (kg), Firm sheet col P / Import Expected Supply
+let rmSupplyM2 = {}; // normKey(rm_name) -> expected supply M2 (kg) — 0 unless the imported file has an M2 column
 let rmCodeReal = {}; // normKey(rm_name) -> real RM code, Firm sheet col F (matched only)
 let pmCodeReal = {}; // normKey(pm_name) -> genuine Mosaic PM code sourced from the BOM file's own PM code column (first non-blank wins), NOT the internal dummy placeholder
 let rmSubGroups   = {}; // normKey(app rm_name) -> [{code, name}] sub-RMs mapped to this Mosaic RM (from "RMs mapping newer.xlsx")
@@ -754,7 +755,8 @@ let pmSubCodeIndex = {}; // sapiens sub-PM code (lowercased) -> normKey(app pm_n
 let pmSubNameIndex = {}; // normKey(sub-PM name) -> normKey(app pm_name)
 let rmMoq      = {}; // normKey(rm_name) -> MOQ (kg) string, user-entered (no source feed yet)
 let pmMoq      = {}; // normKey(pm_name) -> MOQ (units) string — DUMMY seed, editable (no source feed yet)
-let pmSupply   = {}; // normKey(pm_name) -> expected supply (units) from open POs — editable (no real feed yet)
+let pmSupply   = {}; // normKey(pm_name) -> expected supply M1 (units) from open POs / Import Expected Supply — editable
+let pmSupplyM2 = {}; // normKey(pm_name) -> expected supply M2 (units) — 0 unless the imported file has an M2 column
 let rmReqOverride = {}; // normKey(rm_name) -> {name, m1, m2} kg — set by "Import Req Qty"
 let pmReqOverride = {}; // normKey(pm_name) -> {name, m1, m2} units — set by "Import Req Qty"
 let curTab = "demand"
@@ -884,7 +886,7 @@ function loadDataset(d) {
   // RM names are reconciled later: RM code (col F), CURRENT STOCK (col N),
   // EXPECTED SUPPLY (col P). For each RM material the app knows, a matched feed
   // row replaces the DUMMY Sapiens stock and supplies the real code + expected supply.
-  rmFirm = {}; rmSupply = {}; rmCodeReal = {}; rmMoq = {};
+  rmFirm = {}; rmSupply = {}; rmSupplyM2 = {}; rmCodeReal = {}; rmMoq = {};
   (d.rm_firm || []).forEach(x => {
     rmFirm[normKey(x.name)] = { code: String(x.code || "").trim(), stock: num(x.stock, true), supply: num(x.supply, true) };
   });
@@ -1225,7 +1227,7 @@ function renderRM() {
       // Stock/Expected Supply have actually been imported for it, regardless of whether it was
       // ever part of the older Firm-sheet seed.
       const stock = stockTotal('rm', k);
-      const [supM1, supM2] = fwdSupplySplit(num(rmSupply[k], true));
+      const supM1 = num(rmSupply[k], true), supM2 = num(rmSupplyM2[k], true);
       return {k,name,matched:true,moq,code,stock,supM1,supM2};
     });
     _ni.sort((a,b)=>(a.name||"").localeCompare(b.name||""));
@@ -1256,7 +1258,7 @@ function renderRM() {
     if (matched) {
       stock = stockTotal("rm", k);
       supply = num(rmSupply[k], true);
-      [supM1, supM2] = fwdSupplySplit(supply);
+      supM1 = supply; supM2 = num(rmSupplyM2[k], true);
       const availM1 = stock + supM1;
       oM1 = fwdOrder(reqM1, availM1, moq);
       openM2 = Math.max(0, stock + supM1 + moqAdjOrder(oM1.oq, moq) - reqM1)   // opening stock M2 = carry-forward from M1 (floored at 0)
@@ -1381,7 +1383,7 @@ function renderPM() {
     STATIC_BOM.bom_pm.forEach(r => { const nk = normKey(r.pm_name); if (!_pm.has(nk)) _pm.set(nk, r.pm_name); });
     const _pi = [..._pm.entries()].map(([k,name]) => {
       const stock = stockTotal('pm', k); const moq = num(pmMoq[k],true);
-      const supply = num(pmSupply[k],true); const [supM1, supM2] = fwdSupplySplit(supply);
+      const supply = num(pmSupply[k],true); const supM1 = supply, supM2 = num(pmSupplyM2[k], true);
       return {k, name, stock: stock||0, moq, supply, supM1, supM2};
     });
     _pi.sort((a,b)=>a.name.localeCompare(b.name));
@@ -1411,7 +1413,7 @@ function renderPM() {
     const moq = num(pmMoq[k], true);
     const stock = stockTotal("pm", k);
     const supply = num(pmSupply[k], true);
-    const [supM1, supM2] = fwdSupplySplit(supply);
+    const supM1 = supply, supM2 = num(pmSupplyM2[k], true);
     const availM1 = stock + supM1;
     const oM1 = fwdOrder(reqM1, availM1, moq);
     const openM2 = Math.max(0, stock + supM1 + moqAdjOrder(oM1.oq, moq) - reqM1)   // opening stock M2 = carry-forward from M1 (floored at 0)
@@ -1952,25 +1954,41 @@ function applySupplyRows(rows, kind) {
   const resolve = makeResolver(kind);
   const width = rows.reduce((w, r) => Math.max(w, r.length), 0);
   const cell = (r, c) => String(r[c] == null ? "" : r[c]).trim();
+  // Identifier column: same flexible auto-detect as Current Stock — try every column,
+  // pick whichever resolves the most rows (works whether the file uses Mosaic code,
+  // RM/PM name, Sapiens sub-code, or sub-material name).
   let idCol = 0, idHits = -1;
   for (let c = 0; c < width; c++) {
     let hits = 0;
     rows.forEach(r => { const v = cell(r, c); if (v && resolve(v)) hits++; });
     if (hits > idHits) { idHits = hits; idCol = c; }
   }
-  let qtyCol = -1, qHits = -1;
-  for (let c = 0; c < width; c++) {
-    if (c === idCol) continue;
-    let hits = 0;
-    rows.forEach(r => { const s = cell(r, c); if (s !== "" && isFinite(parseFloat(s))) hits++; });
-    if (hits > qHits) { qHits = hits; qtyCol = c; }
+  // M1/M2 quantity columns: detected from the header row (row 0) by keyword, same
+  // convention as "Import Req Qty". If the file only has one supply column (no
+  // recognizable M2 header), M2 stays 0 for every material — as requested.
+  const hdr = (rows[0] || []).map(h => String(h || "").toLowerCase().replace(/[^a-z0-9]/g, ""));
+  let colM1 = hdr.findIndex((h, i) => i !== idCol && (h.includes("m1") || h.includes("month1") || (h.includes("supply") && !h.includes("m2"))));
+  let colM2 = hdr.findIndex((h, i) => i !== idCol && (h.includes("m2") || h.includes("month2")));
+  if (colM1 === colM2) colM2 = -1; // guard against the same column matching both patterns
+  const usedHeader = colM1 >= 0;
+  if (colM1 < 0) {
+    // No usable header — fall back to "widest numeric column" (old behaviour), all of it to M1.
+    let qHits = -1;
+    for (let c = 0; c < width; c++) {
+      if (c === idCol) continue;
+      let hits = 0;
+      rows.forEach(r => { const s = cell(r, c); if (s !== "" && isFinite(parseFloat(s))) hits++; });
+      if (hits > qHits) { qHits = hits; colM1 = c; }
+    }
+    colM2 = -1;
   }
-  const sums = {}; const unmatched = []; // [{identifier, reason}]
-  rows.forEach(r => {
+  const sums1 = {}, sums2 = {}; const unmatched = []; // [{identifier, reason}]
+  rows.forEach((r, i) => {
+    if (i === 0 && usedHeader) return; // skip the header row once we've actually keyed off its text
     const raw = cell(r, idCol);
     if (!raw) return;
-    const qs = qtyCol >= 0 ? cell(r, qtyCol) : "";
-    if (qs === "" || !isFinite(parseFloat(qs))) {
+    const q1s = colM1 >= 0 ? cell(r, colM1) : "";
+    if (q1s === "" || !isFinite(parseFloat(q1s))) {
       unmatched.push({ identifier: raw, reason: "No numeric quantity found in this row" });
       return;
     }
@@ -1981,19 +1999,23 @@ function applySupplyRows(rows, kind) {
         : "Not recognized as a known PM code, PM name, Sapiens sub-code, or sub-PM name" });
       return;
     }
-    sums[key] = (sums[key] || 0) + num(qs, true);
+    sums1[key] = (sums1[key] || 0) + num(q1s, true);
+    const q2s = colM2 >= 0 ? cell(r, colM2) : "";
+    sums2[key] = (sums2[key] || 0) + (q2s !== "" && isFinite(parseFloat(q2s)) ? num(q2s, true) : 0);
   });
-  Object.keys(sums).forEach(key => {
-    const total = sums[key];
+  Object.keys(sums1).forEach(key => {
+    const m1 = sums1[key], m2 = sums2[key] || 0;
     if (kind === "rm") {
-      rmSupply[key] = total;
-      if (rmFirm[key]) rmFirm[key].supply = total;
-      else rmFirm[key] = { code: rmCodeReal[key] || (matMaster[key] ? matMaster[key].code : "") || "", stock: null, supply: total };
+      rmSupply[key] = m1;
+      rmSupplyM2[key] = m2;
+      if (rmFirm[key]) rmFirm[key].supply = m1;
+      else rmFirm[key] = { code: rmCodeReal[key] || (matMaster[key] ? matMaster[key].code : "") || "", stock: null, supply: m1 };
     } else {
-      pmSupply[key] = String(total);
+      pmSupply[key] = String(m1);
+      pmSupplyM2[key] = m2;
     }
   });
-  return { matched: Object.keys(sums).length, unmatched };
+  return { matched: Object.keys(sums1).length, unmatched };
 }
 function updateInvKpis() {
   let rm = 0, pm = 0;
@@ -2049,7 +2071,7 @@ function exportRM() {
       return;
     }
     const stock = stockTotal("rm", k), supply = num(rmSupply[k], true);
-    const [supM1, supM2] = fwdSupplySplit(supply);
+    const supM1 = supply, supM2 = num(rmSupplyM2[k], true);
     const availM1 = stock + supM1;
     const o1 = fwdOrder(reqM1, availM1, moq);
     const openM2 = Math.max(0, stock + supM1 + moqAdjOrder(o1.oq, moq) - reqM1);   // opening stock M2 = carry-forward from M1 (floored at 0), matching the on-screen Opening Stock M2 column
