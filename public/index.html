@@ -3038,6 +3038,13 @@ function broadcastStockUpdate() {
 
 document.addEventListener('DOMContentLoaded', init);
 
+// If the Scheduler tab is opened (inside the Ops Portal) after this MRP Tool has already
+// been loaded and broadcasting, the portal asks for a fresh snapshot so the Scheduler isn't
+// stuck showing stale/no data from before it existed.
+window.addEventListener('message', e => {
+  if (e.data && e.data.type === 'REQUEST_MRP_BROADCAST') broadcastStockUpdate();
+});
+
 
 /* Per-SKU material breakdown (RM/PM stock, Required Qty, DOC) — the single source of
  * truth for the SKU DOC tab AND the Scheduler's "Min(RM DOC, PM DOC)" column, so both
