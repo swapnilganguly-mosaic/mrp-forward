@@ -1835,7 +1835,8 @@ function resolveMatIdentifier(raw, byCode, byName) {
   if (pmSubK && matMaster[pmSubK]) return { key: pmSubK, kind: "pm" };
   return null;
 }
-function makeResolver(kind) {
+function makeResolver(kind, opts) {
+  const mosaicOnly = !!(opts && opts.mosaicOnly);
   const byCode = {}, byName = {};
   // mosaic code (lowercased) -> matMaster key, so an alias name that only exists in
   // STATIC_RM_CODES/STATIC_PM_CODES (e.g. "Soy Protein Isolate" as a short alias for the
@@ -1853,12 +1854,17 @@ function makeResolver(kind) {
     const rawL = raw.toLowerCase(), rawN = normKey(raw);
     const e = byCode[rawL] || byName[rawN];
     if (e) return e.key;
-    if (kind === "rm") {
-      const subK = rmSubCodeIndex[rawL] || rmSubNameIndex[rawN];
-      if (subK && matMaster[subK] && matMaster[subK].kind === "rm") return subK;
-    } else {
-      const subK = pmSubCodeIndex[rawL] || pmSubNameIndex[rawN];
-      if (subK && matMaster[subK] && matMaster[subK].kind === "pm") return subK;
+    // mosaicOnly (used by Import Req Qty): match on Mosaic RM/PM code or material name only —
+    // deliberately skip the Sapiens sub-code/sub-name tier below, since Required Qty files are
+    // expected to identify materials by Mosaic code, not by a Sapiens code.
+    if (!mosaicOnly) {
+      if (kind === "rm") {
+        const subK = rmSubCodeIndex[rawL] || rmSubNameIndex[rawN];
+        if (subK && matMaster[subK] && matMaster[subK].kind === "rm") return subK;
+      } else {
+        const subK = pmSubCodeIndex[rawL] || pmSubNameIndex[rawN];
+        if (subK && matMaster[subK] && matMaster[subK].kind === "pm") return subK;
+      }
     }
     // Alias fallback: raw name isn't itself a BOM material, but it IS a known alias whose
     // mosaic code matches a BOM material that goes by a different (longer/fuller) name.
@@ -2380,7 +2386,7 @@ function wire() {
       let loaded = 0;
       const skipped = []; // rows that resolved to a real material, but one outside the 82-RM BOM list
       rmReqOverride = {};
-      const resolveRm = makeResolver("rm");
+      const resolveRm = makeResolver("rm", { mosaicOnly: true }); // Req Qty maps by Mosaic RM code, not Sapiens code
       const bomKeys = bomRmKeySet();
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
@@ -2437,7 +2443,7 @@ function wire() {
 
       let loaded = 0;
       pmReqOverride = {};
-      const resolvePm = makeResolver("pm");
+      const resolvePm = makeResolver("pm", { mosaicOnly: true }); // Req Qty maps by Mosaic PM code, not Sapiens code
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
         const nameRaw = (row[colName] || "").trim();
