@@ -1412,7 +1412,7 @@ function renderPM() {
       const mv=pmMoq[r.k]!=null?pmMoq[r.k]:'';
       const mi='<input class="cell" type="number" min="0" step="25" value="'+escapeHtml(String(mv))+'" data-k="'+escapeHtml(r.k)+'">';
       const sv=pmSupply[r.k]!=null?pmSupply[r.k]:'';
-      const si='<input class="cell" type="number" min="0" step="50" value="'+escapeHtml(String(sv))+'" data-sk="'+escapeHtml(r.k)+'" title="Expected supply (units) — editable, split M1/M2 same as RM">';
+      const si='<input class="cell" type="number" min="0" step="50" value="'+escapeHtml(String(sv))+'" data-sk="'+escapeHtml(r.k)+'" title="Expected supply M1 (units) — editable; M2 always 0 unless imported">';
       const sti='<input class="cell" type="number" min="0" step="1" value="'+escapeHtml(r.stock.toFixed(1))+'" data-stk="'+escapeHtml(r.k)+'" style="width:90px" title="Current stock (units) — editable">';
       tr.innerHTML='<td class="num">'+(idx+1)+'</td><td>'+escapeHtml(r.name)+'</td><td class="sku-code">'+escapeHtml(officialPmCode(normKey(r.name))||'')+'</td><td class="sku-code" style="font-size:0.85em">'+escapeHtml(sapiensPmCodesLabel(r.k))+'</td><td class="num">'+mi+'</td><td class="num req">'+sti+'</td><td class="num">'+si+'</td><td class="num">'+fmt(r.supM2,1)+'</td>'+_qc2;
       const inp=tr.querySelector('input.cell[data-k]');
@@ -1461,7 +1461,7 @@ function renderPM() {
     const moqIn = '<input class="cell" type="number" min="0" step="50" value="' + r.moq +
       '" data-k="' + escapeHtml(r.k) + '" style="width:80px" title="MOQ (editable)">';
     const supIn = '<input class="cell" type="number" min="0" step="50" value="' + r.supply +
-      '" data-sk="' + escapeHtml(r.k) + '" style="width:80px" title="Expected supply (units) — editable, split M1/M2 same as RM">';
+      '" data-sk="' + escapeHtml(r.k) + '" style="width:80px" title="Expected supply M1 (units) — editable; M2 always 0 unless imported">';
     const stockIn = '<input class="cell" type="number" min="0" step="1" value="' + escapeHtml(r.stock.toFixed(1)) +
       '" data-stk="' + escapeHtml(r.k) + '" style="width:90px" title="Current stock (units) — editable">';
     tr.innerHTML =
@@ -2002,31 +2002,27 @@ function applySupplyRows(rows, kind) {
     rows.forEach(r => { const v = cell(r, c); if (v && resolve(v)) hits++; });
     if (hits > idHits) { idHits = hits; idCol = c; }
   }
-  // M1/M2 quantity columns: detected from the header row (row 0) by keyword, same
-  // convention as "Import Req Qty". If the file only has one supply column (no
-  // recognizable M2 header), M2 stays 0 for every material — as requested.
-  const hdr = (rows[0] || []).map(h => String(h || "").toLowerCase().replace(/[^a-z0-9]/g, ""));
-  let colM1 = hdr.findIndex((h, i) => i !== idCol && (h.includes("m1") || h.includes("month1") || (h.includes("supply") && !h.includes("m2"))));
-  let colM2 = hdr.findIndex((h, i) => i !== idCol && (h.includes("m2") || h.includes("month2")));
-  if (colM1 === colM2) colM2 = -1; // guard against the same column matching both patterns
-  const usedHeader = colM1 >= 0;
-  if (colM1 < 0) {
-    // No usable header — fall back to "widest numeric column" (old behaviour), all of it to M1.
-    let qHits = -1;
-    for (let c = 0; c < width; c++) {
-      if (c === idCol) continue;
-      let hits = 0;
-      rows.forEach(r => { const s = cell(r, c); if (s !== "" && isFinite(parseFloat(s))) hits++; });
-      if (hits > qHits) { qHits = hits; colM1 = c; }
-    }
-    colM2 = -1;
+  // Quantity column: Expected Supply is always a single number per material — whichever
+  // column has the most numeric cells besides the ID column — and it always goes into M1.
+  // M2 is always 0 here (unlike Req Qty, which genuinely needs separate M1/M2 columns).
+  // We deliberately do NOT key off header text like "M1"/"M2" for this import: real files
+  // have used headers such as "EXP SUPPLY M2" to describe a single supply figure, which
+  // isn't an M2 value at all — trying to be clever about the label just misfiles the number.
+  let colM1 = -1, qHits = -1;
+  for (let c = 0; c < width; c++) {
+    if (c === idCol) continue;
+    let hits = 0;
+    rows.forEach(r => { const s = cell(r, c); if (s !== "" && isFinite(parseFloat(s.replace(/,/g, "")))) hits++; });
+    if (hits > qHits) { qHits = hits; colM1 = c; }
   }
-  const sums1 = {}, sums2 = {}; const unmatched = []; // [{identifier, reason}]
+  // Skip row 0 if it looks like a header (its cell in the chosen quantity column isn't numeric).
+  const skipHeaderRow = colM1 >= 0 && rows[0] && !isFinite(parseFloat(cell(rows[0], colM1).replace(/,/g, "")));
+  const sums1 = {}; const unmatched = []; // [{identifier, reason}]
   rows.forEach((r, i) => {
-    if (i === 0 && usedHeader) return; // skip the header row once we've actually keyed off its text
+    if (i === 0 && skipHeaderRow) return;
     const raw = cell(r, idCol);
     if (!raw) return;
-    const q1s = colM1 >= 0 ? cell(r, colM1) : "";
+    const q1s = colM1 >= 0 ? cell(r, colM1).replace(/,/g, "") : "";
     if (q1s === "" || !isFinite(parseFloat(q1s))) {
       unmatched.push({ identifier: raw, reason: "No numeric quantity found in this row" });
       return;
@@ -2039,11 +2035,9 @@ function applySupplyRows(rows, kind) {
       return;
     }
     sums1[key] = (sums1[key] || 0) + num(q1s, true);
-    const q2s = colM2 >= 0 ? cell(r, colM2) : "";
-    sums2[key] = (sums2[key] || 0) + (q2s !== "" && isFinite(parseFloat(q2s)) ? num(q2s, true) : 0);
   });
   Object.keys(sums1).forEach(key => {
-    const m1 = sums1[key], m2 = sums2[key] || 0;
+    const m1 = sums1[key], m2 = 0;
     if (kind === "rm") {
       rmSupply[key] = m1;
       rmSupplyM2[key] = m2;
