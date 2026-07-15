@@ -2008,18 +2008,30 @@ function applySupplyRows(rows, kind) {
     rows.forEach(r => { const v = cell(r, c); if (v && resolve(v)) hits++; });
     if (hits > idHits) { idHits = hits; idCol = c; }
   }
-  // Quantity column: Expected Supply is always a single number per material — whichever
-  // column has the most numeric cells besides the ID column — and it always goes into M1.
-  // M2 is always 0 here (unlike Req Qty, which genuinely needs separate M1/M2 columns).
-  // We deliberately do NOT key off header text like "M1"/"M2" for this import: real files
-  // have used headers such as "EXP SUPPLY M2" to describe a single supply figure, which
-  // isn't an M2 value at all — trying to be clever about the label just misfiles the number.
-  let colM1 = -1, qHits = -1;
+  // Quantity column: Expected Supply is always a single number per material, and it always
+  // goes into M1 — M2 is always 0 here (unlike Req Qty, which genuinely needs separate M1/M2
+  // columns). We do NOT try to distinguish "M1" vs "M2" from the header text (a real file has
+  // used a header like "EXP SUPPLY M2" to describe its only supply figure, which isn't an M2
+  // value at all — trying to be clever about that suffix just misfiles the number). But we DO
+  // use a generic "supply" keyword in the header, when present, to pick the right column —
+  // otherwise, on a file with more than one numeric column (e.g. a serial-number column that's
+  // fully populated while the real quantity column has a few blanks), blindly picking "whichever
+  // column has the most numeric cells" can grab the wrong column entirely.
+  const hdr = (rows[0] || []).map(h => String(h || "").toLowerCase().replace(/[^a-z0-9]/g, ""));
+  let colM1 = -1;
   for (let c = 0; c < width; c++) {
     if (c === idCol) continue;
-    let hits = 0;
-    rows.forEach(r => { const s = cell(r, c); if (s !== "" && isFinite(parseFloat(s.replace(/,/g, "")))) hits++; });
-    if (hits > qHits) { qHits = hits; colM1 = c; }
+    if (hdr[c] && (hdr[c].includes("supply") || hdr[c].includes("exp"))) { colM1 = c; break; }
+  }
+  if (colM1 < 0) {
+    // No usable header hint — fall back to "widest numeric column besides the ID column".
+    let qHits = -1;
+    for (let c = 0; c < width; c++) {
+      if (c === idCol) continue;
+      let hits = 0;
+      rows.forEach(r => { const s = cell(r, c); if (s !== "" && isFinite(parseFloat(s.replace(/,/g, "")))) hits++; });
+      if (hits > qHits) { qHits = hits; colM1 = c; }
+    }
   }
   // Skip row 0 if it looks like a header (its cell in the chosen quantity column isn't numeric).
   const skipHeaderRow = colM1 >= 0 && rows[0] && !isFinite(parseFloat(cell(rows[0], colM1).replace(/,/g, "")));
