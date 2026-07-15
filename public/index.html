@@ -1251,11 +1251,17 @@ function renderRM() {
     return;
   }
 
-  const bomKeysRM = bomRmKeySet();
-  const items = Object.entries(rmReqOverride).filter(([k]) => bomKeysRM.has(k)).map(([k, ov]) => {
+  // Always show all 82 RMs from the BOM, whether or not the uploaded Required Qty file
+  // happened to include a row for each one — the RM list itself must never shrink just
+  // because a file only covers a subset. Materials not present in the file simply show 0
+  // required qty (still with real Current Stock/Supply/DOC), instead of disappearing.
+  const _nmAllRM = new Map();
+  STATIC_BOM.bom_rm.forEach(r => { if (!r.rm_name) return; const nk = normKey(r.rm_name); if (!_nmAllRM.has(nk)) _nmAllRM.set(nk, r.rm_name); });
+  const items = [..._nmAllRM.entries()].map(([k, bomName]) => {
+    const ov = rmReqOverride[k] || null;
     const matched = !!matMaster[k]; // known to the system (in BOM / has a Mosaic code) — not gated on the legacy Sapiens Firm-sheet feed
-    const reqM1 = ov.m1 || 0;
-    const reqM2 = ov.m2 || 0;
+    const reqM1 = ov ? (ov.m1 || 0) : 0;
+    const reqM2 = ov ? (ov.m2 || 0) : 0;
     const moq = num(rmMoq[k], true);
     const code = officialRmCode(k);
     let stock = null, supply = 0, supM1 = 0, supM2 = 0, oM1 = null, oM2 = null, openM2 = null;
@@ -1269,7 +1275,7 @@ function renderRM() {
       const availM2 = openM2 + supM2;
       oM2 = fwdOrder(reqM2, availM2, moq);
     }
-    return { k, name: ov.name, reqM1, reqM2, matched, supply, supM1, supM2, moq, code, stock, openM2, oM1, oM2 };
+    return { k, name: (ov && ov.name) || bomName, reqM1, reqM2, matched, supply, supM1, supM2, moq, code, stock, openM2, oM1, oM2 };
   });
   items.sort((a, b) => {
     if (a.matched !== b.matched) return a.matched ? -1 : 1;
@@ -1420,10 +1426,16 @@ function renderPM() {
     return;
   }
 
-  const items = Object.entries(pmReqOverride).map(([k, ov]) => {
+  // Always show all PMs from the BOM, whether or not the uploaded Required Qty file
+  // happened to include a row for each one — the PM list must never shrink just because a
+  // file only covers a subset. Materials not present in the file simply show 0 required qty.
+  const _nmAllPM = new Map();
+  STATIC_BOM.bom_pm.forEach(r => { if (!r.pm_name) return; const nk = normKey(r.pm_name); if (!_nmAllPM.has(nk)) _nmAllPM.set(nk, r.pm_name); });
+  const items = [..._nmAllPM.entries()].map(([k, bomName]) => {
+    const ov = pmReqOverride[k] || null;
     if (pmMoq[k] == null) pmMoq[k] = "0";
     if (pmSupply[k] == null) pmSupply[k] = "0";
-    const reqM1 = ov.m1 || 0, reqM2 = ov.m2 || 0;
+    const reqM1 = ov ? (ov.m1 || 0) : 0, reqM2 = ov ? (ov.m2 || 0) : 0;
     const moq = num(pmMoq[k], true);
     const stock = stockTotal("pm", k);
     const supply = num(pmSupply[k], true);
@@ -1433,7 +1445,7 @@ function renderPM() {
     const openM2 = Math.max(0, stock + supM1 + moqAdjOrder(oM1.oq, moq) - reqM1)   // opening stock M2 = carry-forward from M1 (floored at 0)
     const availM2 = openM2 + supM2;
     const oM2 = fwdOrder(reqM2, availM2, moq);
-    return { k, name: ov.name, reqM1, reqM2, moq, stock, openM2, supply, supM1, supM2, oM1, oM2 };
+    return { k, name: (ov && ov.name) || bomName, reqM1, reqM2, moq, stock, openM2, supply, supM1, supM2, oM1, oM2 };
   });
   items.sort((a, b) => b.reqM1 - a.reqM1);
 
