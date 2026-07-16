@@ -3047,9 +3047,16 @@ function broadcastStockUpdate() {
     Object.keys(rmReqOverride).forEach(k => { rmReq[k] = num(rmReqOverride[k].m1, true); });
     Object.keys(pmReqOverride).forEach(k => { pmReq[k] = num(pmReqOverride[k].m1, true); });
 
+    // Same, but Required Qty M2 — lets the Scheduler compute its own Month-2
+    // Min(RM DOC, PM DOC) column using the identical stock/(req/30) formula as M1,
+    // just against the M2 override instead of M1.
+    const rmReq2 = {}, pmReq2 = {};
+    Object.keys(rmReqOverride).forEach(k => { rmReq2[k] = num(rmReqOverride[k].m2, true); });
+    Object.keys(pmReqOverride).forEach(k => { pmReq2[k] = num(pmReqOverride[k].m2, true); });
+
     window.parent.postMessage({
       type: 'MRP_STOCK_UPDATE',
-      skuNames, packSizes, rmStock, pmStock, rmBom, pmBom, rmReq, pmReq
+      skuNames, packSizes, rmStock, pmStock, rmBom, pmBom, rmReq, pmReq, rmReq2, pmReq2
     }, '*');
   } catch(e) { console.warn('broadcastStockUpdate:', e); }
 }
