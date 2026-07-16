@@ -3047,16 +3047,25 @@ function broadcastStockUpdate() {
     Object.keys(rmReqOverride).forEach(k => { rmReq[k] = num(rmReqOverride[k].m1, true); });
     Object.keys(pmReqOverride).forEach(k => { pmReq[k] = num(pmReqOverride[k].m1, true); });
 
-    // Same, but Required Qty M2 — lets the Scheduler compute its own Month-2
-    // Min(RM DOC, PM DOC) column using the identical stock/(req/30) formula as M1,
-    // just against the M2 override instead of M1.
+    // Same, but Required Qty M2 (kept for the Scheduler's own display/CSV breakdown).
     const rmReq2 = {}, pmReq2 = {};
     Object.keys(rmReqOverride).forEach(k => { rmReq2[k] = num(rmReqOverride[k].m2, true); });
     Object.keys(pmReqOverride).forEach(k => { pmReq2[k] = num(pmReqOverride[k].m2, true); });
 
+    // Per-SKU Min(RM DOC, PM DOC) for M1 and M2 — computed here directly via getMats(),
+    // the exact same function the SKU DOC tab itself uses, so the Scheduler's "Min(RM DOC,
+    // PM DOC) M1/M2" columns are always identical to what the SKU DOC tab shows, instead of
+    // the Scheduler re-deriving its own (and potentially diverging) number from BOM/DRR.
+    const skuDocM1 = {}, skuDocM2 = {};
+    SKU.forEach(s => {
+      skuDocM1[s.sku_code] = schedSkuDocMinM1(s.sku_code);
+      skuDocM2[s.sku_code] = schedSkuDocMinM2(s.sku_code);
+    });
+
     window.parent.postMessage({
       type: 'MRP_STOCK_UPDATE',
-      skuNames, packSizes, rmStock, pmStock, rmBom, pmBom, rmReq, pmReq, rmReq2, pmReq2
+      skuNames, packSizes, rmStock, pmStock, rmBom, pmBom, rmReq, pmReq, rmReq2, pmReq2,
+      skuDocM1, skuDocM2
     }, '*');
   } catch(e) { console.warn('broadcastStockUpdate:', e); }
 }
@@ -3260,6 +3269,16 @@ function schedSkuDocMinM1(skuCode) {
   var d = getMats(skuCode);
   var docs = d.rm.map(function(r){ return r.docM1; })
     .concat(d.pm.map(function(r){ return r.docM1; }))
+    .filter(function(v){ return v != null; });
+  return docs.length ? Math.min.apply(null, docs) : null;
+}
+/* Same, but Month-2 — the Scheduler's Min(RM DOC, PM DOC) M2 column reads this directly
+ * (via broadcastStockUpdate's skuDocM2 map) instead of recomputing it itself, so both
+ * tools always agree with what the SKU DOC tab shows for M2. */
+function schedSkuDocMinM2(skuCode) {
+  var d = getMats(skuCode);
+  var docs = d.rm.map(function(r){ return r.docM2; })
+    .concat(d.pm.map(function(r){ return r.docM2; }))
     .filter(function(v){ return v != null; });
   return docs.length ? Math.min.apply(null, docs) : null;
 }
