@@ -1838,6 +1838,13 @@ function resolveMatIdentifier(raw, byCode, byName) {
 function makeResolver(kind, opts) {
   const mosaicOnly = !!(opts && opts.mosaicOnly);
   const byCode = {}, byName = {};
+  // Some materials exist twice in the wider master list under two slightly different name
+  // spellings (e.g. "Aquamin TG®" vs "Aquamin Tg", "Astareal®" vs "Astareal") that both
+  // happen to carry the SAME Mosaic code — a real duplicate in the source data, not a bug
+  // here. When that happens, always prefer whichever of the two is actually one of the
+  // 82 RMs / 76 PMs in the Consolidated tab, so a code lookup can never silently resolve
+  // to the "other", non-BOM duplicate instead of the real BOM material.
+  const bomKeys = kind === "rm" ? bomRmKeySet() : bomPmKeySet();
   // mosaic code (lowercased) -> matMaster key, so an alias name that only exists in
   // STATIC_RM_CODES/STATIC_PM_CODES (e.g. "Soy Protein Isolate" as a short alias for the
   // BOM's full "Soy Protein Isolate Supro - 620 IP") still resolves to the real BOM material,
@@ -1845,9 +1852,20 @@ function makeResolver(kind, opts) {
   const byMosaicCode = {};
   MATLIST.forEach(e => {
     if (e.kind !== kind) return;
-    byCode[e.code.toLowerCase()] = e; byName[e.key] = e;
+    const code = e.code.toLowerCase();
+    // On a code collision, keep whichever entry is in the BOM list; only let a non-BOM
+    // entry overwrite another non-BOM entry (never let it displace a BOM one).
+    if (!byCode[code] || bomKeys.has(e.key) || !bomKeys.has(byCode[code].key)) {
+      byCode[code] = e;
+    }
+    byName[e.key] = e;
     const official = matMaster[e.key] && matMaster[e.key].code;
-    if (official) byMosaicCode[official.toLowerCase()] = e;
+    if (official) {
+      const oc = official.toLowerCase();
+      if (!byMosaicCode[oc] || bomKeys.has(e.key) || !bomKeys.has(byMosaicCode[oc].key)) {
+        byMosaicCode[oc] = e;
+      }
+    }
   });
   const ALIAS = kind === "rm" ? (typeof STATIC_RM_CODES !== 'undefined' ? STATIC_RM_CODES : {}) : (typeof STATIC_PM_CODES !== 'undefined' ? STATIC_PM_CODES : {});
   return function resolve(raw) {
@@ -1936,6 +1954,13 @@ function applyInventoryRows(rows, factoryCode) {
 function bomRmKeySet() {
   const set = new Set();
   (STATIC_BOM.bom_rm || []).forEach(r => { if (r.rm_name) set.add(normKey(r.rm_name)); });
+  return set;
+}
+/* Same, but for the ~76 PMs in the Consolidated PM tab — used the same way bomRmKeySet()
+ * is, including to break RM/PM code collisions in makeResolver() below (see comment there). */
+function bomPmKeySet() {
+  const set = new Set();
+  (STATIC_BOM.bom_pm || []).forEach(r => { if (r.pm_name) set.add(normKey(r.pm_name)); });
   return set;
 }
 function applyStockRows(rows, kind) {
