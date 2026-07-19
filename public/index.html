@@ -3081,16 +3081,24 @@ function broadcastStockUpdate() {
     // the exact same function the SKU DOC tab itself uses, so the Scheduler's "Min(RM DOC,
     // PM DOC) M1/M2" columns are always identical to what the SKU DOC tab shows, instead of
     // the Scheduler re-deriving its own (and potentially diverging) number from BOM/DRR.
-    const skuDocM1 = {}, skuDocM2 = {};
+    // Also broadcast the RM-only and PM-only bottleneck DOC separately (the feasibility
+    // gate applies a different lead time to each) and a flag for whether Required Qty has
+    // actually been imported for that SKU yet (drives the "Awaiting Data" bucket).
+    const skuDocM1 = {}, skuDocM2 = {}, skuRmDocM1 = {}, skuPmDocM1 = {}, skuRmDocM2 = {}, skuPmDocM2 = {}, skuHasReqData = {};
     SKU.forEach(s => {
       skuDocM1[s.sku_code] = schedSkuDocMinM1(s.sku_code);
       skuDocM2[s.sku_code] = schedSkuDocMinM2(s.sku_code);
+      skuRmDocM1[s.sku_code] = schedSkuRmDocMinM1(s.sku_code);
+      skuPmDocM1[s.sku_code] = schedSkuPmDocMinM1(s.sku_code);
+      skuRmDocM2[s.sku_code] = schedSkuRmDocMinM2(s.sku_code);
+      skuPmDocM2[s.sku_code] = schedSkuPmDocMinM2(s.sku_code);
+      skuHasReqData[s.sku_code] = schedSkuHasReqData(s.sku_code);
     });
 
     window.parent.postMessage({
       type: 'MRP_STOCK_UPDATE',
       skuNames, packSizes, rmStock, pmStock, rmBom, pmBom, rmReq, pmReq, rmReq2, pmReq2,
-      skuDocM1, skuDocM2
+      skuDocM1, skuDocM2, skuRmDocM1, skuPmDocM1, skuRmDocM2, skuPmDocM2, skuHasReqData
     }, '*');
   } catch(e) { console.warn('broadcastStockUpdate:', e); }
 }
@@ -3306,6 +3314,33 @@ function schedSkuDocMinM2(skuCode) {
     .concat(d.pm.map(function(r){ return r.docM2; }))
     .filter(function(v){ return v != null; });
   return docs.length ? Math.min.apply(null, docs) : null;
+}
+/* RM-only and PM-only bottleneck DOC (M1/M2) — the Scheduler's feasibility gate applies a
+ * different lead time to RM vs PM, so it needs these two numbers separately instead of
+ * just the combined min(RM DOC, PM DOC) above. */
+function schedSkuRmDocMinM1(skuCode) {
+  var docs = getMats(skuCode).rm.map(function(r){ return r.docM1; }).filter(function(v){ return v != null; });
+  return docs.length ? Math.min.apply(null, docs) : null;
+}
+function schedSkuRmDocMinM2(skuCode) {
+  var docs = getMats(skuCode).rm.map(function(r){ return r.docM2; }).filter(function(v){ return v != null; });
+  return docs.length ? Math.min.apply(null, docs) : null;
+}
+function schedSkuPmDocMinM1(skuCode) {
+  var docs = getMats(skuCode).pm.map(function(r){ return r.docM1; }).filter(function(v){ return v != null; });
+  return docs.length ? Math.min.apply(null, docs) : null;
+}
+function schedSkuPmDocMinM2(skuCode) {
+  var docs = getMats(skuCode).pm.map(function(r){ return r.docM2; }).filter(function(v){ return v != null; });
+  return docs.length ? Math.min.apply(null, docs) : null;
+}
+/* Whether Novacore's Required Qty file has actually been imported for at least one of this
+ * SKU's RM/PM materials — used by the Scheduler to show a SKU as "Awaiting Data" rather
+ * than scoring it (or gating it as Blocked) off of an estimate. */
+function schedSkuHasReqData(skuCode) {
+  var rmHit = STATIC_BOM.bom_rm.some(function(r){ return r.sku_code === skuCode && r.rm_name && rmReqOverride[normKey(r.rm_name)]; });
+  if (rmHit) return true;
+  return STATIC_BOM.bom_pm.some(function(r){ return r.sku_code === skuCode && pmReqOverride[normKey(r.pm_name)]; });
 }
 function schedSWt(cls, pri) {
   var tbl = {A:{P1:1.0,P2:1.2,P3:1.5},B:{P1:0.7,P2:0.9,P3:1.1},C:{P1:0.4,P2:0.5,P3:0.6}};
