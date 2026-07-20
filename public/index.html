@@ -255,6 +255,7 @@
         <button class="btn sm" id="btnImportSupplyPm" title="Import a CSV/Excel with columns: identifier (Sapiens PM Code, Mosaic PM Code, PM name, or sub-PM name — any of these), Expected supply (units). Sub-PMs mapped to the same Mosaic PM code are summed into that one PM's expected supply.">Import Expected Supply</button>
         <button class="btn sm" id="btnImportReqPm" title="Import a CSV/Excel with columns: PM Name, Required M1 (units), Required M2 (units)">Import Req Qty</button>
         <button class="btn sm" id="btnClearReqPm" style="display:none" title="Remove imported required qty and revert to empty">Clear override</button>
+        <button class="btn sm" id="btnImportMoqPm" title="Import a CSV/Excel with columns: identifier (Sapiens PM Code, Mosaic PM Code, PM name, or sub-PM name — any of these), MOQ. If a material has more than one vendor row, the lowest MOQ is kept.">Import MOQ</button>
         <button class="btn primary" id="exportPm">Export PM CSV</button>
       </div>
     </div>
@@ -263,6 +264,7 @@
     <input type="file" id="fileStockPm" accept=".xlsx,.csv" style="display:none" />
     <input type="file" id="fileSupplyPm" accept=".xlsx,.csv" style="display:none" />
     <input type="file" id="fileReqPm" accept=".xlsx,.csv" style="display:none" />
+    <input type="file" id="fileMoqPm" accept=".xlsx,.csv" style="display:none" />
     <div>
     <table class="sticky-table">
       <thead>
@@ -2138,6 +2140,64 @@ function applySupplyRows(rows, kind) {
   });
   return { matched: Object.keys(sums1).length, unmatched };
 }
+/* Import MOQ (Minimum Order Quantity) for a single kind ("rm" or "pm") — used by the
+ * Consolidated RM/PM tabs' "Import MOQ" button. Same flexible identifier resolution as
+ * Current Stock/Expected Supply (Mosaic code, name, Sapiens sub-code, or sub-material
+ * name); a code shared across more than one material updates all of them. Unlike stock/
+ * supply, multiple rows for the same material are NOT summed — MOQ is a per-order
+ * threshold, not an accumulating quantity, so when a file lists more than one vendor
+ * for the same material (each with their own MOQ), the LOWEST MOQ across those vendors
+ * is kept, since that's the one actually achievable when placing an order. */
+function applyMoqRows(rows, kind) {
+  const resolve = makeResolver(kind);
+  const width = rows.reduce((w, r) => Math.max(w, r.length), 0);
+  const cell = (r, c) => String(r[c] == null ? "" : r[c]).trim();
+  let idCol = 0, idHits = -1;
+  for (let c = 0; c < width; c++) {
+    let hits = 0;
+    rows.forEach(r => { const v = cell(r, c); if (v && resolve(v)) hits++; });
+    if (hits > idHits) { idHits = hits; idCol = c; }
+  }
+  const hdr = (rows[0] || []).map(h => String(h || "").toLowerCase().replace(/[^a-z0-9]/g, ""));
+  let colMoq = -1;
+  for (let c = 0; c < width; c++) {
+    if (c === idCol) continue;
+    if (hdr[c] && hdr[c].includes("moq")) { colMoq = c; break; }
+  }
+  if (colMoq < 0) {
+    let qHits = -1;
+    for (let c = 0; c < width; c++) {
+      if (c === idCol) continue;
+      let hits = 0;
+      rows.forEach(r => { const s = cell(r, c); if (s !== "" && isFinite(parseFloat(s.replace(/,/g, "")))) hits++; });
+      if (hits > qHits) { qHits = hits; colMoq = c; }
+    }
+  }
+  const skipHeaderRow = colMoq >= 0 && rows[0] && !isFinite(parseFloat(cell(rows[0], colMoq).replace(/,/g, "")));
+  const mins = {}; const unmatched = []; // [{identifier, reason}]
+  rows.forEach((r, i) => {
+    if (i === 0 && skipHeaderRow) return;
+    const raw = cell(r, idCol);
+    if (!raw) return;
+    const qs = colMoq >= 0 ? cell(r, colMoq).replace(/,/g, "") : "";
+    if (qs === "" || !isFinite(parseFloat(qs))) {
+      unmatched.push({ identifier: raw, reason: "No numeric MOQ found in this row" });
+      return;
+    }
+    const keys = resolve.resolveAll(raw);
+    if (!keys.length) {
+      unmatched.push({ identifier: raw, reason: kind === "rm"
+        ? "Not recognized as a known RM code, RM name, Sapiens sub-code, or sub-RM name"
+        : "Not recognized as a known PM code, PM name, Sapiens sub-code, or sub-PM name" });
+      return;
+    }
+    const v = num(qs, true);
+    keys.forEach(key => { mins[key] = (mins[key] == null) ? v : Math.min(mins[key], v); });
+  });
+  const moqStore = kind === "rm" ? rmMoq : pmMoq;
+  Object.keys(mins).forEach(key => { moqStore[key] = String(mins[key]); });
+  return { matched: Object.keys(mins).length, unmatched };
+}
 function updateInvKpis() {
   let rm = 0, pm = 0;
   MATLIST.forEach(e => {
@@ -2643,6 +2703,33 @@ function wire() {
       msg.innerHTML = "Imported expected supply for <b>" + res.matched + "</b> PM(s)" +
         (res.unmatched.length ? "; <span class='miss-badge'>" + res.unmatched.length + " row(s) could not be mapped</span> — see popup" : "") + ".";
       showUnmatchedModal("Import Expected Supply (PM) — unmatched rows", res.unmatched);
+      renderPM();
+      broadcastStockUpdate();
+    } catch (err) {
+      msg.style.color = "var(--warn)";
+      msg.textContent = "⚠ " + (err && err.message ? err.message : "Could not read this file.");
+    }
+  });
+
+  // Import MOQ (PM tab) — identifier can be Mosaic code, PM name, Sapiens sub-code, or
+  // sub-PM name; if a material has multiple vendor rows, the lowest MOQ is kept.
+  $("btnImportMoqPm").addEventListener("click", () => $("fileMoqPm").click());
+  $("fileMoqPm").addEventListener("change", async e => {
+    const file = e.target.files[0]; if (!file) return;
+    e.target.value = "";
+    const msg = $("pmStockImportMsg");
+    msg.style.display = "block"; msg.style.color = "";
+    try {
+      let rows;
+      if (/\.csv$/i.test(file.name)) rows = parseCSV(await file.text());
+      else if (/\.xlsx$/i.test(file.name)) rows = await readXlsx(await file.arrayBuffer());
+      else throw new Error("Unsupported file type. Use .xlsx or .csv (not the older .xls).");
+      rows = trimLeadingBlank(rows || []);
+      if (!rows.length) throw new Error("The file has no rows.");
+      const res = applyMoqRows(rows, "pm");
+      msg.innerHTML = "Imported MOQ for <b>" + res.matched + "</b> PM(s)" +
+        (res.unmatched.length ? "; <span class='miss-badge'>" + res.unmatched.length + " row(s) could not be mapped</span> — see popup" : "") + ".";
+      showUnmatchedModal("Import MOQ (PM) — unmatched rows", res.unmatched);
       renderPM();
       broadcastStockUpdate();
     } catch (err) {
