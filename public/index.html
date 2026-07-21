@@ -195,6 +195,7 @@
         <button class="btn sm" id="btnImportStockRm" title="Import a CSV/Excel with columns: RM Name (or RM Code, or Sapiens RM Code / sub-RM name), Current Stock (kg). Sub-RMs mapped to the same Mosaic RM code (e.g. Jaggery Powder's 7Dinam/Dhampure/Shivalik) are summed into that one RM's stock.">Import Current Stock</button>
         <button class="btn sm" id="btnImportSupplyRm" title="Import a CSV/Excel with columns: identifier (Sapiens RM Code, Mosaic RM Code, RM name, or sub-RM name — any of these), Expected supply (kg). Sub-RMs mapped to the same Mosaic RM code are summed into that one RM's expected supply.">Import Expected Supply</button>
         <button class="btn sm" id="btnImportReqRm" title="Import a CSV/Excel with columns: RM Name (or RM Code), Required M1 (kg), Required M2 (kg)">Import Req Qty</button>
+        <button class="btn sm" id="btnImportReqRmSap" title="Import a CSV/Excel with columns: identifier (Sapiens RM Code, Mosaic RM Code, RM name, or sub-RM name — any of these), Required M1 (kg), Required M2 (kg). Sub-RMs mapped to the same Mosaic RM code are summed; a code shared across materials applies to all of them.">Import Req Qty (Sapiens Code)</button>
         <button class="btn sm" id="btnClearReqRm" style="display:none" title="Remove imported required qty overrides and revert to BOM-calculated values">Clear override</button>
         <button class="btn primary" id="exportRm">Export RM CSV</button>
       </div>
@@ -204,6 +205,7 @@
     <input type="file" id="fileStockRm" accept=".xlsx,.csv" style="display:none" />
     <input type="file" id="fileSupplyRm" accept=".xlsx,.csv" style="display:none" />
     <input type="file" id="fileReqRm" accept=".xlsx,.csv" style="display:none" />
+    <input type="file" id="fileReqRmSap" accept=".xlsx,.csv" style="display:none" />
     <div>
     <table class="sticky-table">
       <thead>
@@ -254,6 +256,7 @@
         <button class="btn sm" id="btnImportStockPm" title="Import a CSV/Excel with columns: PM Name (or PM Code, or Sapiens PM Code / sub-PM name), Current Stock (units). Sub-PMs mapped to the same Mosaic PM code are summed into that one PM's stock.">Import Current Stock</button>
         <button class="btn sm" id="btnImportSupplyPm" title="Import a CSV/Excel with columns: identifier (Sapiens PM Code, Mosaic PM Code, PM name, or sub-PM name — any of these), Expected supply (units). Sub-PMs mapped to the same Mosaic PM code are summed into that one PM's expected supply.">Import Expected Supply</button>
         <button class="btn sm" id="btnImportReqPm" title="Import a CSV/Excel with columns: PM Name, Required M1 (units), Required M2 (units)">Import Req Qty</button>
+        <button class="btn sm" id="btnImportReqPmSap" title="Import a CSV/Excel with columns: identifier (Sapiens PM Code, Mosaic PM Code, PM name, or sub-PM name — any of these), Required M1 (units), Required M2 (units). Sub-PMs mapped to the same Mosaic PM code are summed; a code shared across materials applies to all of them.">Import Req Qty (Sapiens Code)</button>
         <button class="btn sm" id="btnClearReqPm" style="display:none" title="Remove imported required qty and revert to empty">Clear override</button>
         <button class="btn sm" id="btnImportMoqPm" title="Import a CSV/Excel with columns: identifier (Sapiens PM Code, Mosaic PM Code, PM name, or sub-PM name — any of these), MOQ. If a material has more than one vendor row, the lowest MOQ is kept.">Import MOQ</button>
         <button class="btn primary" id="exportPm">Export PM CSV</button>
@@ -264,6 +267,7 @@
     <input type="file" id="fileStockPm" accept=".xlsx,.csv" style="display:none" />
     <input type="file" id="fileSupplyPm" accept=".xlsx,.csv" style="display:none" />
     <input type="file" id="fileReqPm" accept=".xlsx,.csv" style="display:none" />
+    <input type="file" id="fileReqPmSap" accept=".xlsx,.csv" style="display:none" />
     <input type="file" id="fileMoqPm" accept=".xlsx,.csv" style="display:none" />
     <div>
     <table class="sticky-table">
@@ -2198,6 +2202,79 @@ function applyMoqRows(rows, kind) {
   Object.keys(mins).forEach(key => { moqStore[key] = String(mins[key]); });
   return { matched: Object.keys(mins).length, unmatched };
 }
+// Import Required Qty by Sapiens code (RM/PM tabs) — an alternate identifier scheme to the
+// default "Import Req Qty" (which matches by Mosaic code/name only). This one resolves the
+// SAME way Current Stock/Expected Supply/MOQ do: Mosaic code, name, Sapiens sub-code, or
+// sub-material name, fanning out to every material a shared Sapiens code belongs to and
+// summing quantities across duplicate rows for the same material. Only writes into materials
+// that are actually part of the Consolidated RM/PM tab (the BOM list) — same rule as the
+// existing Mosaic-code Req Qty importer.
+function applyReqRowsBySapiens(rows, kind) {
+  const resolve = makeResolver(kind); // NOT mosaicOnly — Sapiens sub-codes/sub-names resolve too
+  const bomKeys = kind === "rm" ? bomRmKeySet() : bomPmKeySet();
+  const width = rows.reduce((w, r) => Math.max(w, r.length), 0);
+  const cell = (r, c) => String(r[c] == null ? "" : r[c]).trim();
+
+  // identifier column = whichever column's cells most often resolve to a known material
+  let idCol = 0, idHits = -1;
+  for (let c = 0; c < width; c++) {
+    let hits = 0;
+    rows.forEach(r => { const v = cell(r, c); if (v && resolve(v)) hits++; });
+    if (hits > idHits) { idHits = hits; idCol = c; }
+  }
+
+  // M1/M2 quantity columns — detected from the header row, same convention as the
+  // Mosaic-code Req Qty importer.
+  const hdr = (rows[0] || []).map(h => String(h || "").toLowerCase().replace(/[^a-z0-9]/g, ""));
+  let colM1 = -1, colM2 = -1;
+  for (let c = 0; c < width; c++) {
+    if (c === idCol) continue;
+    if (hdr[c] && hdr[c].includes("m2")) { colM2 = c; continue; }
+    if (hdr[c] && (hdr[c].includes("m1") || hdr[c].includes("month1") || hdr[c].includes("req"))) { if (colM1 < 0) colM1 = c; }
+  }
+  // Fallback: header naming didn't match — take the first two remaining numeric-looking
+  // columns as M1 then M2, in column order.
+  if (colM1 < 0) {
+    for (let c = 0; c < width; c++) {
+      if (c === idCol) continue;
+      let hits = 0;
+      rows.slice(1).forEach(r => { const s = cell(r, c); if (s !== "" && isFinite(parseFloat(s.replace(/,/g, "")))) hits++; });
+      if (hits > 0) { if (colM1 < 0) colM1 = c; else if (colM2 < 0) { colM2 = c; break; } }
+    }
+  }
+  if (colM1 < 0) return { matched: 0, unmatched: [{ identifier: "(file)", reason: "Could not find a Required Quantity column (M1)" }] };
+
+  const skipHeaderRow = !isFinite(parseFloat(cell(rows[0], colM1).replace(/,/g, "")));
+  const sums = {}; // key -> { name, m1, m2 }
+  const unmatched = [];
+  rows.forEach((r, i) => {
+    if (i === 0 && skipHeaderRow) return;
+    const raw = cell(r, idCol);
+    if (!raw) return;
+    const m1s = cell(r, colM1).replace(/,/g, "");
+    if (m1s === "" || !isFinite(parseFloat(m1s))) {
+      unmatched.push({ identifier: raw, reason: "No numeric Required Qty M1 found in this row" });
+      return;
+    }
+    const m2s = colM2 >= 0 ? cell(r, colM2).replace(/,/g, "") : "";
+    const m1 = num(m1s, true);
+    const m2 = (m2s !== "" && isFinite(parseFloat(m2s))) ? num(m2s, true) : 0;
+    const keys = resolve.resolveAll(raw).filter(k => bomKeys.has(k));
+    if (!keys.length) {
+      unmatched.push({ identifier: raw, reason: "Not recognized as one of the " + bomKeys.size + " " + kind.toUpperCase() +
+        "s in Consolidated " + kind.toUpperCase() + " (checked Sapiens code, Mosaic code, name, and sub-material name)" });
+      return;
+    }
+    keys.forEach(key => {
+      const prev = sums[key] || { name: raw, m1: 0, m2: 0 };
+      sums[key] = { name: prev.name, m1: prev.m1 + m1, m2: prev.m2 + m2 };
+    });
+  });
+
+  if (kind === "rm") { rmReqOverride = {}; Object.keys(sums).forEach(key => { rmReqOverride[key] = sums[key]; }); }
+  else { pmReqOverride = {}; Object.keys(sums).forEach(key => { pmReqOverride[key] = sums[key]; }); }
+  return { matched: Object.keys(sums).length, unmatched };
+}
 function updateInvKpis() {
   let rm = 0, pm = 0;
   MATLIST.forEach(e => {
@@ -2556,6 +2633,34 @@ function wire() {
     } catch (err) { alert("Error reading file: " + err.message); }
   });
 
+  // Import Required Qty by Sapiens code (RM tab) — alternate identifier scheme; see
+  // applyReqRowsBySapiens for matching/summing/fan-out behavior.
+  $("btnImportReqRmSap").addEventListener("click", () => $("fileReqRmSap").click());
+  $("fileReqRmSap").addEventListener("change", async e => {
+    const file = e.target.files[0]; if (!file) return;
+    e.target.value = "";
+    const msg = $("rmStockImportMsg");
+    msg.style.display = "block"; msg.style.color = "";
+    try {
+      let rows;
+      if (/\.csv$/i.test(file.name)) rows = parseCSV(await file.text());
+      else if (/\.xlsx$/i.test(file.name)) rows = await readXlsx(await file.arrayBuffer());
+      else throw new Error("Unsupported file type. Use .xlsx or .csv (not the older .xls).");
+      rows = trimLeadingBlank(rows || []);
+      if (!rows.length) throw new Error("The file has no rows.");
+      const res = applyReqRowsBySapiens(rows, "rm");
+      msg.innerHTML = "Imported required qty for <b>" + res.matched + "</b> RM(s)" +
+        (res.unmatched.length ? "; <span class='miss-badge'>" + res.unmatched.length + " row(s) could not be mapped</span> — see popup" : "") + ".";
+      showUnmatchedModal("Import Req Qty by Sapiens Code (RM) — unmatched rows", res.unmatched);
+      if ($("btnClearReqRm")) $("btnClearReqRm").style.display = "";
+      renderRM();
+      broadcastStockUpdate();
+    } catch (err) {
+      msg.style.color = "var(--warn)";
+      msg.textContent = "⚠ " + (err && err.message ? err.message : "Could not read this file.");
+    }
+  });
+
   // Import Required Qty (PM tab)
   $("btnImportReqPm").addEventListener("click", () => $("fileReqPm").click());
   $("btnClearReqPm").addEventListener("click", () => {
@@ -2603,6 +2708,34 @@ function wire() {
       renderPM();
       broadcastStockUpdate();
     } catch (err) { alert("Error reading file: " + err.message); }
+  });
+
+  // Import Required Qty by Sapiens code (PM tab) — alternate identifier scheme; see
+  // applyReqRowsBySapiens for matching/summing/fan-out behavior.
+  $("btnImportReqPmSap").addEventListener("click", () => $("fileReqPmSap").click());
+  $("fileReqPmSap").addEventListener("change", async e => {
+    const file = e.target.files[0]; if (!file) return;
+    e.target.value = "";
+    const msg = $("pmStockImportMsg");
+    msg.style.display = "block"; msg.style.color = "";
+    try {
+      let rows;
+      if (/\.csv$/i.test(file.name)) rows = parseCSV(await file.text());
+      else if (/\.xlsx$/i.test(file.name)) rows = await readXlsx(await file.arrayBuffer());
+      else throw new Error("Unsupported file type. Use .xlsx or .csv (not the older .xls).");
+      rows = trimLeadingBlank(rows || []);
+      if (!rows.length) throw new Error("The file has no rows.");
+      const res = applyReqRowsBySapiens(rows, "pm");
+      msg.innerHTML = "Imported required qty for <b>" + res.matched + "</b> PM(s)" +
+        (res.unmatched.length ? "; <span class='miss-badge'>" + res.unmatched.length + " row(s) could not be mapped</span> — see popup" : "") + ".";
+      showUnmatchedModal("Import Req Qty by Sapiens Code (PM) — unmatched rows", res.unmatched);
+      if ($("btnClearReqPm")) $("btnClearReqPm").style.display = "";
+      renderPM();
+      broadcastStockUpdate();
+    } catch (err) {
+      msg.style.color = "var(--warn)";
+      msg.textContent = "⚠ " + (err && err.message ? err.message : "Could not read this file.");
+    }
   });
 
   // Import Current Stock (RM tab) — matched by RM name/code, applied to Current stock (kg).
