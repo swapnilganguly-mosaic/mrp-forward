@@ -209,7 +209,7 @@
       <div class="kpi"><b id="rmAtRisk">0</b><span>M1 orders needed</span></div>
       <div class="spacer"></div>
       <div class="field" style="justify-content:flex-end;gap:8px">
-        <button class="btn sm" id="btnImportStockRm" title="Import a CSV/Excel with columns: RM Name (or RM Code, or Sapiens RM Code / sub-RM name), Current Stock (kg). Sub-RMs mapped to the same Mosaic RM code (e.g. Jaggery Powder's 7Dinam/Dhampure/Shivalik) are summed into that one RM's stock.">Import Current Stock</button>
+        <button class="btn sm" id="btnImportStockRm" title="Import a CSV/Excel with columns: RM Name (or RM Code, or Sapiens RM Code / sub-RM name), Current Stock (kg), and optionally an Expected Inward (kg) column (stock-in-transit — added into current stock for all calculations). Sub-RMs mapped to the same Mosaic RM code (e.g. Jaggery Powder's 7Dinam/Dhampure/Shivalik) are summed into that one RM's stock.">Import Current Stock</button>
         <button class="btn sm" id="btnImportSupplyRm" title="Import a CSV/Excel with columns: identifier (Sapiens RM Code, Mosaic RM Code, RM name, or sub-RM name — any of these), Expected supply (kg). Sub-RMs mapped to the same Mosaic RM code are summed into that one RM's expected supply.">Import Expected Supply</button>
         <button class="btn sm" id="btnImportReqRm" title="Import a CSV/Excel with columns: RM Name (or RM Code), Required M1 (kg), Required M2 (kg)">Import Req Qty</button>
         <button class="btn sm" id="btnImportReqRmSap" title="Import a CSV/Excel with columns: identifier (Sapiens RM Code, Mosaic RM Code, RM name, or sub-RM name — any of these), Required M1 (kg), Required M2 (kg). Sub-RMs mapped to the same Mosaic RM code are summed; a code shared across materials applies to all of them.">Import Req Qty (Sapiens Code)</button>
@@ -233,6 +233,7 @@
           <th rowspan="2">Sapiens RM Code</th>
           <th rowspan="2" class="num">MOQ (kg)</th>
           <th rowspan="2" class="num">Current stock (kg)</th>
+          <th rowspan="2" class="num" title="Stock-in-transit — already dispatched, about to land. Added into current stock for every calculation below.">Expected Inward (kg)</th>
           <th rowspan="2" class="num">Exp. supply M1</th>
           <th rowspan="2" class="num">Exp. supply M2</th>
           <th colspan="6" class="grp">Month 1 (0–30 d)</th>
@@ -272,7 +273,7 @@
       <div class="kpi"><b id="pmAtRisk">0</b><span>M1 orders needed</span></div>
       <div class="spacer"></div>
       <div class="field" style="justify-content:flex-end;gap:8px">
-        <button class="btn sm" id="btnImportStockPm" title="Import a CSV/Excel with columns: PM Name (or PM Code, or Sapiens PM Code / sub-PM name), Current Stock (units). Sub-PMs mapped to the same Mosaic PM code are summed into that one PM's stock.">Import Current Stock</button>
+        <button class="btn sm" id="btnImportStockPm" title="Import a CSV/Excel with columns: PM Name (or PM Code, or Sapiens PM Code / sub-PM name), Current Stock (units), and optionally an Expected Inward (units) column (stock-in-transit — added into current stock for all calculations). Sub-PMs mapped to the same Mosaic PM code are summed into that one PM's stock.">Import Current Stock</button>
         <button class="btn sm" id="btnImportSupplyPm" title="Import a CSV/Excel with columns: identifier (Sapiens PM Code, Mosaic PM Code, PM name, or sub-PM name — any of these), Expected supply (units). Sub-PMs mapped to the same Mosaic PM code are summed into that one PM's expected supply.">Import Expected Supply</button>
         <button class="btn sm" id="btnImportReqPm" title="Import a CSV/Excel with columns: PM Name, Required M1 (units), Required M2 (units)">Import Req Qty</button>
         <button class="btn sm" id="btnImportReqPmSap" title="Import a CSV/Excel with columns: identifier (Sapiens PM Code, Mosaic PM Code, PM name, or sub-PM name — any of these), Required M1 (units), Required M2 (units). Sub-PMs mapped to the same Mosaic PM code are summed; a code shared across materials applies to all of them.">Import Req Qty (Sapiens Code)</button>
@@ -298,6 +299,7 @@
           <th rowspan="2">Sapiens PM Code</th>
           <th rowspan="2" class="num">MOQ (units)</th>
           <th rowspan="2" class="num">Stock in hand (units)</th>
+          <th rowspan="2" class="num" title="Stock-in-transit — already dispatched, about to land. Added into current stock for every calculation below.">Expected Inward (units)</th>
           <th rowspan="2" class="num">Exp. supply M1</th>
           <th rowspan="2" class="num">Exp. supply M2</th>
           <th colspan="6" class="grp">Month 1 (0–30 d)</th>
@@ -780,6 +782,10 @@ let pmSubCodeIndex = {}; // sapiens sub-PM code (lowercased) -> normKey(app pm_n
 let pmSubNameIndex = {}; // normKey(sub-PM name) -> normKey(app pm_name)
 let rmMoq      = {}; // normKey(rm_name) -> MOQ (kg) string, user-entered (no source feed yet)
 let pmMoq      = {}; // normKey(pm_name) -> MOQ (units) string — DUMMY seed, editable (no source feed yet)
+let rmInward   = {}; // normKey(rm_name) -> expected inward / stock-in-transit (kg) — read from the
+                      // same file as Import Current Stock (an "Expected Inward" column alongside
+                      // Current Stock); added into current stock for every downstream calculation.
+let pmInward   = {}; // normKey(pm_name) -> expected inward / stock-in-transit (units) — same as above.
 let pmSupply   = {}; // normKey(pm_name) -> expected supply M1 (units) from open POs / Import Expected Supply — editable
 let pmSupplyM2 = {}; // normKey(pm_name) -> expected supply M2 (units) — 0 unless the imported file has an M2 column
 let rmReqOverride = {}; // normKey(rm_name) -> {name, m1, m2} kg — set by "Import Req Qty"
@@ -1057,6 +1063,16 @@ function stockTotal(kind, key) {
   let t = 0; FACTORIES.forEach(f => t += num((F[f.code] || {})[key], true));
   return t;
 }
+/* Current stock + Expected Inward (stock-in-transit, about to land) — this is the number
+ * every downstream calculation (DOC, Available for order-qty, Opening Stock M2 carry-forward,
+ * KPI/footer totals) should use as "how much material do we effectively have," per the rule
+ * that Expected Inward always folds into current stock. stockTotal() itself stays as the
+ * pure physical current-stock figure, since that's what the editable Current Stock field
+ * and the Expected Inward column each display separately. */
+function stockAvailable(kind, key) {
+  const inward = kind === "rm" ? rmInward : pmInward;
+  return stockTotal(kind, key) + num(inward[key], true);
+}
 
 /* ==================================================================
  *  CORE AGGREGATION
@@ -1284,13 +1300,16 @@ function renderRM() {
       const mv=rmMoq[r.k]!=null?rmMoq[r.k]:'';
       const mi='<input class="cell" type="number" min="0" step="25" value="'+escapeHtml(String(mv))+'" data-k="'+escapeHtml(r.k)+'">';
       const sti='<input class="cell" type="number" min="0" step="1" value="'+escapeHtml(r.stock.toFixed(1))+'" data-stk="'+escapeHtml(r.k)+'" style="width:90px" title="Current stock (kg) \u2014 editable">';
+      const iwi='<input class="cell" type="number" min="0" step="1" value="'+escapeHtml(r.inward.toFixed(1))+'" data-iw="'+escapeHtml(r.k)+'" style="width:90px" title="Expected inward (kg) \u2014 stock-in-transit, added into current stock for all calculations \u2014 editable">';
       tr.innerHTML='<td class="num">'+(idx+1)+'</td><td class="sku-code">'+escapeHtml(r.code||'\u2014')+'</td><td>'+escapeHtml(r.name)+'</td><td class="sku-code" style="font-size:0.85em">'+escapeHtml(sapiensCodesLabel(r.k))+'</td><td class="num">'+mi+'</td>'+
-        (r.matched?'<td class="num req">'+sti+'</td><td class="num">'+fmt(r.supM1,1)+'</td><td class="num">'+fmt(r.supM2,1)+'</td>'
-                  :'<td class="num"><span class="muted">NA</span></td><td class="num">'+_d+'</td><td class="num">'+_d+'</td>')+_qc;
+        (r.matched?'<td class="num req">'+sti+'</td><td class="num">'+iwi+'</td><td class="num">'+fmt(r.supM1,1)+'</td><td class="num">'+fmt(r.supM2,1)+'</td>'
+                  :'<td class="num"><span class="muted">NA</span></td><td class="num"><span class="muted">NA</span></td><td class="num">'+_d+'</td><td class="num">'+_d+'</td>')+_qc;
       const inp=tr.querySelector('input.cell[data-k]');
       if(inp){inp.addEventListener('click',ev=>ev.stopPropagation());inp.addEventListener('change',()=>{rmMoq[inp.getAttribute('data-k')]=inp.value;renderRM();});}
       const stInp=tr.querySelector('input.cell[data-stk]');
       if(stInp){stInp.addEventListener('click',ev=>ev.stopPropagation());stInp.addEventListener('change',()=>{rmStockF[FACTORIES[0].code][stInp.getAttribute('data-stk')]=stInp.value;broadcastStockUpdate();renderRM();});}
+      const iwInp=tr.querySelector('input.cell[data-iw]');
+      if(iwInp){iwInp.addEventListener('click',ev=>ev.stopPropagation());iwInp.addEventListener('change',()=>{rmInward[iwInp.getAttribute('data-iw')]=iwInp.value;broadcastStockUpdate();renderRM();});}
       _tb.appendChild(tr);
     });
     return;
@@ -1309,18 +1328,20 @@ function renderRM() {
     const reqM2 = ov ? (ov.m2 || 0) : 0;
     const moq = num(rmMoq[k], true);
     const code = officialRmCode(k);
-    let stock = null, supply = 0, supM1 = 0, supM2 = 0, oM1 = null, oM2 = null, openM2 = null;
+    let stock = null, inward = 0, avail = null, supply = 0, supM1 = 0, supM2 = 0, oM1 = null, oM2 = null, openM2 = null;
     if (matched) {
       stock = stockTotal("rm", k);
+      inward = num(rmInward[k], true);
+      avail = stock + inward;   // current stock + expected inward — the number every calc below uses
       supply = num(rmSupply[k], true);
       supM1 = supply; supM2 = num(rmSupplyM2[k], true);
-      const availM1 = stock + supM1;
+      const availM1 = avail + supM1;
       oM1 = fwdOrder(reqM1, availM1, moq);
-      openM2 = Math.max(0, stock + supM1 + moqAdjOrder(oM1.oq, moq) - reqM1)   // opening stock M2 = carry-forward from M1 (floored at 0)
+      openM2 = Math.max(0, avail + supM1 + moqAdjOrder(oM1.oq, moq) - reqM1)   // opening stock M2 = carry-forward from M1 (floored at 0)
       const availM2 = openM2 + supM2;
       oM2 = fwdOrder(reqM2, availM2, moq);
     }
-    return { k, name: bomName, reqM1, reqM2, matched, supply, supM1, supM2, moq, code, stock, openM2, oM1, oM2 };
+    return { k, name: bomName, reqM1, reqM2, matched, supply, supM1, supM2, moq, code, stock, inward, avail, openM2, oM1, oM2 };
   });
   const rmF = rmFilter.trim().toLowerCase();
   const itemsAllCount = items.length;
@@ -1334,11 +1355,11 @@ function renderRM() {
   const tbody = $("rmRows"); tbody.innerHTML = "";
   // Totals/KPIs always reflect the full 82-RM list, regardless of the search filter —
   // only the visible rows narrow when searching.
-  let stockTot = 0, supplyTot = 0, supM1Tot = 0, supM2Tot = 0, openM2Tot = 0, m1Tot = 0, m2Tot = 0, adjM1Tot = 0, adjM2Tot = 0, reqM1Tot = 0, reqM2Tot = 0, ordersNeeded = 0, na = 0;
+  let stockTot = 0, inwardTot = 0, supplyTot = 0, supM1Tot = 0, supM2Tot = 0, openM2Tot = 0, m1Tot = 0, m2Tot = 0, adjM1Tot = 0, adjM2Tot = 0, reqM1Tot = 0, reqM2Tot = 0, ordersNeeded = 0, na = 0;
   items.forEach(r => {
     reqM1Tot += r.reqM1; reqM2Tot += r.reqM2;
     if (!r.matched) { na++; return; }
-    stockTot += r.stock; supplyTot += r.supply; supM1Tot += r.supM1; supM2Tot += r.supM2; openM2Tot += r.openM2;
+    stockTot += r.stock; inwardTot += r.inward; supplyTot += r.supply; supM1Tot += r.supM1; supM2Tot += r.supM2; openM2Tot += r.openM2;
     m1Tot += r.oM1.oq; m2Tot += r.oM2.oq;
     adjM1Tot += moqAdjOrder(r.oM1.oq, r.moq); adjM2Tot += moqAdjOrder(r.oM2.oq, r.moq);
     if (r.oM1.oq > 0) ordersNeeded++;
@@ -1350,12 +1371,15 @@ function renderRM() {
       '" data-k="' + escapeHtml(r.k) + '" style="width:80px" title="MOQ kg — editable">';
     const stockIn = r.matched ? ('<input class="cell" type="number" min="0" step="1" value="' + escapeHtml(r.stock.toFixed(1)) +
       '" data-stk="' + escapeHtml(r.k) + '" style="width:90px" title="Current stock (kg) — editable">') : '';
+    const inwardIn = r.matched ? ('<input class="cell" type="number" min="0" step="1" value="' + escapeHtml(r.inward.toFixed(1)) +
+      '" data-iw="' + escapeHtml(r.k) + '" style="width:90px" title="Expected inward (kg) — stock-in-transit, added into current stock for all calculations — editable">') : '';
     if (!r.matched) {
       tr.innerHTML =
         '<td class="num">' + (idx + 1) + '</td>' +
         '<td class="sku-code">' + escapeHtml(r.code || "—") + '</td><td>' + escapeHtml(r.name) + '</td>' +
         '<td class="sku-code" style="font-size:0.85em">' + escapeHtml(sapiensCodesLabel(r.k)) + '</td>' +
         '<td class="num">' + moqIn + '</td>' +
+        '<td class="num">' + NA + '</td>' +
         '<td class="num">' + NA + '</td>' +
         '<td class="num"><span class="muted">—</span></td>' +
         '<td class="num"><span class="muted">—</span></td>' +
@@ -1369,9 +1393,10 @@ function renderRM() {
         '<td class="sku-code" style="font-size:0.85em">' + escapeHtml(sapiensCodesLabel(r.k)) + '</td>' +
         '<td class="num">' + moqIn + '</td>' +
         '<td class="num req">' + stockIn + '</td>' +
+        '<td class="num req">' + inwardIn + '</td>' +
         '<td class="num">' + fmt(r.supM1,1) + '</td>' +
         '<td class="num">' + fmt(r.supM2,1) + '</td>' +
-        '<td class="num">' + fmt(r.reqM1, 1) + '</td>' + '<td class="num">' + (r.stock != null && r.reqM1 > 0 ? (r.stock * 30 / r.reqM1).toFixed(1) : '—') + '<td class="num req">' + fmt(r.oM1.oq, 1) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM1.oq, r.moq), 1) + '</td>' + diffCell(r.oM1.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM1) + '</td>' +
+        '<td class="num">' + fmt(r.reqM1, 1) + '</td>' + '<td class="num">' + (r.avail != null && r.reqM1 > 0 ? (r.avail * 30 / r.reqM1).toFixed(1) : '—') + '<td class="num req">' + fmt(r.oM1.oq, 1) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM1.oq, r.moq), 1) + '</td>' + diffCell(r.oM1.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM1) + '</td>' +
         '<td class="num">' + fmt(r.openM2, 1) + '</td><td class="num">' + fmt(r.reqM2, 1) + '</td>' + '<td class="num">' + (r.openM2 != null && r.reqM2 > 0 ? (r.openM2 * 30 / r.reqM2).toFixed(1) : '—') + '<td class="num req">' + fmt(r.oM2.oq, 1) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM2.oq, r.moq), 1) + '</td>' + diffCell(r.oM2.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM2) + '</td>' +
         '<td class="num"></td>';
     }
@@ -1384,16 +1409,21 @@ function renderRM() {
       stInp.addEventListener("click", ev => ev.stopPropagation());
       stInp.addEventListener("change", () => { rmStockF[FACTORIES[0].code][stInp.getAttribute("data-stk")] = stInp.value; broadcastStockUpdate(); renderRM(); });
     }
+    const iwInp = tr.querySelector("input.cell[data-iw]");
+    if (iwInp) {
+      iwInp.addEventListener("click", ev => ev.stopPropagation());
+      iwInp.addEventListener("change", () => { rmInward[iwInp.getAttribute("data-iw")] = iwInp.value; broadcastStockUpdate(); renderRM(); });
+    }
   });
 
   $("rmDistinct").textContent = items.length;
   $("rmDistinct2").textContent = items.length + (na ? " (" + na + " NA)" : "");
-  $("rmStockTot").textContent = fmt(stockTot,1);
+  $("rmStockTot").textContent = fmt(stockTot + inwardTot,1);
   $("rmSupplyTot").textContent = fmt(supplyTot,1);
   $("rmOrderM1").textContent = fmt(m1Tot, 1);
   $("rmOrderM2").textContent = fmt(m2Tot, 1);
   $("rmAtRisk").textContent = ordersNeeded;
-  $("rmFootStock").textContent = fmt(stockTot,1);
+  $("rmFootStock").textContent = fmt(stockTot + inwardTot,1);
   $("rmFootSupplyM1").textContent = fmt(supM1Tot,1);
   $("rmFootSupplyM2").textContent = fmt(supM2Tot,1);
   $("rmFootReqM1").textContent = fmt(reqM1Tot, 1);
@@ -1452,9 +1482,9 @@ function renderPM() {
     const _pm = new Map();
     STATIC_BOM.bom_pm.forEach(r => { const nk = normKey(r.pm_name); if (!_pm.has(nk)) _pm.set(nk, r.pm_name); });
     const _pi = [..._pm.entries()].map(([k,name]) => {
-      const stock = stockTotal('pm', k); const moq = num(pmMoq[k],true);
+      const stock = stockTotal('pm', k); const inward = num(pmInward[k], true); const moq = num(pmMoq[k],true);
       const supply = num(pmSupply[k],true); const supM1 = supply, supM2 = num(pmSupplyM2[k], true);
-      return {k, name, stock: stock||0, moq, supply, supM1, supM2};
+      return {k, name, stock: stock||0, inward, moq, supply, supM1, supM2};
     });
     const _pf = pmFilter.trim().toLowerCase();
     const _piShown = _pf ? _pi.filter(r => (r.name||"").toLowerCase().includes(_pf) || (officialPmCode(r.k)||"").toLowerCase().includes(_pf)) : _pi;
@@ -1470,13 +1500,16 @@ function renderPM() {
       const sv=pmSupply[r.k]!=null?pmSupply[r.k]:'';
       const si='<input class="cell" type="number" min="0" step="50" value="'+escapeHtml(String(sv))+'" data-sk="'+escapeHtml(r.k)+'" title="Expected supply M1 (units) — editable; M2 always 0 unless imported">';
       const sti='<input class="cell" type="number" min="0" step="1" value="'+escapeHtml(r.stock.toFixed(1))+'" data-stk="'+escapeHtml(r.k)+'" style="width:90px" title="Current stock (units) — editable">';
-      tr.innerHTML='<td class="num">'+(idx+1)+'</td><td>'+escapeHtml(r.name)+'</td><td class="sku-code">'+escapeHtml(officialPmCode(normKey(r.name))||'')+'</td><td class="sku-code" style="font-size:0.85em">'+escapeHtml(sapiensPmCodesLabel(r.k))+'</td><td class="num">'+mi+'</td><td class="num req">'+sti+'</td><td class="num">'+si+'</td><td class="num">'+fmt(r.supM2,1)+'</td>'+_qc2;
+      const iwi='<input class="cell" type="number" min="0" step="1" value="'+escapeHtml(r.inward.toFixed(1))+'" data-iw="'+escapeHtml(r.k)+'" style="width:90px" title="Expected inward (units) — stock-in-transit, added into current stock for all calculations — editable">';
+      tr.innerHTML='<td class="num">'+(idx+1)+'</td><td>'+escapeHtml(r.name)+'</td><td class="sku-code">'+escapeHtml(officialPmCode(normKey(r.name))||'')+'</td><td class="sku-code" style="font-size:0.85em">'+escapeHtml(sapiensPmCodesLabel(r.k))+'</td><td class="num">'+mi+'</td><td class="num req">'+sti+'</td><td class="num req">'+iwi+'</td><td class="num">'+si+'</td><td class="num">'+fmt(r.supM2,1)+'</td>'+_qc2;
       const inp=tr.querySelector('input.cell[data-k]');
       if(inp){inp.addEventListener('click',ev=>ev.stopPropagation());inp.addEventListener('change',()=>{pmMoq[inp.getAttribute('data-k')]=inp.value;renderPM();});}
       const sInp=tr.querySelector('input.cell[data-sk]');
       if(sInp){sInp.addEventListener('click',ev=>ev.stopPropagation());sInp.addEventListener('change',()=>{pmSupply[sInp.getAttribute('data-sk')]=sInp.value;renderPM();});}
       const stInp=tr.querySelector('input.cell[data-stk]');
       if(stInp){stInp.addEventListener('click',ev=>ev.stopPropagation());stInp.addEventListener('change',()=>{pmStockF[FACTORIES[0].code][stInp.getAttribute('data-stk')]=stInp.value;broadcastStockUpdate();renderPM();});}
+      const iwInp=tr.querySelector('input.cell[data-iw]');
+      if(iwInp){iwInp.addEventListener('click',ev=>ev.stopPropagation());iwInp.addEventListener('change',()=>{pmInward[iwInp.getAttribute('data-iw')]=iwInp.value;broadcastStockUpdate();renderPM();});}
       _ptb.appendChild(tr);
     });
     return;
@@ -1494,14 +1527,16 @@ function renderPM() {
     const reqM1 = ov ? (ov.m1 || 0) : 0, reqM2 = ov ? (ov.m2 || 0) : 0;
     const moq = num(pmMoq[k], true);
     const stock = stockTotal("pm", k);
+    const inward = num(pmInward[k], true);
+    const avail = stock + inward;   // current stock + expected inward — the number every calc below uses
     const supply = num(pmSupply[k], true);
     const supM1 = supply, supM2 = num(pmSupplyM2[k], true);
-    const availM1 = stock + supM1;
+    const availM1 = avail + supM1;
     const oM1 = fwdOrder(reqM1, availM1, moq);
-    const openM2 = Math.max(0, stock + supM1 + moqAdjOrder(oM1.oq, moq) - reqM1)   // opening stock M2 = carry-forward from M1 (floored at 0)
+    const openM2 = Math.max(0, avail + supM1 + moqAdjOrder(oM1.oq, moq) - reqM1)   // opening stock M2 = carry-forward from M1 (floored at 0)
     const availM2 = openM2 + supM2;
     const oM2 = fwdOrder(reqM2, availM2, moq);
-    return { k, name: bomName, reqM1, reqM2, moq, stock, openM2, supply, supM1, supM2, oM1, oM2 };
+    return { k, name: bomName, reqM1, reqM2, moq, stock, inward, avail, openM2, supply, supM1, supM2, oM1, oM2 };
   });
   const pmF = pmFilter.trim().toLowerCase();
   const pmItemsAllCount = items.length;
@@ -1512,9 +1547,9 @@ function renderPM() {
   const tbody = $("pmRows"); tbody.innerHTML = "";
   // Totals/KPIs always reflect the full PM list, regardless of the search filter — only
   // the visible rows narrow when searching.
-  let stockTot = 0, supplyTot = 0, supM1Tot = 0, supM2Tot = 0, openM2Tot = 0, m1Tot = 0, m2Tot = 0, adjM1Tot = 0, adjM2Tot = 0, reqM1Tot = 0, reqM2Tot = 0, ordersNeeded = 0;
+  let stockTot = 0, inwardTot = 0, supplyTot = 0, supM1Tot = 0, supM2Tot = 0, openM2Tot = 0, m1Tot = 0, m2Tot = 0, adjM1Tot = 0, adjM2Tot = 0, reqM1Tot = 0, reqM2Tot = 0, ordersNeeded = 0;
   items.forEach(r => {
-    stockTot += r.stock; supplyTot += r.supply; supM1Tot += r.supM1; supM2Tot += r.supM2; openM2Tot += r.openM2;
+    stockTot += r.stock; inwardTot += r.inward; supplyTot += r.supply; supM1Tot += r.supM1; supM2Tot += r.supM2; openM2Tot += r.openM2;
     m1Tot += r.oM1.oq; m2Tot += r.oM2.oq;
     adjM1Tot += moqAdjOrder(r.oM1.oq, r.moq); adjM2Tot += moqAdjOrder(r.oM2.oq, r.moq);
     reqM1Tot += r.reqM1; reqM2Tot += r.reqM2;
@@ -1528,6 +1563,8 @@ function renderPM() {
       '" data-sk="' + escapeHtml(r.k) + '" style="width:80px" title="Expected supply M1 (units) — editable; M2 always 0 unless imported">';
     const stockIn = '<input class="cell" type="number" min="0" step="1" value="' + escapeHtml(r.stock.toFixed(1)) +
       '" data-stk="' + escapeHtml(r.k) + '" style="width:90px" title="Current stock (units) — editable">';
+    const inwardIn = '<input class="cell" type="number" min="0" step="1" value="' + escapeHtml(r.inward.toFixed(1)) +
+      '" data-iw="' + escapeHtml(r.k) + '" style="width:90px" title="Expected inward (units) — stock-in-transit, added into current stock for all calculations — editable">';
     tr.innerHTML =
       '<td class="num">' + (idx + 1) + '</td>' +
       '<td>' + escapeHtml(r.name) + '</td>' +
@@ -1535,9 +1572,10 @@ function renderPM() {
       '<td class="sku-code" style="font-size:0.85em">' + escapeHtml(sapiensPmCodesLabel(r.k)) + '</td>' +
       '<td class="num">' + moqIn + '</td>' +
       '<td class="num req">' + stockIn + '</td>' +
+      '<td class="num req">' + inwardIn + '</td>' +
       '<td class="num">' + supIn + '</td>' +
       '<td class="num">' + fmt(r.supM2,1) + '</td>' +
-      '<td class="num">' + fmt(r.reqM1,1) + '</td>' + '<td class="num">' + (r.stock != null && r.reqM1 > 0 ? (r.stock * 30 / r.reqM1).toFixed(1) : '—') + '<td class="num req">' + fmt(r.oM1.oq,1) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM1.oq, r.moq),1) + '</td>' + diffCell(r.oM1.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM1) + '</td>' +
+      '<td class="num">' + fmt(r.reqM1,1) + '</td>' + '<td class="num">' + (r.avail != null && r.reqM1 > 0 ? (r.avail * 30 / r.reqM1).toFixed(1) : '—') + '<td class="num req">' + fmt(r.oM1.oq,1) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM1.oq, r.moq),1) + '</td>' + diffCell(r.oM1.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM1) + '</td>' +
       '<td class="num">' + fmt(r.openM2,1) + '</td><td class="num">' + fmt(r.reqM2,1) + '</td>' + '<td class="num">' + (r.openM2 != null && r.reqM2 > 0 ? (r.openM2 * 30 / r.reqM2).toFixed(1) : '—') + '<td class="num req">' + fmt(r.oM2.oq,1) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM2.oq, r.moq),1) + '</td>' + diffCell(r.oM2.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM2) + '</td>' +
       '<td class="num"></td>';
     tbody.appendChild(tr);
@@ -1550,16 +1588,19 @@ function renderPM() {
     const stInp = tr.querySelector("input.cell[data-stk]");
     stInp.addEventListener("click", ev => ev.stopPropagation());
     stInp.addEventListener("change", () => { pmStockF[FACTORIES[0].code][stInp.getAttribute("data-stk")] = stInp.value; broadcastStockUpdate(); renderPM(); });
+    const iwInp = tr.querySelector("input.cell[data-iw]");
+    iwInp.addEventListener("click", ev => ev.stopPropagation());
+    iwInp.addEventListener("change", () => { pmInward[iwInp.getAttribute("data-iw")] = iwInp.value; broadcastStockUpdate(); renderPM(); });
   });
 
   $("pmDistinct").textContent = items.length;
   $("pmDistinct2").textContent = items.length;
-  $("pmStockTot").textContent = fmt(stockTot,1);
+  $("pmStockTot").textContent = fmt(stockTot + inwardTot,1);
   $("pmSupplyTot").textContent = fmt(supplyTot,1);
   $("pmOrderM1").textContent = fmt(m1Tot,1);
   $("pmOrderM2").textContent = fmt(m2Tot,1);
   $("pmAtRisk").textContent = ordersNeeded;
-  $("pmFootStock").textContent = fmt(stockTot,1);
+  $("pmFootStock").textContent = fmt(stockTot + inwardTot,1);
   $("pmFootSupplyM1").textContent = fmt(supM1Tot,1);
   $("pmFootSupplyM2").textContent = fmt(supM2Tot,1);
   $("pmFootReqM1").textContent = fmt(reqM1Tot,1);
@@ -2073,9 +2114,18 @@ function applyStockRows(rows, kind) {
     rows.forEach(r => { const v = cell(r, c); if (v && resolve(v)) hits++; });
     if (hits > idHits) { idHits = hits; idCol = c; }
   }
-  let qtyCol = -1, qHits = -1;
+  // Expected Inward (stock-in-transit) column — identified by header text so it's never
+  // confused with the main Current Stock quantity column below. Optional: files without
+  // this column simply leave rmInward/pmInward untouched for materials not mentioned here.
+  const hdr = (rows[0] || []).map(h => String(h || "").toLowerCase().replace(/[^a-z0-9]/g, ""));
+  let inwardCol = -1;
   for (let c = 0; c < width; c++) {
     if (c === idCol) continue;
+    if (hdr[c] && (hdr[c].includes("inward") || hdr[c].includes("intransit") || hdr[c].includes("transit"))) { inwardCol = c; break; }
+  }
+  let qtyCol = -1, qHits = -1;
+  for (let c = 0; c < width; c++) {
+    if (c === idCol || c === inwardCol) continue;
     let hits = 0;
     rows.forEach(r => { const s = cell(r, c); if (s !== "" && isFinite(parseFloat(s))) hits++; });
     if (hits > qHits) { qHits = hits; qtyCol = c; }
@@ -2084,8 +2134,10 @@ function applyStockRows(rows, kind) {
   // Sapiens-side sub-materials (e.g. Jaggery Powder) gets the sum of all its rows. A code
   // shared across more than one material (e.g. a jar + its matching cap) applies the same
   // row's quantity to every material it resolves to, not just one.
-  const sums = {}; const unmatched = []; // [{identifier, reason}]
-  rows.forEach(r => {
+  const sums = {}; const inwardSums = {}; const unmatched = []; // [{identifier, reason}]
+  const skipHeaderRow = inwardCol >= 0 && rows[0] && !isFinite(parseFloat(cell(rows[0], inwardCol).replace(/,/g, "")));
+  rows.forEach((r, i) => {
+    if (i === 0 && skipHeaderRow) return;
     const raw = cell(r, idCol);
     if (!raw) return;                                       // no identifier at all — likely a blank/filler row, ignore silently
     const qs = qtyCol >= 0 ? cell(r, qtyCol) : "";
@@ -2102,6 +2154,13 @@ function applyStockRows(rows, kind) {
     }
     const v = num(qs, true);
     keys.forEach(key => { sums[key] = (sums[key] || 0) + v; });
+    if (inwardCol >= 0) {
+      const iqs = cell(r, inwardCol).replace(/,/g, "");
+      if (iqs !== "" && isFinite(parseFloat(iqs))) {
+        const iv = num(iqs, true);
+        keys.forEach(key => { inwardSums[key] = (inwardSums[key] || 0) + iv; });
+      }
+    }
   });
   const SAP = FACTORIES[0].code;
   const store = kind === "rm" ? rmStockF : pmStockF;
@@ -2113,7 +2172,11 @@ function applyStockRows(rows, kind) {
       else rmFirm[key] = { code: rmCodeReal[key] || (matMaster[key] ? matMaster[key].code : "") || "", stock: total, supply: rmSupply[key] || 0 };
     }
   });
-  return { matched: Object.keys(sums).length, unmatched };
+  if (inwardCol >= 0) {
+    const inwardStore = kind === "rm" ? rmInward : pmInward;
+    Object.keys(inwardSums).forEach(key => { inwardStore[key] = String(inwardSums[key]); });
+  }
+  return { matched: Object.keys(sums).length, unmatched, inwardMatched: Object.keys(inwardSums).length, inwardColFound: inwardCol >= 0 };
 }
 /* Import expected supply (kg for RM, units for PM) for a single kind — used by the
  * Consolidated RM/PM tabs' "Import Expected Supply" button. The identifier column can
@@ -2366,7 +2429,7 @@ function exportForNovaCore() {
 }
 function exportRM() {
   const agg = aggregateRM();
-  const L = ["RM Code,RM Name,MOQ (kg),Current Stock (kg),Exp Supply M1 (kg),Exp Supply M2 (kg)," +
+  const L = ["RM Code,RM Name,MOQ (kg),Current Stock (kg),Expected Inward (kg),Exp Supply M1 (kg),Exp Supply M2 (kg)," +
     "M1 Required qty,M1 Desired quantity,M1 Actual Quantity,M1 Diff,M1 Status," +
     "M2 Required qty,M2 Desired quantity,M2 Actual Quantity,M2 Diff,M2 Status"];
   agg.forEach(e => {
@@ -2377,18 +2440,18 @@ function exportRM() {
     const moqStr = (rmMoq[k] == null || rmMoq[k] === "") ? "" : String(rmMoq[k]);
     const code = officialRmCode(k);
     if (!matched) {
-      L.push([csvField(code), csvField(e.name), moqStr, "NA", "NA", "NA",
+      L.push([csvField(code), csvField(e.name), moqStr, "NA", "NA", "NA", "NA",
         reqM1.toFixed(1), "NA", "NA", "NA", "no stock feed", reqM2.toFixed(1), "NA", "NA", "NA", "no stock feed"].join(","));
       return;
     }
-    const stock = stockTotal("rm", k), supply = num(rmSupply[k], true);
+    const stock = stockTotal("rm", k), inward = num(rmInward[k], true), avail = stock + inward, supply = num(rmSupply[k], true);
     const supM1 = supply, supM2 = num(rmSupplyM2[k], true);
-    const availM1 = stock + supM1;
+    const availM1 = avail + supM1;
     const o1 = fwdOrder(reqM1, availM1, moq);
-    const openM2 = Math.max(0, stock + supM1 + moqAdjOrder(o1.oq, moq) - reqM1);   // opening stock M2 = carry-forward from M1 (floored at 0), matching the on-screen Opening Stock M2 column
+    const openM2 = Math.max(0, avail + supM1 + moqAdjOrder(o1.oq, moq) - reqM1);   // opening stock M2 = carry-forward from M1 (floored at 0), matching the on-screen Opening Stock M2 column
     const availM2 = openM2 + supM2;
     const o2 = fwdOrder(reqM2, availM2, moq);
-    L.push([csvField(code), csvField(e.name), moqStr, stock.toFixed(3), supM1.toFixed(3), supM2.toFixed(3),
+    L.push([csvField(code), csvField(e.name), moqStr, stock.toFixed(3), inward.toFixed(3), supM1.toFixed(3), supM2.toFixed(3),
       reqM1.toFixed(1), o1.oq.toFixed(1), moqAdjOrder(o1.oq, moq).toFixed(1), (moqDiff(o1.oq, moq) * 100).toFixed(1) + "%", o1.status,
       reqM2.toFixed(1), o2.oq.toFixed(1), moqAdjOrder(o2.oq, moq).toFixed(1), (moqDiff(o2.oq, moq) * 100).toFixed(1) + "%", o2.status].join(","));
   });
@@ -2396,7 +2459,7 @@ function exportRM() {
 }
 function exportPM() {
   const agg = aggregatePM();
-  const L = ["PM Name,MOQ (units),Stock (units)," +
+  const L = ["PM Name,MOQ (units),Stock (units),Expected Inward (units)," +
     "M1 Required qty,M1 Desired quantity,M1 Actual Quantity,M1 Diff,M1 Status," +
     "M2 Required qty,M2 Desired quantity,M2 Actual Quantity,M2 Diff,M2 Status"];
   agg.forEach(e => {
@@ -2405,11 +2468,13 @@ function exportPM() {
     const reqM1 = e.reqM1U, reqM2 = e.reqM2U;
     const moq = num(pmMoq[k], true);
     const stock = stockTotal("pm", k);
-    const availM1 = stock;
+    const inward = num(pmInward[k], true);
+    const avail = stock + inward;
+    const availM1 = avail;
     const o1 = fwdOrder(reqM1, availM1, moq);
-    const stockIntoM2 = stock - reqM1;
+    const stockIntoM2 = avail - reqM1;
     const o2 = fwdOrder(reqM2, stockIntoM2, moq);
-    L.push([csvField(e.name), moq, Math.round(stock),
+    L.push([csvField(e.name), moq, Math.round(stock), Math.round(inward),
       Math.round(reqM1), Math.round(o1.oq), Math.round(moqAdjOrder(o1.oq, moq)), (moqDiff(o1.oq, moq) * 100).toFixed(1) + "%", o1.status,
       Math.round(reqM2), Math.round(o2.oq), Math.round(moqAdjOrder(o2.oq, moq)), (moqDiff(o2.oq, moq) * 100).toFixed(1) + "%", o2.status].join(","));
   });
@@ -2809,6 +2874,7 @@ function wire() {
       if (!rows.length) throw new Error("The file has no rows.");
       const res = applyStockRows(rows, "rm");
       msg.innerHTML = "Imported current stock for <b>" + res.matched + "</b> RM(s)" +
+        (res.inwardColFound ? "; expected inward read for <b>" + res.inwardMatched + "</b> RM(s)" : "") +
         (res.unmatched.length ? "; <span class='miss-badge'>" + res.unmatched.length + " row(s) could not be mapped</span> — see popup" : "") + ".";
       showUnmatchedModal("Import Current Stock (RM) — unmatched rows", res.unmatched);
       renderRM();
@@ -2835,6 +2901,7 @@ function wire() {
       if (!rows.length) throw new Error("The file has no rows.");
       const res = applyStockRows(rows, "pm");
       msg.innerHTML = "Imported current stock for <b>" + res.matched + "</b> PM(s)" +
+        (res.inwardColFound ? "; expected inward read for <b>" + res.inwardMatched + "</b> PM(s)" : "") +
         (res.unmatched.length ? "; <span class='miss-badge'>" + res.unmatched.length + " row(s) could not be mapped</span> — see popup" : "") + ".";
       showUnmatchedModal("Import Current Stock (PM) — unmatched rows", res.unmatched);
       renderPM();
@@ -3369,10 +3436,13 @@ function broadcastStockUpdate() {
     const skuNames = {}, packSizes = {};
     SKU.forEach(s => { skuNames[s.sku_code] = s.fg_name; packSizes[s.sku_code] = s.pack_size_g; });
 
+    // Broadcast the effective stock (current stock + expected inward) — the Scheduler's own
+    // fallback DOC recompute (used only when this MRP tool's authoritative skuDocM1/M2 aren't
+    // available) should see the same "current stock" figure this tool uses everywhere else.
     const rmStock = {}, pmStock = {};
     MATLIST.forEach(e => {
-      if (e.kind === 'rm') rmStock[e.key] = stockTotal('rm', e.key);
-      else                 pmStock[e.key] = stockTotal('pm', e.key);
+      if (e.kind === 'rm') rmStock[e.key] = stockAvailable('rm', e.key);
+      else                 pmStock[e.key] = stockAvailable('pm', e.key);
     });
 
     const rmBom = {}, pmBom = {};
@@ -3460,7 +3530,7 @@ function getMats(skuCode) {
       var req2=ovR?(num(ovR.m2,true)):pct/100*packG*dem2/1000;
       var hasReq1=ovR?true:dem1>0;
       var hasReq2=ovR?true:dem2>0;
-      var f=rmFirm[nk]; var stock=stockTotal('rm',nk); var moq=num(rmMoq[nk],true);
+      var f=rmFirm[nk]; var stock=stockAvailable('rm',nk); var moq=num(rmMoq[nk],true);
       var docM1=(stock!=null&&req1>0)?stock/(req1/30):null;
       var docM2=(stock!=null&&req2>0)?stock/(req2/30):null;
       return {code:f?f.code:'',name:r.rm_name,stock:stock,moq:moq,req1:req1,req2:req2,hasReq1:hasReq1,hasReq2:hasReq2,docM1:docM1,docM2:docM2};
@@ -3472,7 +3542,7 @@ function getMats(skuCode) {
       var req2=ovP?(num(ovP.m2,true)):qpu*dem2;
       var hasReq1=ovP?true:dem1>0;
       var hasReq2=ovP?true:dem2>0;
-      var stock=stockTotal('pm',nk); var moq=num(pmMoq[nk],true);
+      var stock=stockAvailable('pm',nk); var moq=num(pmMoq[nk],true);
       var docM1=(stock!=null&&req1>0)?stock/(req1/30):null;
       var docM2=(stock!=null&&req2>0)?stock/(req2/30):null;
       return {code:r.pm_code||'',name:r.pm_name,stock:stock,moq:moq,req1:req1,req2:req2,hasReq1:hasReq1,hasReq2:hasReq2,docM1:docM1,docM2:docM2};
@@ -3614,14 +3684,14 @@ function schedMinMatDoc(skuCode) {
     var k = normKey(r.rm_name);
     var ov = rmReqOverride[k];
     if (!ov || !(ov.m1 > 0)) return;
-    var stock = stockTotal("rm", k);
+    var stock = stockAvailable("rm", k);
     minDoc = Math.min(minDoc, stock * 30 / ov.m1);
   });
   PM.filter(function(r){ return r.sku_code === skuCode; }).forEach(function(r){
     var k = normKey(r.pm_name);
     var ov = pmReqOverride[k];
     if (!ov || !(ov.m1 > 0)) return;
-    var stock = stockTotal("pm", k);
+    var stock = stockAvailable("pm", k);
     minDoc = Math.min(minDoc, stock * 30 / ov.m1);
   });
   return minDoc === Infinity ? null : minDoc;
