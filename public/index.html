@@ -46,6 +46,21 @@
   .sticky-table { overflow: visible; }
   .sticky-table thead tr:nth-child(1) th { position:sticky; top:0; z-index:6; background:#f1f5f9; }
   .sticky-table thead tr:nth-child(2) th { position:sticky; top:var(--sticky-row1-h,34px); z-index:6; background:#f1f5f9; }
+  /* Freeze the first 4 identifier columns (#, code, name, vendor code) while scrolling the
+   * table sideways — same idea as the sticky header above, just on the horizontal axis.
+   * Widths are fixed (not just suggested) so the left offsets below always line up. */
+  .sticky-table th:nth-child(-n+4), .sticky-table td:nth-child(-n+4) {
+    position: sticky; background: var(--card, #fff);
+  }
+  .sticky-table thead th:nth-child(-n+4) { z-index: 7; }   /* above both the sticky header row and frozen body cells */
+  .sticky-table tbody td:nth-child(-n+4) { z-index: 2; }   /* above normal scrolling body cells, below the header */
+  .sticky-table th:nth-child(1), .sticky-table td:nth-child(1) { left:0px;   width:44px;  min-width:44px;  max-width:44px; }
+  .sticky-table th:nth-child(2), .sticky-table td:nth-child(2) { left:44px;  width:140px; min-width:140px; max-width:140px; white-space:normal; overflow-wrap:anywhere; }
+  .sticky-table th:nth-child(3), .sticky-table td:nth-child(3) { left:184px; width:220px; min-width:220px; max-width:220px; white-space:normal; overflow-wrap:anywhere; }
+  .sticky-table th:nth-child(4), .sticky-table td:nth-child(4) {
+    left:404px; width:130px; min-width:130px; max-width:130px; white-space:normal; overflow-wrap:anywhere;
+    box-shadow: 4px 0 6px -4px rgba(0,0,0,.25);   /* subtle edge so it's clear content is scrolling underneath */
+  }
   th.num, td.num { text-align:right; font-variant-numeric:tabular-nums; }
   tbody tr:last-child td { border-bottom:none; }
   tfoot td { background:#f8fafc; font-weight:700; }
