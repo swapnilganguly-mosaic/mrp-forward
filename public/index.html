@@ -1285,8 +1285,9 @@ function renderRM() {
       // Stock/Expected Supply have actually been imported for it, regardless of whether it was
       // ever part of the older Firm-sheet seed.
       const stock = stockTotal('rm', k);
+      const inward = num(rmInward[k], true);
       const supM1 = num(rmSupply[k], true), supM2 = num(rmSupplyM2[k], true);
-      return {k,name,matched:true,moq,code,stock,supM1,supM2};
+      return {k,name,matched:true,moq,code,stock,inward,supM1,supM2};
     });
     const _rf = rmFilter.trim().toLowerCase();
     const _niShown = _rf ? _ni.filter(r => (r.name||"").toLowerCase().includes(_rf) || (r.code||"").toLowerCase().includes(_rf)) : _ni;
