@@ -184,6 +184,8 @@
   <!-- ============ TAB 2: CONSOLIDATED RM ============ -->
   <section class="panel" id="panel-rm">
     <div class="grand">
+      <input class="search" id="rmSearch" placeholder="Search by RM code or name…" style="width:240px" />
+      <span class="count-tag" id="rmSearchCount"></span>
       <div class="kpi"><b id="rmDistinct">0</b><span>Distinct raw materials</span></div>
       <div class="kpi"><b id="rmStockTot">0.000</b><span>Current stock (kg)</span></div>
       <div class="kpi"><b id="rmSupplyTot">0.000</b><span>Expected supply (kg)</span></div>
@@ -245,6 +247,8 @@
   <!-- ============ TAB 3: CONSOLIDATED PM ============ -->
   <section class="panel" id="panel-pm">
     <div class="grand">
+      <input class="search" id="pmSearch" placeholder="Search by PM code or name…" style="width:240px" />
+      <span class="count-tag" id="pmSearchCount"></span>
       <div class="kpi"><b id="pmDistinct">0</b><span>Distinct packaging materials</span></div>
       <div class="kpi"><b id="pmStockTot">0</b><span>Stock in hand (units)</span></div>
       <div class="kpi"><b id="pmSupplyTot">0</b><span>Expected supply (units)</span></div>
@@ -780,6 +784,8 @@ let schedMaxCap     = {};
 let schedMonthPlan  = {};
 let schedSubTab     = "input";;
 let demandFilter = "";
+let rmFilter = "";
+let pmFilter = "";
 let planDays = "30";   // demand-plan horizon (days); converts total requirement -> daily rate for DOH
 
 /* ---------- factory / co-packer dimension ----------
@@ -1241,11 +1247,14 @@ function renderRM() {
       const supM1 = num(rmSupply[k], true), supM2 = num(rmSupplyM2[k], true);
       return {k,name,matched:true,moq,code,stock,supM1,supM2};
     });
-    _ni.sort((a,b)=>(a.name||"").localeCompare(b.name||""));
+    const _rf = rmFilter.trim().toLowerCase();
+    const _niShown = _rf ? _ni.filter(r => (r.name||"").toLowerCase().includes(_rf) || (r.code||"").toLowerCase().includes(_rf)) : _ni;
+    if ($("rmSearchCount")) $("rmSearchCount").textContent = _rf ? (_niShown.length + " of " + _ni.length + " shown") : "";
+    _niShown.sort((a,b)=>(a.name||"").localeCompare(b.name||""));
     const _tb=$('rmRows'); _tb.innerHTML='';
     const _d='<span class="muted">\u2014</span>';
     const _qc=Array(14).fill('<td class="num">'+_d+'</td>').join('');
-    _ni.forEach((r,idx)=>{
+    _niShown.forEach((r,idx)=>{
       const tr=document.createElement('tr');
       const mv=rmMoq[r.k]!=null?rmMoq[r.k]:'';
       const mi='<input class="cell" type="number" min="0" step="25" value="'+escapeHtml(String(mv))+'" data-k="'+escapeHtml(r.k)+'">';
@@ -1288,15 +1297,28 @@ function renderRM() {
     }
     return { k, name: bomName, reqM1, reqM2, matched, supply, supM1, supM2, moq, code, stock, openM2, oM1, oM2 };
   });
-  items.sort((a, b) => {
+  const rmF = rmFilter.trim().toLowerCase();
+  const itemsAllCount = items.length;
+  const itemsShown = rmF ? items.filter(r => (r.name||"").toLowerCase().includes(rmF) || (r.code||"").toLowerCase().includes(rmF)) : items;
+  if ($("rmSearchCount")) $("rmSearchCount").textContent = rmF ? (itemsShown.length + " of " + itemsAllCount + " shown") : "";
+  itemsShown.sort((a, b) => {
     if (a.matched !== b.matched) return a.matched ? -1 : 1;
     return b.reqM1 - a.reqM1;
   });
 
   const tbody = $("rmRows"); tbody.innerHTML = "";
+  // Totals/KPIs always reflect the full 82-RM list, regardless of the search filter —
+  // only the visible rows narrow when searching.
   let stockTot = 0, supplyTot = 0, supM1Tot = 0, supM2Tot = 0, openM2Tot = 0, m1Tot = 0, m2Tot = 0, adjM1Tot = 0, adjM2Tot = 0, reqM1Tot = 0, reqM2Tot = 0, ordersNeeded = 0, na = 0;
-  items.forEach((r, idx) => {
+  items.forEach(r => {
     reqM1Tot += r.reqM1; reqM2Tot += r.reqM2;
+    if (!r.matched) { na++; return; }
+    stockTot += r.stock; supplyTot += r.supply; supM1Tot += r.supM1; supM2Tot += r.supM2; openM2Tot += r.openM2;
+    m1Tot += r.oM1.oq; m2Tot += r.oM2.oq;
+    adjM1Tot += moqAdjOrder(r.oM1.oq, r.moq); adjM2Tot += moqAdjOrder(r.oM2.oq, r.moq);
+    if (r.oM1.oq > 0) ordersNeeded++;
+  });
+  itemsShown.forEach((r, idx) => {
     const tr = document.createElement("tr"); tr.className = "clickable";
     const moqVal = (rmMoq[r.k] == null ? "" : rmMoq[r.k]);
     const moqIn = '<input class="cell" type="number" min="0" step="25" value="' + escapeHtml(moqVal) +
@@ -1304,7 +1326,6 @@ function renderRM() {
     const stockIn = r.matched ? ('<input class="cell" type="number" min="0" step="1" value="' + escapeHtml(r.stock.toFixed(1)) +
       '" data-stk="' + escapeHtml(r.k) + '" style="width:90px" title="Current stock (kg) — editable">') : '';
     if (!r.matched) {
-      na++;
       tr.innerHTML =
         '<td class="num">' + (idx + 1) + '</td>' +
         '<td class="sku-code">' + escapeHtml(r.code || "—") + '</td><td>' + escapeHtml(r.name) + '</td>' +
@@ -1317,10 +1338,6 @@ function renderRM() {
         '<td class="num">NA</td><td class="num">' + fmt(r.reqM2, 1) + '</td>' + '<td class="num">' + (r.stock != null && r.reqM2 > 0 ? (r.stock * 30 / r.reqM2).toFixed(1) : '—') + '<td class="num">NA</td><td class="num">NA</td><td class="num">NA</td><td><span class="tag none">no stock feed</span></td>' +
         '<td class="num"></td>';
     } else {
-      stockTot += r.stock; supplyTot += r.supply; supM1Tot += r.supM1; supM2Tot += r.supM2; openM2Tot += r.openM2;
-      m1Tot += r.oM1.oq; m2Tot += r.oM2.oq;
-      adjM1Tot += moqAdjOrder(r.oM1.oq, r.moq); adjM2Tot += moqAdjOrder(r.oM2.oq, r.moq);
-      if (r.oM1.oq > 0) ordersNeeded++;
       tr.innerHTML =
         '<td class="num">' + (idx + 1) + '</td>' +
         '<td class="sku-code">' + escapeHtml(r.code || "—") + '</td><td>' + escapeHtml(r.name) + '</td>' +
@@ -1414,11 +1431,14 @@ function renderPM() {
       const supply = num(pmSupply[k],true); const supM1 = supply, supM2 = num(pmSupplyM2[k], true);
       return {k, name, stock: stock||0, moq, supply, supM1, supM2};
     });
-    _pi.sort((a,b)=>a.name.localeCompare(b.name));
+    const _pf = pmFilter.trim().toLowerCase();
+    const _piShown = _pf ? _pi.filter(r => (r.name||"").toLowerCase().includes(_pf) || (officialPmCode(r.k)||"").toLowerCase().includes(_pf)) : _pi;
+    if ($("pmSearchCount")) $("pmSearchCount").textContent = _pf ? (_piShown.length + " of " + _pi.length + " shown") : "";
+    _piShown.sort((a,b)=>a.name.localeCompare(b.name));
     const _ptb=$('pmRows'); _ptb.innerHTML='';
     const _d2='<span class="muted">\u2014</span>';
     const _qc2=Array(14).fill('<td class="num">'+_d2+'</td>').join('');
-    _pi.forEach((r,idx)=>{
+    _piShown.forEach((r,idx)=>{
       const tr=document.createElement('tr');
       const mv=pmMoq[r.k]!=null?pmMoq[r.k]:'';
       const mi='<input class="cell" type="number" min="0" step="25" value="'+escapeHtml(String(mv))+'" data-k="'+escapeHtml(r.k)+'">';
@@ -1458,16 +1478,24 @@ function renderPM() {
     const oM2 = fwdOrder(reqM2, availM2, moq);
     return { k, name: bomName, reqM1, reqM2, moq, stock, openM2, supply, supM1, supM2, oM1, oM2 };
   });
-  items.sort((a, b) => b.reqM1 - a.reqM1);
+  const pmF = pmFilter.trim().toLowerCase();
+  const pmItemsAllCount = items.length;
+  const itemsShown = pmF ? items.filter(r => (r.name||"").toLowerCase().includes(pmF) || (officialPmCode(r.k)||"").toLowerCase().includes(pmF)) : items;
+  if ($("pmSearchCount")) $("pmSearchCount").textContent = pmF ? (itemsShown.length + " of " + pmItemsAllCount + " shown") : "";
+  itemsShown.sort((a, b) => b.reqM1 - a.reqM1);
 
   const tbody = $("pmRows"); tbody.innerHTML = "";
+  // Totals/KPIs always reflect the full PM list, regardless of the search filter — only
+  // the visible rows narrow when searching.
   let stockTot = 0, supplyTot = 0, supM1Tot = 0, supM2Tot = 0, openM2Tot = 0, m1Tot = 0, m2Tot = 0, adjM1Tot = 0, adjM2Tot = 0, reqM1Tot = 0, reqM2Tot = 0, ordersNeeded = 0;
-  items.forEach((r, idx) => {
+  items.forEach(r => {
     stockTot += r.stock; supplyTot += r.supply; supM1Tot += r.supM1; supM2Tot += r.supM2; openM2Tot += r.openM2;
     m1Tot += r.oM1.oq; m2Tot += r.oM2.oq;
     adjM1Tot += moqAdjOrder(r.oM1.oq, r.moq); adjM2Tot += moqAdjOrder(r.oM2.oq, r.moq);
     reqM1Tot += r.reqM1; reqM2Tot += r.reqM2;
     if (r.oM1.oq > 0) ordersNeeded++;
+  });
+  itemsShown.forEach((r, idx) => {
     const tr = document.createElement("tr"); tr.className = "clickable";
     const moqIn = '<input class="cell" type="number" min="0" step="50" value="' + r.moq +
       '" data-k="' + escapeHtml(r.k) + '" style="width:80px" title="MOQ (editable)">';
@@ -2559,6 +2587,8 @@ function wire() {
   document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => showTab(t.dataset.tab)));
 
   $("demandSearch").addEventListener("input", e => { demandFilter = e.target.value; renderDemand(); });
+  if ($("rmSearch")) $("rmSearch").addEventListener("input", e => { rmFilter = e.target.value; renderRM(); });
+  if ($("pmSearch")) $("pmSearch").addEventListener("input", e => { pmFilter = e.target.value; renderPM(); });
   $("btnReset").addEventListener("click", () => { SKU.forEach(s => { demand[s.sku_code] = "0"; demandM2[s.sku_code] = "0"; }); showTab(curTab); });
   $("planDays").addEventListener("input", e => { planDays = e.target.value; if (curTab === "rm" || curTab === "pm") showTab(curTab); });
 
