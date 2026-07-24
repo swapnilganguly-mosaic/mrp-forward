@@ -1170,10 +1170,6 @@ function renderDemand() {
   let shown = 0;
   SKU.forEach(s => {
     if (f && !(s.sku_code.toLowerCase().includes(f) || s.fg_name.toLowerCase().includes(f))) return;
-    // A SKU with no supply for M1, or no supply for M2, isn't a candidate for this planning
-    // cycle at all — hide it from this tab entirely (bulk import/paste still writes its
-    // demand value regardless of visibility here; this only affects what's shown/broadcast).
-    if (!skuHasSupplyBothMonths(s.sku_code)) return;
     shown++;
     const tr = document.createElement("tr");
 
@@ -1199,14 +1195,8 @@ function renderDemand() {
     tbody.appendChild(tr);
     updateDemandRow(tr, s);
   });
-  $("demandCount").textContent = shown + " of " + SKU.length + " SKUs shown (SKUs missing supply for M1 or M2 are hidden)";
+  $("demandCount").textContent = shown + " of " + SKU.length + " SKUs shown";
   updateDemandFooter();
-}
-/* A SKU only counts as "in play" for this planning cycle once it has real supply for BOTH
- * months — used to hide zero/missing-supply SKUs from the Supply Entry and SKU DOC tabs,
- * and to keep them out of what gets broadcast to the Scheduler. */
-function skuHasSupplyBothMonths(skuCode) {
-  return num(demand[skuCode], true) > 0 && num(demandM2[skuCode], true) > 0;
 }
 /* batch weight (kg) for one SKU row, updated live without re-render. */
 function updateDemandRow(tr, s) {
@@ -3476,13 +3466,7 @@ function broadcastStockUpdate() {
     // gate applies a different lead time to each) and a flag for whether Required Qty has
     // actually been imported for that SKU yet (drives the "Awaiting Data" bucket).
     const skuDocM1 = {}, skuDocM2 = {}, skuRmDocM1 = {}, skuPmDocM1 = {}, skuRmDocM2 = {}, skuPmDocM2 = {}, skuHasReqData = {};
-    // Only broadcast SKUs that actually have supply for BOTH M1 and M2 this cycle — a SKU
-    // missing supply for either month is excluded here entirely (not just given a 0/null),
-    // so the Scheduler never receives it as an "awaiting/blocked" row with stale/partial
-    // numbers; from the Scheduler's own point of view it simply isn't part of this cycle.
-    SKU.filter(s => skuHasSupplyBothMonths(s.sku_code)).forEach(s => {
-      skuNames[s.sku_code] = s.fg_name; // re-affirm (already set above) — keeps this block self-contained
-      packSizes[s.sku_code] = s.pack_size_g;
+    SKU.forEach(s => {
       skuDocM1[s.sku_code] = schedSkuDocMinM1(s.sku_code);
       skuDocM2[s.sku_code] = schedSkuDocMinM2(s.sku_code);
       skuRmDocM1[s.sku_code] = schedSkuRmDocMinM1(s.sku_code);
@@ -3491,10 +3475,6 @@ function broadcastStockUpdate() {
       skuPmDocM2[s.sku_code] = schedSkuPmDocMinM2(s.sku_code);
       skuHasReqData[s.sku_code] = schedSkuHasReqData(s.sku_code);
     });
-    // skuNames/packSizes were pre-populated for every SKU further up (for other consumers);
-    // strip out the ones that don't qualify this cycle so the Scheduler's own SKU discovery
-    // (which unions in Object.keys(mrpData.skuNames)) doesn't pick them up either.
-    Object.keys(skuNames).forEach(code => { if (!skuHasSupplyBothMonths(code)) { delete skuNames[code]; delete packSizes[code]; } });
 
     window.parent.postMessage({
       type: 'MRP_STOCK_UPDATE',
@@ -3555,9 +3535,7 @@ function renderSkuDoc() {
   var picker = $('skuDocPicker');
   if (!picker) return;
   if (picker.options.length <= 1) {
-    // Only offer SKUs that actually have supply for both M1 and M2 in this cycle — same
-    // rule as the Supply Entry tab, so this tab can never show a SKU that isn't in play.
-    var skus0 = Object.keys(skuIndex).filter(skuHasSupplyBothMonths).sort(function(a,b){return (skuIndex[a].fg_name||'').localeCompare(skuIndex[b].fg_name||'');});
+    var skus0 = Object.keys(skuIndex).sort(function(a,b){return (skuIndex[a].fg_name||'').localeCompare(skuIndex[b].fg_name||'');});
     skus0.forEach(function(sku) {
       var o = document.createElement('option');
       o.value = sku; o.textContent = skuIndex[sku].fg_name || sku;
@@ -3579,7 +3557,7 @@ function renderSkuDoc() {
     tbl.style.cssText='width:100%;border-collapse:collapse;font-size:0.9em';
     tbl.innerHTML='<thead><tr style="background:#f0f0f0;text-align:left"><th style="padding:6px 8px">SKU Name</th><th style="padding:6px 8px;text-align:center">Min RM DOC M1</th><th style="padding:6px 8px;text-align:center">Min RM DOC M2</th><th style="padding:6px 8px">Bottleneck RM</th><th style="padding:6px 8px;text-align:center">Min PM DOC M1</th><th style="padding:6px 8px;text-align:center">Min PM DOC M2</th><th style="padding:6px 8px">Bottleneck PM</th></tr></thead>';
     var tbody=document.createElement('tbody');
-    var allSkus=Object.keys(skuIndex).filter(skuHasSupplyBothMonths).sort(function(a,b){return (skuIndex[a].fg_name||'').localeCompare(skuIndex[b].fg_name||'');});
+    var allSkus=Object.keys(skuIndex).sort(function(a,b){return (skuIndex[a].fg_name||'').localeCompare(skuIndex[b].fg_name||'');});
     allSkus.forEach(function(sku){
       var d=getMats(sku);
       var rmByM1=d.rm.filter(function(r){return r.docM1!=null;}).sort(function(a,b){return a.docM1-b.docM1;});
