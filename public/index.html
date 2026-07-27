@@ -1073,6 +1073,31 @@ function stockAvailable(kind, key) {
   const inward = kind === "rm" ? rmInward : pmInward;
   return stockTotal(kind, key) + num(inward[key], true);
 }
+/* Per-material DOC M1/M2 — the SINGLE source of truth for these two numbers, used by both
+ * the Consolidated RM/PM tabs' rendering AND the SKU DOC tab (via getMats() below), so the
+ * two can never disagree. Mirrors exactly what Consolidated RM/PM displays:
+ *   DOC M1 = (current stock + expected inward) x 30 / Required Qty M1
+ *   DOC M2 = (Opening Stock M2, carried forward from M1's ending position) x 30 / Required Qty M2
+ * Opening Stock M2 = current stock + inward + expected supply M1 + Actual Order Qty M1
+ * (floored at 0) minus Required Qty M1 — i.e. whatever's left after M1 is consumed and
+ * replenished. This carry-forward is the piece the SKU DOC tab was previously skipping,
+ * which is why its DOC M2 could disagree with the Consolidated tab's DOC M2. */
+function matDocPair(kind, key) {
+  const reqOverride  = kind === "rm" ? rmReqOverride : pmReqOverride;
+  const moqStore     = kind === "rm" ? rmMoq : pmMoq;
+  const supplyStore  = kind === "rm" ? rmSupply : pmSupply;
+  const ov = reqOverride[key] || null;
+  const reqM1 = ov ? num(ov.m1, true) : 0;
+  const reqM2 = ov ? num(ov.m2, true) : 0;
+  const moq = num(moqStore[key], true);
+  const avail = stockAvailable(kind, key);
+  const supM1 = num(supplyStore[key], true);
+  const oM1 = fwdOrder(reqM1, avail + supM1, moq);
+  const openM2 = Math.max(0, avail + supM1 + moqAdjOrder(oM1.oq, moq) - reqM1);
+  const docM1 = reqM1 > 0 ? (avail * 30 / reqM1) : null;
+  const docM2 = reqM2 > 0 ? (openM2 * 30 / reqM2) : null;
+  return { docM1, docM2 };
+}
 
 /* ==================================================================
  *  CORE AGGREGATION
@@ -3504,29 +3529,25 @@ function getMats(skuCode) {
     var packG = num(s.pack_size_g, true);
     var dem1 = num(demand[skuCode], true);
     var dem2 = num(demandM2[skuCode], true);
+    // DOC M1/M2 come straight from matDocPair() — the exact same formula (and carry-forward
+    // from M1 into M2's opening stock) that the Consolidated RM/PM tabs use, so this tab can
+    // never show a different number for the same material. A material only gets a real DOC
+    // once Required Qty has actually been imported for it (hasReq1/hasReq2 = override present)
+    // — same rule as Consolidated RM/PM, which also has no fallback estimate of its own.
     var rm = STATIC_BOM.bom_rm.filter(function(r){return r.sku_code===skuCode&&r.rm_name;}).map(function(r){
-      var nk=normKey(r.rm_name); var pct=num(r.rm_pct,true);
+      var nk=normKey(r.rm_name);
       var ovR=rmReqOverride[nk];
-      var req1=ovR?(num(ovR.m1,true)):pct/100*packG*dem1/1000;
-      var req2=ovR?(num(ovR.m2,true)):pct/100*packG*dem2/1000;
-      var hasReq1=ovR?true:dem1>0;
-      var hasReq2=ovR?true:dem2>0;
-      var f=rmFirm[nk]; var stock=stockAvailable('rm',nk); var moq=num(rmMoq[nk],true);
-      var docM1=(stock!=null&&req1>0)?stock/(req1/30):null;
-      var docM2=(stock!=null&&req2>0)?stock/(req2/30):null;
-      return {code:f?f.code:'',name:r.rm_name,stock:stock,moq:moq,req1:req1,req2:req2,hasReq1:hasReq1,hasReq2:hasReq2,docM1:docM1,docM2:docM2};
+      var hasReq1=!!ovR, hasReq2=!!ovR;
+      var f=rmFirm[nk];
+      var pair=matDocPair('rm', nk);
+      return {code:f?f.code:'',name:r.rm_name,hasReq1:hasReq1,hasReq2:hasReq2,docM1:pair.docM1,docM2:pair.docM2};
     });
     var pm = STATIC_BOM.bom_pm.filter(function(r){return r.sku_code===skuCode;}).map(function(r){
-      var nk=normKey(r.pm_name); var qpu=num(r.pm_qty_per_unit,true);
+      var nk=normKey(r.pm_name);
       var ovP=pmReqOverride[nk];
-      var req1=ovP?(num(ovP.m1,true)):qpu*dem1;
-      var req2=ovP?(num(ovP.m2,true)):qpu*dem2;
-      var hasReq1=ovP?true:dem1>0;
-      var hasReq2=ovP?true:dem2>0;
-      var stock=stockAvailable('pm',nk); var moq=num(pmMoq[nk],true);
-      var docM1=(stock!=null&&req1>0)?stock/(req1/30):null;
-      var docM2=(stock!=null&&req2>0)?stock/(req2/30):null;
-      return {code:r.pm_code||'',name:r.pm_name,stock:stock,moq:moq,req1:req1,req2:req2,hasReq1:hasReq1,hasReq2:hasReq2,docM1:docM1,docM2:docM2};
+      var hasReq1=!!ovP, hasReq2=!!ovP;
+      var pair=matDocPair('pm', nk);
+      return {code:r.pm_code||'',name:r.pm_name,hasReq1:hasReq1,hasReq2:hasReq2,docM1:pair.docM1,docM2:pair.docM2};
     });
     return {rm:rm,pm:pm,dem1:dem1,dem2:dem2,skuName:s.fg_name||skuCode};
 }
@@ -3597,7 +3618,7 @@ function renderSkuDoc() {
       h3.style.cssText='margin:0 0 8px;font-size:1em;font-weight:600;color:#444;border-bottom:2px solid #e0e0e0;padding-bottom:4px';
       wrap.appendChild(h3);
       var t=document.createElement('table'); t.style.cssText='width:100%;border-collapse:collapse;font-size:0.88em';
-      t.innerHTML='<thead><tr style="background:#f5f5f5"><th style="text-align:left;padding:6px 8px">Code</th><th style="text-align:left;padding:6px 8px">Material Name</th><th style="padding:6px 8px;text-align:right">MOQ</th><th style="padding:6px 8px;text-align:right">Stock ('+unit+')</th><th style="padding:6px 8px;text-align:right">Req M1 ('+unit+')</th><th style="padding:6px 8px;text-align:center">DOC M1</th><th style="padding:6px 8px;text-align:right">Req M2 ('+unit+')</th><th style="padding:6px 8px;text-align:center">DOC M2</th><th style="padding:6px 8px;text-align:center">Flag</th></tr></thead>';
+      t.innerHTML='<thead><tr style="background:#f5f5f5"><th style="text-align:left;padding:6px 8px">Code</th><th style="text-align:left;padding:6px 8px">Material Name</th><th style="padding:6px 8px;text-align:center">DOC M1</th><th style="padding:6px 8px;text-align:center">DOC M2</th><th style="padding:6px 8px;text-align:center">Flag</th></tr></thead>';
       var tb=document.createElement('tbody');
       rows.slice().sort(function(a,b){
         var am=Math.min(a.docM1!=null?a.docM1:Infinity,a.docM2!=null?a.docM2:Infinity);
@@ -3611,11 +3632,7 @@ function renderSkuDoc() {
         tr2.innerHTML=
           '<td style="padding:5px 8px;border-bottom:1px solid #eee;color:#888;font-size:0.9em">'+escapeHtml(r.code||'—')+'</td>'+
           '<td style="padding:5px 8px;border-bottom:1px solid #eee">'+escapeHtml(r.name)+'</td>'+
-          '<td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:right">'+r.moq+'</td>'+
-          '<td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:right">'+fmt(r.stock,unit==='kg'?3:0)+'</td>'+
-          '<td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:right">'+(!r.hasReq1?'—':fmt(r.req1,unit==='kg'?3:0))+'</td>'+
           '<td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:center;'+docBg(r.docM1)+'">'+(! r.hasReq1?'Set demand':fmtDoc(r.docM1))+'</td>'+
-          '<td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:right">'+(!r.hasReq2?'—':fmt(r.req2,unit==='kg'?3:0))+'</td>'+
           '<td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:center;'+docBg(r.docM2)+'">'+(! r.hasReq2?'Set demand':fmtDoc(r.docM2))+'</td>'+
           '<td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:center;font-size:1.1em">'+(isMin?'⚠ MIN':'')+'</td>';
         tb.appendChild(tr2);
