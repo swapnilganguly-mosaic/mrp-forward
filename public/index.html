@@ -1082,6 +1082,8 @@ function stockAvailable(kind, key) {
  * (floored at 0) minus Required Qty M1 — i.e. whatever's left after M1 is consumed and
  * replenished. This carry-forward is the piece the SKU DOC tab was previously skipping,
  * which is why its DOC M2 could disagree with the Consolidated tab's DOC M2. */
+// A required-qty value that rounds to 0.0 at the 1-decimal precision shown on screen (e.g. Nova Core's export can carry a near-zero float like 0.0003 due to BOM-% rounding) is treated as no real requirement for DOC purposes -- otherwise dividing by that near-zero number produces a nonsensical multi-hundred-thousand-day DOC even though the displayed Required Qty reads "0.0". Anything below 0.05 rounds to "0.0" at 1dp, so that's the floor.
+function hasRealReq(v) { return v >= 0.05; }
 function matDocPair(kind, key) {
   const reqOverride  = kind === "rm" ? rmReqOverride : pmReqOverride;
   const moqStore     = kind === "rm" ? rmMoq : pmMoq;
@@ -1094,8 +1096,8 @@ function matDocPair(kind, key) {
   const supM1 = num(supplyStore[key], true);
   const oM1 = fwdOrder(reqM1, avail + supM1, moq);
   const openM2 = Math.max(0, avail + supM1 + moqAdjOrder(oM1.oq, moq) - reqM1);
-  const docM1 = reqM1 > 0 ? (avail * 30 / reqM1) : null;
-  const docM2 = reqM2 > 0 ? (openM2 * 30 / reqM2) : null;
+  const docM1 = hasRealReq(reqM1) ? (avail * 30 / reqM1) : null;
+  const docM2 = hasRealReq(reqM2) ? (openM2 * 30 / reqM2) : null;
   return { docM1, docM2 };
 }
 
@@ -1399,8 +1401,8 @@ function renderRM() {
         '<td class="num">' + NA + '</td>' +
         '<td class="num"><span class="muted">—</span></td>' +
         '<td class="num"><span class="muted">—</span></td>' +
-        '<td class="num">' + fmt(r.reqM1, 1) + '</td>' + '<td class="num">' + (r.stock != null && r.reqM1 > 0 ? (r.stock * 30 / r.reqM1).toFixed(1) : '—') + '<td class="num">NA</td><td class="num">NA</td><td class="num">NA</td><td><span class="tag none">no stock feed</span></td>' +
-        '<td class="num">NA</td><td class="num">' + fmt(r.reqM2, 1) + '</td>' + '<td class="num">' + (r.stock != null && r.reqM2 > 0 ? (r.stock * 30 / r.reqM2).toFixed(1) : '—') + '<td class="num">NA</td><td class="num">NA</td><td class="num">NA</td><td><span class="tag none">no stock feed</span></td>' +
+        '<td class="num">' + fmt(r.reqM1, 1) + '</td>' + '<td class="num">' + (r.stock != null && hasRealReq(r.reqM1) ? (r.stock * 30 / r.reqM1).toFixed(1) : '—') + '<td class="num">NA</td><td class="num">NA</td><td class="num">NA</td><td><span class="tag none">no stock feed</span></td>' +
+        '<td class="num">NA</td><td class="num">' + fmt(r.reqM2, 1) + '</td>' + '<td class="num">' + (r.stock != null && hasRealReq(r.reqM2) ? (r.stock * 30 / r.reqM2).toFixed(1) : '—') + '<td class="num">NA</td><td class="num">NA</td><td class="num">NA</td><td><span class="tag none">no stock feed</span></td>' +
         '<td class="num"></td>';
     } else {
       tr.innerHTML =
@@ -1412,8 +1414,8 @@ function renderRM() {
         '<td class="num req">' + inwardIn + '</td>' +
         '<td class="num">' + fmt(r.supM1,1) + '</td>' +
         '<td class="num">' + fmt(r.supM2,1) + '</td>' +
-        '<td class="num">' + fmt(r.reqM1, 1) + '</td>' + '<td class="num">' + (r.avail != null && r.reqM1 > 0 ? (r.avail * 30 / r.reqM1).toFixed(1) : '—') + '<td class="num req">' + fmt(r.oM1.oq, 1) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM1.oq, r.moq), 1) + '</td>' + diffCell(r.oM1.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM1) + '</td>' +
-        '<td class="num">' + fmt(r.openM2, 1) + '</td><td class="num">' + fmt(r.reqM2, 1) + '</td>' + '<td class="num">' + (r.openM2 != null && r.reqM2 > 0 ? (r.openM2 * 30 / r.reqM2).toFixed(1) : '—') + '<td class="num req">' + fmt(r.oM2.oq, 1) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM2.oq, r.moq), 1) + '</td>' + diffCell(r.oM2.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM2) + '</td>' +
+        '<td class="num">' + fmt(r.reqM1, 1) + '</td>' + '<td class="num">' + (r.avail != null && hasRealReq(r.reqM1) ? (r.avail * 30 / r.reqM1).toFixed(1) : '—') + '<td class="num req">' + fmt(r.oM1.oq, 1) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM1.oq, r.moq), 1) + '</td>' + diffCell(r.oM1.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM1) + '</td>' +
+        '<td class="num">' + fmt(r.openM2, 1) + '</td><td class="num">' + fmt(r.reqM2, 1) + '</td>' + '<td class="num">' + (r.openM2 != null && hasRealReq(r.reqM2) ? (r.openM2 * 30 / r.reqM2).toFixed(1) : '—') + '<td class="num req">' + fmt(r.oM2.oq, 1) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM2.oq, r.moq), 1) + '</td>' + diffCell(r.oM2.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM2) + '</td>' +
         '<td class="num"></td>';
     }
     tbody.appendChild(tr);
@@ -1591,8 +1593,8 @@ function renderPM() {
       '<td class="num req">' + inwardIn + '</td>' +
       '<td class="num">' + supIn + '</td>' +
       '<td class="num">' + fmt(r.supM2,1) + '</td>' +
-      '<td class="num">' + fmt(r.reqM1,1) + '</td>' + '<td class="num">' + (r.avail != null && r.reqM1 > 0 ? (r.avail * 30 / r.reqM1).toFixed(1) : '—') + '<td class="num req">' + fmt(r.oM1.oq,1) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM1.oq, r.moq),1) + '</td>' + diffCell(r.oM1.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM1) + '</td>' +
-      '<td class="num">' + fmt(r.openM2,1) + '</td><td class="num">' + fmt(r.reqM2,1) + '</td>' + '<td class="num">' + (r.openM2 != null && r.reqM2 > 0 ? (r.openM2 * 30 / r.reqM2).toFixed(1) : '—') + '<td class="num req">' + fmt(r.oM2.oq,1) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM2.oq, r.moq),1) + '</td>' + diffCell(r.oM2.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM2) + '</td>' +
+      '<td class="num">' + fmt(r.reqM1,1) + '</td>' + '<td class="num">' + (r.avail != null && hasRealReq(r.reqM1) ? (r.avail * 30 / r.reqM1).toFixed(1) : '—') + '<td class="num req">' + fmt(r.oM1.oq,1) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM1.oq, r.moq),1) + '</td>' + diffCell(r.oM1.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM1) + '</td>' +
+      '<td class="num">' + fmt(r.openM2,1) + '</td><td class="num">' + fmt(r.reqM2,1) + '</td>' + '<td class="num">' + (r.openM2 != null && hasRealReq(r.reqM2) ? (r.openM2 * 30 / r.reqM2).toFixed(1) : '—') + '<td class="num req">' + fmt(r.oM2.oq,1) + '</td><td class="num req">' + fmt(moqAdjOrder(r.oM2.oq, r.moq),1) + '</td>' + diffCell(r.oM2.oq, r.moq, 1) + '<td>' + fwdStatusCell(r.oM2) + '</td>' +
       '<td class="num"></td>';
     tbody.appendChild(tr);
     const inp = tr.querySelector("input.cell[data-k]");
