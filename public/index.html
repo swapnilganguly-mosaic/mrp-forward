@@ -157,10 +157,8 @@
     <div class="tab active" data-tab="demand">1 · Supply Entry</div>
     <div class="tab" data-tab="rm">2 · Consolidated RM</div>
     <div class="tab" data-tab="pm">3 · Consolidated PM</div>
-    <div class="tab" data-tab="master">4 · Material Master</div>
-    <div class="tab" data-tab="inv">5 · Live Inventory</div>
-    <div class="tab" data-tab="skudoc">6 · SKU DOC</div>
-    <div class="tab" data-tab="scheduler">7 · Scheduler</div>
+    <div class="tab" data-tab="inv">4 · Live Inventory</div>
+    <div class="tab" data-tab="skudoc">5 · SKU DOC</div>
   </div>
 
   <!-- ============ TAB 1: DEMAND ENTRY ============ -->
@@ -328,39 +326,6 @@
 
   
 
-  <!-- ============ TAB 4: MATERIAL MASTER ============ -->
-  <section class="panel" id="panel-master">
-    <div class="grand">
-      <div class="kpi"><b id="mmRm">0</b><span>Raw materials</span></div>
-      <div class="kpi"><b id="mmPm">0</b><span>Packaging materials</span></div>
-      <div class="kpi"><b id="mmFactories">0</b><span>Co-packers</span></div>
-      <div class="spacer"></div>
-      <div class="field" style="justify-content:flex-end"><button class="btn primary" id="exportMaster">Export master CSV</button></div>
-    </div>
-    <div class="toolbar">
-      <input class="search" id="masterSearch" placeholder="Filter by code, material or category…" />
-      <span class="count-tag" id="masterCount"></span>
-    </div>
-    <table>
-      <thead>
-        <tr>
-          <th style="width:110px">Mosaic code</th>
-          <th style="width:34%">Material</th>
-          <th>Type</th>
-          <th>UOM</th>
-          <th>Category</th>
-          <th class="num"># SKUs</th>
-          <th style="width:90px"></th>
-        </tr>
-      </thead>
-      <tbody id="masterRows"></tbody>
-    </table>
-    <div class="hint">The normalisation layer: one <b>Mosaic material code</b> per distinct RM/PM, mapped to each co-packer's
-      internal code and a UOM. <b>Codes, UOM, category and co-packer codes are DUMMY</b> (deterministically seeded from the
-      material name) — edit UOM/category inline; replace with the real material master when available. Click a row to see the
-      per-co-packer code mapping.</div>
-  </section>
-
   <!-- ============ TAB 5: LIVE INVENTORY ============ -->
   <section class="panel" id="panel-inv">
     <div class="grand">
@@ -407,74 +372,6 @@
     <div id="skuDocBody"></div>
   </section>
 
-  <!-- ============ TAB 7: SCHEDULER ============ -->
-  <section class="panel" id="panel-scheduler">
-    <div style="display:flex;gap:8px;margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid var(--border)">
-      <button class="sched-sub-btn active" id="schedBtnInput" onclick="schedShowSub('input')">1 · Input</button>
-      <button class="sched-sub-btn" id="schedBtnTable" onclick="schedShowSub('table')">2 · Scheduler</button>
-    </div>
-    <div id="panel-sched-input">
-      <div class="hint" style="margin-bottom:12px">Enter production plan for M1 and M2. <b>Tonnage</b> = (Pack size g × Units) ÷ 10⁶ metric tonnes (MT).</div>
-      <table>
-        <thead><tr>
-          <th>SKU Code</th><th>SKU Name</th>
-          <th class="num">Pack Size (g)</th>
-          <th class="num">Prod Plan M1 (units)</th>
-          <th class="num">Tonnage M1 (MT)</th>
-          <th class="num">Prod Plan M2 (units)</th>
-          <th class="num">Tonnage M2 (MT)</th>
-        </tr></thead>
-        <tbody id="schedInputRows"></tbody>
-        <tfoot><tr>
-          <td colspan="3"><b>Total</b></td>
-          <td class="num req" id="schedTotalM1U">—</td>
-          <td class="num req" id="schedTotalM1T">—</td>
-          <td class="num req" id="schedTotalM2U">—</td>
-          <td class="num req" id="schedTotalM2T">—</td>
-        </tr></tfoot>
-      </table>
-    </div>
-    <div id="panel-sched-table" style="display:none">
-      <details style="margin-bottom:12px">
-        <summary style="cursor:pointer;font-weight:600;color:var(--accent);padding:4px 0">▸ S Weight (I) — Class × Priority reference</summary>
-        <table style="width:auto;margin-top:6px;font-size:.88em">
-          <thead><tr><th>Class</th><th>P0</th><th>P1</th><th>P2</th><th>P3</th></tr></thead>
-          <tbody>
-            <tr><td>A</td><td class="num muted">—</td><td class="num">1.0</td><td class="num">1.2</td><td class="num">1.5</td></tr>
-            <tr><td>B</td><td class="num muted">—</td><td class="num">0.7</td><td class="num">0.9</td><td class="num">1.1</td></tr>
-            <tr><td>C</td><td class="num muted">—</td><td class="num">0.4</td><td class="num">0.5</td><td class="num">0.6</td></tr>
-          </tbody>
-        </table>
-      </details>
-      <div class="hint" style="margin-bottom:10px">Sorted by <b>H × I × K</b> descending = highest priority first. Edit Urgency (H), Class, Priority, FG Stock, Target DOC, Caps and Monthly Plan directly.</div>
-      <div style="overflow-x:auto">
-      <table id="schedTable">
-        <thead><tr>
-          <th style="min-width:130px">A<br>SKU Code</th>
-          <th style="min-width:160px">B<br>SKU Name</th>
-          <th style="min-width:55px">C<br>Class</th>
-          <th style="min-width:65px">D<br>Priority</th>
-          <th class="num" style="min-width:80px">E<br>FG Stock</th>
-          <th class="num" style="min-width:60px">F<br>DRR</th>
-          <th class="num" style="min-width:60px">G<br>FG DOC</th>
-          <th class="num" style="min-width:75px">H<br>Urgency</th>
-          <th class="num" style="min-width:50px">I<br>S Wt</th>
-          <th class="num" style="min-width:85px">J<br>Min Mat DOC</th>
-          <th class="num" style="min-width:100px">Min(RM DOC,<br>PM DOC) M1<br><small>(SKU DOC tab)</small></th>
-          <th class="num" style="min-width:90px">K<br>RM Conf<br><small>(Target DOC)</small></th>
-          <th class="num" style="min-width:70px;background:rgba(59,130,246,.08)">L<br>H×I×K</th>
-          <th class="num" style="min-width:80px">M<br>Line Cap</th>
-          <th class="num" style="min-width:70px">N<br>Min Cap</th>
-          <th class="num" style="min-width:70px">O<br>Max Cap</th>
-          <th class="num" style="min-width:100px">P<br>Target Run QTY</th>
-          <th class="num" style="min-width:100px">Q<br>Monthly Plan</th>
-          <th class="num" style="min-width:80px">R<br>Balance</th>
-        </tr></thead>
-        <tbody id="schedTableRows"></tbody>
-      </table>
-      </div>
-    </div>
-  </section>
 
 </div>
 
@@ -2684,10 +2581,8 @@ function showTab(name) {
   if (name === "rm") renderRM();
   if (name === "pm") renderPM();
   if (name === "sku") renderSkuDetail($("skuPicker").value || (SKU[0] && SKU[0].sku_code));
-  if (name === "master") renderMaster();
   if (name === "inv") renderInventory();
   if (name === "skudoc") renderSkuDoc();
-  if (name === "scheduler") schedShowSub(schedSubTab);
   requestAnimationFrame(syncStickyHeadOffsets);
 }
 
@@ -3012,11 +2907,9 @@ function wire() {
   });
 
   if ($("exportSku")) $("exportSku").addEventListener("click", exportSku);
-  $("exportMaster").addEventListener("click", exportMaster);
   $("exportInv").addEventListener("click", exportInventory);
 
-  // Material Master + Live Inventory controls
-  $("masterSearch").addEventListener("input", renderMaster);
+  // Live Inventory controls
   $("invSearch").addEventListener("input", renderInventory);
   $("invFactoryFilter").addEventListener("change", renderInventory);
   $("invKindFilter").addEventListener("change", renderInventory);
