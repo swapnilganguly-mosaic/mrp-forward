@@ -509,7 +509,7 @@
         <th class="num" style="min-width:110px">Min(RM DOC,<br>PM DOC) M1</th>
         <th class="num">Material<br>Feasibility M1</th><th class="num">Score M1 &#9660;</th>
         <th class="num">Run Qty M1</th><th class="num" style="white-space:normal;min-width:90px">Monthly Plan M1<div style="display:flex;justify-content:center;margin-top:3px;font-weight:400"><label class="btn secondary" style="font-size:9px;padding:1px 4px;cursor:pointer;margin:0">Import<input type="file" accept=".xlsx,.csv" style="display:none" onchange="importValCol('mpM1',this)"></label></div></th><th class="num">Balance M1</th>
-        <th class="num" style="white-space:normal;min-width:90px">Line Cap<div style="display:flex;justify-content:center;margin-top:3px;font-weight:400"><label class="btn secondary" style="font-size:9px;padding:1px 4px;cursor:pointer;margin:0">Import<input type="file" accept=".xlsx,.csv" style="display:none" onchange="importValCol('lineCap',this)"></label></div></th>
+        <th class="num" style="white-space:normal;min-width:90px" title="Max production rate for this SKU, in kg per day. Monthly Plan cannot imply exceeding this rate.">Line Cap<br><span style="font-size:8px;font-weight:400;color:#94a3b8">(kg/day)</span><div style="display:flex;justify-content:center;margin-top:3px;font-weight:400"><label class="btn secondary" style="font-size:9px;padding:1px 4px;cursor:pointer;margin:0">Import<input type="file" accept=".xlsx,.csv" style="display:none" onchange="importValCol('lineCap',this)"></label></div></th>
       </tr></thead>
       <tbody id="scoreBodyM1"></tbody>
     </table>
@@ -556,7 +556,7 @@
         <th class="num" style="min-width:110px">Min(RM DOC,<br>PM DOC) M2</th>
         <th class="num">Material<br>Feasibility M2</th><th class="num">Score M2 &#9660;</th>
         <th class="num">Run Qty M2</th><th class="num" style="white-space:normal;min-width:90px">Monthly Plan M2<div style="display:flex;justify-content:center;margin-top:3px;font-weight:400"><label class="btn secondary" style="font-size:9px;padding:1px 4px;cursor:pointer;margin:0">Import<input type="file" accept=".xlsx,.csv" style="display:none" onchange="importValCol('mpM2',this)"></label></div></th><th class="num">Balance M2</th>
-        <th class="num" style="white-space:normal;min-width:90px">Line Cap<div style="display:flex;justify-content:center;margin-top:3px;font-weight:400"><label class="btn secondary" style="font-size:9px;padding:1px 4px;cursor:pointer;margin:0">Import<input type="file" accept=".xlsx,.csv" style="display:none" onchange="importValCol('lineCap',this)"></label></div></th>
+        <th class="num" style="white-space:normal;min-width:90px" title="Max production rate for this SKU, in kg per day. Monthly Plan cannot imply exceeding this rate.">Line Cap<br><span style="font-size:8px;font-weight:400;color:#94a3b8">(kg/day)</span><div style="display:flex;justify-content:center;margin-top:3px;font-weight:400"><label class="btn secondary" style="font-size:9px;padding:1px 4px;cursor:pointer;margin:0">Import<input type="file" accept=".xlsx,.csv" style="display:none" onchange="importValCol('lineCap',this)"></label></div></th>
       </tr></thead>
       <tbody id="scoreBodyM2"></tbody>
     </table>
@@ -4793,7 +4793,7 @@ function renderScoreTable() {
           </div>
         </td>
         <td class="num">${fmt(r.runQtyM1,0)}</td>
-        <td class="num"><input type="number" min="0" step="100" value="${monthlyPlan[r.code]||''}" data-code="${r.code}" onchange="monthlyPlan[this.dataset.code]=+this.value;renderScoreTable()" style="width:75px"></td>
+        <td class="num"><input type="number" min="0" step="100" value="${monthlyPlan[r.code]||''}" data-code="${r.code}" onchange="monthlyPlan[this.dataset.code]=clampToLineCap(this.dataset.code,+this.value);renderScoreTable()" style="width:75px"></td>
         <td class="num" style="color:${(+monthlyPlan[r.code]||0)-(r.runQtyM1)<0?'#e53935':'#388e3c'}">${(+monthlyPlan[r.code]||0)>0?fmt((+monthlyPlan[r.code]||0)-(r.runQtyM1),0):'—'}</td>
         <td class="num"><input type="number" min="0" step="1000" value="${lineCap[r.code]||10000}" data-code="${r.code}" onchange="lineCap[this.dataset.code]=+this.value" style="width:60px"></td>
       </tr>`).join('');
@@ -4827,7 +4827,7 @@ function renderScoreTable() {
           </div>
         </td>
         <td class="num">${fmt(r.runQtyM2,0)}</td>
-        <td class="num"><input type="number" min="0" step="100" value="${monthlyPlanM2[r.code]||''}" data-code="${r.code}" onchange="monthlyPlanM2[this.dataset.code]=+this.value;renderScoreTable()" style="width:75px"></td>
+        <td class="num"><input type="number" min="0" step="100" value="${monthlyPlanM2[r.code]||''}" data-code="${r.code}" onchange="monthlyPlanM2[this.dataset.code]=clampToLineCap(this.dataset.code,+this.value);renderScoreTable()" style="width:75px"></td>
         <td class="num" style="color:${(+monthlyPlanM2[r.code]||0)-(r.runQtyM2)<0?'#e53935':'#388e3c'}">${(+monthlyPlanM2[r.code]||0)>0?fmt((+monthlyPlanM2[r.code]||0)-(r.runQtyM2),0):'—'}</td>
         <td class="num"><input type="number" min="0" step="1000" value="${lineCap[r.code]||10000}" data-code="${r.code}" onchange="lineCap[this.dataset.code]=+this.value" style="width:60px"></td>
       </tr>`).join('');
@@ -4901,7 +4901,8 @@ function renderSummaryCards(){
 // M1 SKUs (weeks 1-4) are ordered by descending Score M1; M2 SKUs (weeks 5-8) are ordered
 // by descending Score M2 — each phase uses that month's Run Qty (DRR x 13) as the total to
 // place, respecting both the shared weekly Line Cap (kg/week, config panel) and each SKU's
-// own per-row Line Cap (kg/week). Each week's resulting total is then spread evenly across
+// own per-row Line Cap (kg/DAY, converted to a weekly ceiling internally). Each week's
+// resulting total is then spread evenly across
 // its 7 days for the day-wise view.
 function generateSchedule2Month(){
   const wks = 8, wpm = 4;
@@ -4916,7 +4917,7 @@ function generateSchedule2Month(){
     orderedRows.forEach(r => {
       const pkKg = r.packSizeKg || 0.001;
       let remKg = Math.max(0, r[runQtyField]) * pkKg;
-      const perSkuCapKg = lineCap[r.code] || 10000;
+      const perSkuCapKg = (lineCap[r.code] || 10000) * 7; // Line Cap is kg/day -> weekly ceiling
       for (let w = weekStart; w < weekEnd && remKg > 0; w++){
         const cap = Math.min(weekCap[w], perSkuCapKg);
         const fit = Math.min(remKg, cap);
@@ -4994,6 +4995,25 @@ function renderSchedule2Month(){
       <td class="num"><b>${tot.toFixed(0)}</b></td>
     </tr>`;
   }).join('');
+}
+
+// --- Line Cap enforcement -------------------------------------------------------------
+// Line Cap (per-SKU column) is a MAX PRODUCTION RATE PER DAY (kg/day), not a weekly or
+// monthly total. Monthly Plan M1/M2 (units) must never imply more than
+// Line Cap (kg/day) x 30 days worth of production for that SKU's pack size.
+function lineCapMonthlyMaxUnits(code) {
+  const r = (typeof rows !== 'undefined' ? rows.find(x => x.code === code) : null);
+  const pkKg = (r && r.packSizeKg) || 0.001;
+  const capKgPerDay = lineCap[code] || 10000;
+  return Math.floor((capKgPerDay * 30) / pkKg);
+}
+function clampToLineCap(code, unitsVal) {
+  const maxUnits = lineCapMonthlyMaxUnits(code);
+  if (unitsVal > maxUnits) {
+    setStatus(`${code}: Monthly Plan capped at ${fmt(maxUnits,0)} units &mdash; exceeds Line Cap (${fmt(lineCap[code]||10000,0)} kg/day &times; 30 days)`, 'warn');
+    return maxUnits;
+  }
+  return unitsVal;
 }
 
 // --- DRR import: separate Import button per column (DRR M1 / DRR M2 headers), each with
@@ -5140,9 +5160,9 @@ function processValColCsv(text, kind) {
       updated.fgStock = (updated.sih || 0) + (updated.sit || 0);
       stockData[code] = updated;
     } else if (kind === 'mpM1') {
-      monthlyPlan[code] = v;
+      monthlyPlan[code] = clampToLineCap(code, v);
     } else if (kind === 'mpM2') {
-      monthlyPlanM2[code] = v;
+      monthlyPlanM2[code] = clampToLineCap(code, v);
     } else if (kind === 'lineCap') {
       lineCap[code] = v;
     }
