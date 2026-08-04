@@ -492,7 +492,7 @@
     <table id="scoreTableM1">
       <thead><tr>
         <th>#</th><th>SKU Code</th><th>SKU Name</th><th>Class</th><th>Volatility</th>
-        <th class="num">SIH</th><th class="num">SIT</th>
+        <th class="num" style="white-space:normal;min-width:90px">SIH<div style="display:flex;justify-content:center;margin-top:3px;font-weight:400"><label class="btn secondary" style="font-size:9px;padding:1px 4px;cursor:pointer;margin:0">Import<input type="file" accept=".xlsx,.csv" style="display:none" onchange="importValCol('sih',this)"></label></div></th><th class="num" style="white-space:normal;min-width:90px">SIT<div style="display:flex;justify-content:center;margin-top:3px;font-weight:400"><label class="btn secondary" style="font-size:9px;padding:1px 4px;cursor:pointer;margin:0">Import<input type="file" accept=".xlsx,.csv" style="display:none" onchange="importValCol('sit',this)"></label></div></th>
         <th class="num">FG Stock</th><th class="num">Strategic Weight</th><th class="num">Target DOC</th>
         <th class="num" style="white-space:normal;min-width:110px">
           DRR M1
@@ -508,8 +508,8 @@
         </th><th class="num">FG DOC M1</th><th class="num">Urgency M1</th>
         <th class="num" style="min-width:110px">Min(RM DOC,<br>PM DOC) M1</th>
         <th class="num">Material<br>Feasibility M1</th><th class="num">Score M1 &#9660;</th>
-        <th class="num">Run Qty M1</th><th class="num">Monthly Plan M1</th><th class="num">Balance M1</th>
-        <th class="num">Line Cap</th>
+        <th class="num">Run Qty M1</th><th class="num" style="white-space:normal;min-width:90px">Monthly Plan M1<div style="display:flex;justify-content:center;margin-top:3px;font-weight:400"><label class="btn secondary" style="font-size:9px;padding:1px 4px;cursor:pointer;margin:0">Import<input type="file" accept=".xlsx,.csv" style="display:none" onchange="importValCol('mpM1',this)"></label></div></th><th class="num">Balance M1</th>
+        <th class="num" style="white-space:normal;min-width:90px">Line Cap<div style="display:flex;justify-content:center;margin-top:3px;font-weight:400"><label class="btn secondary" style="font-size:9px;padding:1px 4px;cursor:pointer;margin:0">Import<input type="file" accept=".xlsx,.csv" style="display:none" onchange="importValCol('lineCap',this)"></label></div></th>
       </tr></thead>
       <tbody id="scoreBodyM1"></tbody>
     </table>
@@ -539,7 +539,7 @@
     <table id="scoreTableM2">
       <thead><tr>
         <th>#</th><th>SKU Code</th><th>SKU Name</th><th>Class</th><th>Volatility</th>
-        <th class="num">SIH</th><th class="num">SIT</th>
+        <th class="num" style="white-space:normal;min-width:90px">SIH<div style="display:flex;justify-content:center;margin-top:3px;font-weight:400"><label class="btn secondary" style="font-size:9px;padding:1px 4px;cursor:pointer;margin:0">Import<input type="file" accept=".xlsx,.csv" style="display:none" onchange="importValCol('sih',this)"></label></div></th><th class="num" style="white-space:normal;min-width:90px">SIT<div style="display:flex;justify-content:center;margin-top:3px;font-weight:400"><label class="btn secondary" style="font-size:9px;padding:1px 4px;cursor:pointer;margin:0">Import<input type="file" accept=".xlsx,.csv" style="display:none" onchange="importValCol('sit',this)"></label></div></th>
         <th class="num">FG Stock</th><th class="num">Strategic Weight</th><th class="num">Target DOC</th>
         <th class="num" style="white-space:normal;min-width:110px">
           DRR M2
@@ -555,8 +555,8 @@
         </th><th class="num">FG DOC M2</th><th class="num">Urgency M2</th>
         <th class="num" style="min-width:110px">Min(RM DOC,<br>PM DOC) M2</th>
         <th class="num">Material<br>Feasibility M2</th><th class="num">Score M2 &#9660;</th>
-        <th class="num">Run Qty M2</th><th class="num">Monthly Plan M2</th><th class="num">Balance M2</th>
-        <th class="num">Line Cap</th>
+        <th class="num">Run Qty M2</th><th class="num" style="white-space:normal;min-width:90px">Monthly Plan M2<div style="display:flex;justify-content:center;margin-top:3px;font-weight:400"><label class="btn secondary" style="font-size:9px;padding:1px 4px;cursor:pointer;margin:0">Import<input type="file" accept=".xlsx,.csv" style="display:none" onchange="importValCol('mpM2',this)"></label></div></th><th class="num">Balance M2</th>
+        <th class="num" style="white-space:normal;min-width:90px">Line Cap<div style="display:flex;justify-content:center;margin-top:3px;font-weight:400"><label class="btn secondary" style="font-size:9px;padding:1px 4px;cursor:pointer;margin:0">Import<input type="file" accept=".xlsx,.csv" style="display:none" onchange="importValCol('lineCap',this)"></label></div></th>
       </tr></thead>
       <tbody id="scoreBodyM2"></tbody>
     </table>
@@ -5068,6 +5068,88 @@ function downloadDrrTemplate(){
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
   a.download='drr_import_template.csv';a.click();
+}
+
+// --- Generic single-value column import (SIH / SIT / Monthly Plan M1/M2 / Line Cap) ---
+// Mirrors the DRR column importer above: auto-detects the SKU-code column, auto-detects
+// the value column by keyword (falling back to "most numeric column"), and silently skips
+// any SKU code in the file that this tool doesn't recognize.
+function importValCol(kind, input) {
+  const file = input.files[0]; if (!file) return;
+  const ext = file.name.split('.').pop().toLowerCase();
+  const reader = new FileReader();
+  if (ext === 'csv') {
+    reader.onload = e => { processValColCsv(e.target.result, kind); input.value = ''; };
+    reader.readAsText(file);
+  } else {
+    reader.onload = e => {
+      try {
+        const wb = XLSX.read(e.target.result, { type: 'array' });
+        processValColCsv(XLSX.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[0]]), kind);
+      } catch (err) { alert('Cannot read XLSX: ' + err.message); }
+      input.value = '';
+    };
+    reader.readAsArrayBuffer(file);
+  }
+}
+const VAL_COL_CFG = {
+  sih:  { keywords: ['sih'],                          label: 'SIH' },
+  sit:  { keywords: ['sit'],                           label: 'SIT' },
+  mpM1: { keywords: ['monthlyplanm1','monthlyplan','plan'], label: 'Monthly Plan M1' },
+  mpM2: { keywords: ['monthlyplanm2','monthlyplan','plan'], label: 'Monthly Plan M2' },
+  lineCap: { keywords: ['linecap','cap'],              label: 'Line Cap' }
+};
+function processValColCsv(text, kind) {
+  const cfg = VAL_COL_CFG[kind];
+  const rawRows = text.trim().split(/\r?\n/).map(l => parseRow(l).map(c => c.trim()));
+  if (!rawRows.length) { setStatus('The file has no rows.', 'warn'); return; }
+  const known = knownSkuCodes();
+  const width = rawRows.reduce((w, r) => Math.max(w, r.length), 0);
+  let idCol = 0, idHits = -1;
+  for (let c = 0; c < width; c++) {
+    let hits = 0;
+    rawRows.forEach(r => { const v = (r[c] || '').trim(); if (v && known.has(v)) hits++; });
+    if (hits > idHits) { idHits = hits; idCol = c; }
+  }
+  if (idHits <= 0) { setStatus('Could not find a column matching any known SKU code in this file.', 'warn'); return; }
+  const hdr = (rawRows[0] || []).map(h => (h || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
+  const taken = new Set([idCol]);
+  let colVal = findColByKeywords(hdr, taken, cfg.keywords);
+  const usedHeader = colVal >= 0;
+  if (colVal < 0) {
+    let qHits = -1;
+    for (let c = 0; c < width; c++) {
+      if (c === idCol) continue;
+      let hits = 0;
+      rawRows.forEach(r => { const v = (r[c] || '').replace(/,/g, '').trim(); if (v !== '' && isFinite(parseFloat(v))) hits++; });
+      if (hits > qHits) { qHits = hits; colVal = c; }
+    }
+  }
+  if (colVal < 0) { setStatus('Could not find a ' + cfg.label + ' quantity column in this file.', 'warn'); return; }
+  const numAt = (r, c) => { if (c < 0) return null; const v = (r[c] || '').replace(/,/g, '').trim(); return v !== '' && isFinite(parseFloat(v)) ? parseFloat(v) : null; };
+  let loaded = 0;
+  rawRows.forEach((r, i) => {
+    if (i === 0 && usedHeader) return;
+    const code = (r[idCol] || '').trim();
+    if (!code || !known.has(code)) return;
+    const v = numAt(r, colVal);
+    if (v == null) return;
+    if (kind === 'sih' || kind === 'sit') {
+      const existing = stockData[code] || { sih: 0, sit: 0, fgStock: 0, rmStock: 0, pmStock: 0 };
+      const updated = { ...existing, [kind]: v };
+      updated.fgStock = (updated.sih || 0) + (updated.sit || 0);
+      stockData[code] = updated;
+    } else if (kind === 'mpM1') {
+      monthlyPlan[code] = v;
+    } else if (kind === 'mpM2') {
+      monthlyPlanM2[code] = v;
+    } else if (kind === 'lineCap') {
+      lineCap[code] = v;
+    }
+    loaded++;
+  });
+  setStatus(`${cfg.label} loaded &mdash; ${loaded} SKU(s) matched by SKU code`, 'ok');
+  recompute();
 }
 
 
