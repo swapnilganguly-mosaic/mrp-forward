@@ -149,6 +149,8 @@
       <div class="sub" id="dataStatus">Loading dataset…</div>
     </div>
     <div class="data-ctl">
+<label class="row-flex" style="gap:6px;font-size:12px;color:var(--muted)">Factory
+        <select class="cell" id="factoryPicker" style="min-width:140px;font-weight:600"></select></label>
 <label class="row-flex" style="gap:6px;font-size:12px;color:var(--muted)">Plan horizon (days)
         <input class="cell" id="planDays" type="number" min="1" step="1" value="30" style="width:64px" /></label>
       <button class="btn sm" id="btnUpload">Upload CSVs</button>
@@ -954,6 +956,91 @@ const FACTORIES = [
   { code: "SAP", name: "Sapiens", lastUpdated: "dummy stock (no real feed yet)" }
 ];
 
+// Which factory's data is currently loaded into the shared SKU/RM/PM/demand/etc. state
+// below. Each factory has a fully independent SKU list, BOM, demand plan, Required Qty,
+// MOQ, and stock -- switching just swaps the whole set of globals via switchFactory().
+let currentFactory = FACTORIES[0].code;
+let factoryStore = {};   // factoryCode -> snapshot of every per-factory global (see switchFactory)
+
+function snapshotFactoryState(code) {
+  factoryStore[code] = {
+    SKU, RM, PM, demand, demandM2, skuIndex, rmLead, pmLead, drrBySku,
+    rmFirm, rmSupply, rmSupplyM2, rmCodeReal, pmCodeReal,
+    rmSubGroups, rmSubCodeIndex, rmSubNameIndex, pmSubGroups, pmSubCodeIndex, pmSubNameIndex,
+    rmMoq, pmMoq, rmInward, pmInward, pmSupply, pmSupplyM2,
+    rmReqOverride, pmReqOverride,
+    matMaster, MATLIST, cpCode
+  };
+  // rmStockF/pmStockF are already keyed by factory code (factoryCode -> {materialKey -> stock}),
+  // so they don't need snapshotting/restoring -- every factory's stock already coexists there.
+}
+
+function restoreOrInitFactoryState(code) {
+  const s = factoryStore[code];
+  if (s) {
+    SKU=s.SKU; RM=s.RM; PM=s.PM; demand=s.demand; demandM2=s.demandM2; skuIndex=s.skuIndex;
+    rmLead=s.rmLead; pmLead=s.pmLead; drrBySku=s.drrBySku;
+    rmFirm=s.rmFirm; rmSupply=s.rmSupply; rmSupplyM2=s.rmSupplyM2; rmCodeReal=s.rmCodeReal; pmCodeReal=s.pmCodeReal;
+    rmSubGroups=s.rmSubGroups; rmSubCodeIndex=s.rmSubCodeIndex; rmSubNameIndex=s.rmSubNameIndex;
+    pmSubGroups=s.pmSubGroups; pmSubCodeIndex=s.pmSubCodeIndex; pmSubNameIndex=s.pmSubNameIndex;
+    rmMoq=s.rmMoq; pmMoq=s.pmMoq; rmInward=s.rmInward; pmInward=s.pmInward; pmSupply=s.pmSupply; pmSupplyM2=s.pmSupplyM2;
+    rmReqOverride=s.rmReqOverride; pmReqOverride=s.pmReqOverride;
+    matMaster=s.matMaster; MATLIST=s.MATLIST; cpCode=s.cpCode;
+  } else {
+    // Brand-new factory: start from a genuinely blank slate. Populate via "Upload BOM data"
+    // (Tab 1) and the existing Import Current Stock / Req Qty / MOQ controls, same as Sapiens
+    // was originally set up.
+    SKU=[]; RM=[]; PM=[]; demand={}; demandM2={}; skuIndex={};
+    rmLead={}; pmLead={}; drrBySku={};
+    rmFirm={}; rmSupply={}; rmSupplyM2={}; rmCodeReal={}; pmCodeReal={};
+    rmSubGroups={}; rmSubCodeIndex={}; rmSubNameIndex={};
+    pmSubGroups={}; pmSubCodeIndex={}; pmSubNameIndex={};
+    rmMoq={}; pmMoq={}; rmInward={}; pmInward={}; pmSupply={}; pmSupplyM2={};
+    rmReqOverride={}; pmReqOverride={};
+    matMaster={}; MATLIST=[]; cpCode={};
+  }
+  if (!rmStockF[code]) rmStockF[code] = {};
+  if (!pmStockF[code]) pmStockF[code] = {};
+  if (!cpCode[code]) cpCode[code] = {};
+}
+
+function switchFactory(code) {
+  if (code === currentFactory) return;
+  snapshotFactoryState(currentFactory);
+  currentFactory = code;
+  restoreOrInitFactoryState(code);
+  const st = $('dataStatus');
+  if (st) st.textContent = SKU.length
+    ? (SKU.length + ' SKUs loaded — ' + (FACTORIES.find(f=>f.code===code)||{}).name)
+    : 'No data yet for this factory — use "Upload BOM data" (top of Supply Entry tab) to add one.';
+  const picker = $('factoryPicker');
+  if (picker) picker.value = code;
+  showTab(curTab);
+  broadcastStockUpdate();
+  // Scheduler tab keeps its own fully separate per-factory state (production plan, FG
+  // stock/DRR, priority scoring) -- ask it to switch too, same in-process pattern as the
+  // MRP<->Scheduler data bridge.
+  if (typeof window.schedSwitchFactory === 'function') window.schedSwitchFactory(code);
+}
+
+function addFactory() {
+  const name = prompt('New factory / co-packer name (e.g. "Abhinav Healthcare"):');
+  if (!name || !name.trim()) return;
+  const code = name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_').slice(0, 12) || ('F' + (FACTORIES.length+1));
+  if (FACTORIES.some(f => f.code === code)) { alert('A factory with that code already exists.'); return; }
+  FACTORIES.push({ code, name: name.trim(), lastUpdated: 'no data yet' });
+  renderFactoryPicker();
+  switchFactory(code);
+}
+
+function renderFactoryPicker() {
+  const picker = $('factoryPicker');
+  if (!picker) return;
+  picker.innerHTML = FACTORIES.map(f => '<option value="' + escapeHtml(f.code) + '">' + escapeHtml(f.name) + '</option>').join('')
+    + '<option value="__add__">+ Add factory…</option>';
+  picker.value = currentFactory;
+}
+
 /* ---------- material-code master + per-factory inventory (DUMMY) ---------- */
 let matMaster = {};   // normKey(name) -> {key, name, kind:'rm'|'pm', code, uom, category}
 let MATLIST   = [];   // ordered master entries (rm then pm), each with .skuCount
@@ -1066,7 +1153,7 @@ function loadDataset(d) {
   // Real RM MOQ (kg) from "RM PM Req.xlsx" Sheet2, MOQ column — matched by RM name.
   const rmMoqReal = {};
   (d.rm_moq || []).forEach(x => { rmMoqReal[normKey(x.name)] = String(x.moq); });
-  const SAP = FACTORIES[0].code;
+  const SAP = currentFactory;
   Object.keys(matMaster).forEach(k => {
     if (matMaster[k].kind !== "rm") return;
     // Real MOQ where the sheet has one; blank (no MOQ on file) otherwise — editable. Not invented.
@@ -1195,8 +1282,7 @@ function buildMaster() {
 /* Stock in hand summed across all co-packers (what the consolidated tabs use). */
 function stockTotal(kind, key) {
   const F = kind === "rm" ? rmStockF : pmStockF;
-  let t = 0; FACTORIES.forEach(f => t += num((F[f.code] || {})[key], true));
-  return t;
+  return num((F[currentFactory] || {})[key], true);
 }
 /* Current stock + Expected Inward (stock-in-transit, about to land) — this is the number
  * every downstream calculation (DOC, Available for order-qty, Opening Stock M2 carry-forward,
@@ -1460,7 +1546,7 @@ function renderRM() {
       const inp=tr.querySelector('input.cell[data-k]');
       if(inp){inp.addEventListener('click',ev=>ev.stopPropagation());inp.addEventListener('change',()=>{rmMoq[inp.getAttribute('data-k')]=inp.value;renderRM();});}
       const stInp=tr.querySelector('input.cell[data-stk]');
-      if(stInp){stInp.addEventListener('click',ev=>ev.stopPropagation());stInp.addEventListener('change',()=>{rmStockF[FACTORIES[0].code][stInp.getAttribute('data-stk')]=stInp.value;broadcastStockUpdate();renderRM();});}
+      if(stInp){stInp.addEventListener('click',ev=>ev.stopPropagation());stInp.addEventListener('change',()=>{rmStockF[currentFactory][stInp.getAttribute('data-stk')]=stInp.value;broadcastStockUpdate();renderRM();});}
       const iwInp=tr.querySelector('input.cell[data-iw]');
       if(iwInp){iwInp.addEventListener('click',ev=>ev.stopPropagation());iwInp.addEventListener('change',()=>{rmInward[iwInp.getAttribute('data-iw')]=iwInp.value;broadcastStockUpdate();renderRM();});}
       _tb.appendChild(tr);
@@ -1560,7 +1646,7 @@ function renderRM() {
     const stInp = tr.querySelector("input.cell[data-stk]");
     if (stInp) {
       stInp.addEventListener("click", ev => ev.stopPropagation());
-      stInp.addEventListener("change", () => { rmStockF[FACTORIES[0].code][stInp.getAttribute("data-stk")] = stInp.value; broadcastStockUpdate(); renderRM(); });
+      stInp.addEventListener("change", () => { rmStockF[currentFactory][stInp.getAttribute("data-stk")] = stInp.value; broadcastStockUpdate(); renderRM(); });
     }
     const iwInp = tr.querySelector("input.cell[data-iw]");
     if (iwInp) {
@@ -1660,7 +1746,7 @@ function renderPM() {
       const sInp=tr.querySelector('input.cell[data-sk]');
       if(sInp){sInp.addEventListener('click',ev=>ev.stopPropagation());sInp.addEventListener('change',()=>{pmSupply[sInp.getAttribute('data-sk')]=sInp.value;renderPM();});}
       const stInp=tr.querySelector('input.cell[data-stk]');
-      if(stInp){stInp.addEventListener('click',ev=>ev.stopPropagation());stInp.addEventListener('change',()=>{pmStockF[FACTORIES[0].code][stInp.getAttribute('data-stk')]=stInp.value;broadcastStockUpdate();renderPM();});}
+      if(stInp){stInp.addEventListener('click',ev=>ev.stopPropagation());stInp.addEventListener('change',()=>{pmStockF[currentFactory][stInp.getAttribute('data-stk')]=stInp.value;broadcastStockUpdate();renderPM();});}
       const iwInp=tr.querySelector('input.cell[data-iw]');
       if(iwInp){iwInp.addEventListener('click',ev=>ev.stopPropagation());iwInp.addEventListener('change',()=>{pmInward[iwInp.getAttribute('data-iw')]=iwInp.value;broadcastStockUpdate();renderPM();});}
       _ptb.appendChild(tr);
@@ -1740,7 +1826,7 @@ function renderPM() {
     sInp.addEventListener("change", () => { pmSupply[sInp.getAttribute("data-sk")] = sInp.value; renderPM(); });
     const stInp = tr.querySelector("input.cell[data-stk]");
     stInp.addEventListener("click", ev => ev.stopPropagation());
-    stInp.addEventListener("change", () => { pmStockF[FACTORIES[0].code][stInp.getAttribute("data-stk")] = stInp.value; broadcastStockUpdate(); renderPM(); });
+    stInp.addEventListener("change", () => { pmStockF[currentFactory][stInp.getAttribute("data-stk")] = stInp.value; broadcastStockUpdate(); renderPM(); });
     const iwInp = tr.querySelector("input.cell[data-iw]");
     iwInp.addEventListener("click", ev => ev.stopPropagation());
     iwInp.addEventListener("change", () => { pmInward[iwInp.getAttribute("data-iw")] = iwInp.value; broadcastStockUpdate(); renderPM(); });
@@ -2315,7 +2401,7 @@ function applyStockRows(rows, kind) {
       }
     }
   });
-  const SAP = FACTORIES[0].code;
+  const SAP = currentFactory;
   const store = kind === "rm" ? rmStockF : pmStockF;
   Object.keys(sums).forEach(key => {
     const total = sums[key];
@@ -2828,6 +2914,12 @@ function showTab(name) {
 function wire() {
   document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => showTab(t.dataset.tab)));
 
+  renderFactoryPicker();
+  if ($("factoryPicker")) $("factoryPicker").addEventListener("change", e => {
+    if (e.target.value === "__add__") { addFactory(); return; }
+    switchFactory(e.target.value);
+  });
+
   $("demandSearch").addEventListener("input", e => { demandFilter = e.target.value; renderDemand(); });
   if ($("rmSearch")) $("rmSearch").addEventListener("input", e => { rmFilter = e.target.value; renderRM(); });
   if ($("pmSearch")) $("pmSearch").addEventListener("input", e => { pmFilter = e.target.value; renderPM(); });
@@ -3156,7 +3248,7 @@ function wire() {
   $("invFile").addEventListener("change", e => {
     const f = e.target.files[0];
     e.target.value = "";                                    // allow re-picking the same file
-    if (f) loadInventoryFile(f, FACTORIES[0].code);         // single co-packer: Sapiens
+    if (f) loadInventoryFile(f, currentFactory);         // single co-packer: Sapiens
   });
 
   // Bulk paste modal
@@ -4172,6 +4264,43 @@ let rows      = [];
 let schedPlan = [];
 let sched2mo  = null;   // generated 2-month week/day schedule (Priority Scoring tab)
 let inputPlan = {}, inputPlanM2 = {}, monthlyPlan = {}, monthlyPlanM2 = {}, lineCap = {};
+
+// Per-factory isolation for the Scheduler's own data (production plan, uploaded FG
+// stock/DRR, priority-scoring inputs, generated schedule) -- mirrors mrp-forward's own
+// switchFactory() mechanism. mrpData is NOT snapshotted here: it's refreshed automatically
+// whenever mrp-forward calls schedReceiveMrpData() after its own factory switch, so it's
+// always already correct for whichever factory is current. gsData (the Scheduler's own
+// read-only Google-Sheet-based SKU/pack-size/stock lookup) also stays shared/global --
+// there's currently only one such sheet, not one per factory.
+let currentSchedFactory = 'SAP';
+let schedFactoryStore = {};
+
+function schedSnapshotFactory(code) {
+  schedFactoryStore[code] = { stockData, schedPlan, sched2mo, inputPlan, inputPlanM2, monthlyPlan, monthlyPlanM2, lineCap,
+    drrActualM1, drrForecastM1, drrActualM2, drrForecastM2 };
+}
+
+window.schedSwitchFactory = function(code) {
+  if (code === currentSchedFactory) return;
+  schedSnapshotFactory(currentSchedFactory);
+  currentSchedFactory = code;
+  const s = schedFactoryStore[code];
+  if (s) {
+    stockData=s.stockData; schedPlan=s.schedPlan; sched2mo=s.sched2mo;
+    inputPlan=s.inputPlan; inputPlanM2=s.inputPlanM2; monthlyPlan=s.monthlyPlan; monthlyPlanM2=s.monthlyPlanM2;
+    lineCap=s.lineCap;
+    drrActualM1=s.drrActualM1; drrForecastM1=s.drrForecastM1; drrActualM2=s.drrActualM2; drrForecastM2=s.drrForecastM2;
+  } else {
+    stockData={}; schedPlan=[]; sched2mo=null;
+    inputPlan={}; inputPlanM2={}; monthlyPlan={}; monthlyPlanM2={}; lineCap={};
+    drrActualM1={}; drrForecastM1={}; drrActualM2={}; drrForecastM2={};
+  }
+  rows = computeRows();
+  renderSummaryCards();
+  renderScoreTable();
+  const badge = document.getElementById('mrpSyncBadge');
+  if (badge) badge.classList.remove('visible');
+};
 // DRR buckets: Actual/Forecast per month, populated independently via the Import control
 // embedded in each DRR M1 / DRR M2 column header (toggle Actual/Forecast, then upload).
 let drrActualM1 = {}, drrForecastM1 = {}, drrActualM2 = {}, drrForecastM2 = {};
