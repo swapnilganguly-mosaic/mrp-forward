@@ -5232,16 +5232,30 @@ function generateSchedule2Month(){
   allocatePhase(m1Order, 'runQtyM1', 0, wpm);
   allocatePhase(m2Order, 'runQtyM2', wpm, wks);
 
-  sched2mo = rows.map(r => ({
-    code:r.code, name:r.name, cls:r.cls, priority:r.priority,
-    scoreM1:r.scoreM1, scoreM2:r.scoreM2,
-    weekKg: weekAlloc[r.code]
-  })).filter(r => r.weekKg.some(v=>v>0));
+  // Every SKU that has a Score for either month (i.e. it's "ok"/schedulable in the Ranked
+  // table -- not Blocked, not Awaiting Data, not No-supply) gets a row here, even if the
+  // greedy weekly-capacity allocation above ended up giving it 0 kg in every single week
+  // because higher-scored SKUs exhausted the shared Line Cap first. Previously any SKU with
+  // an all-zero week allocation was silently dropped from this table entirely, which made it
+  // look like the schedule only covered a handful of SKUs even though many more had a real
+  // Score and Run Qty upstream. Showing the row (with 0/dash weeks) makes that capacity
+  // shortfall visible instead of hiding it.
+  sched2mo = rows
+    .filter(r => r.dataStateM1 === 'ok' || r.dataStateM2 === 'ok')
+    .map(r => ({
+      code:r.code, name:r.name, cls:r.cls, priority:r.priority,
+      scoreM1:r.scoreM1, scoreM2:r.scoreM2,
+      weekKg: weekAlloc[r.code]
+    }));
 
   renderSchedule2Month();
   const statusEl=document.getElementById('sched2moStatus');
-  if(statusEl) statusEl.textContent =
-    `Scheduled ${sched2mo.length}/${rows.length} SKUs across ${wks} weeks (M1: weeks 1-${wpm}, M2: weeks ${wpm+1}-${wks})`;
+  if(statusEl) {
+    const unallocated = sched2mo.filter(r => !r.weekKg.some(v=>v>0)).length;
+    statusEl.textContent =
+      `Scheduled ${sched2mo.length}/${rows.length} SKUs across ${wks} weeks (M1: weeks 1-${wpm}, M2: weeks ${wpm+1}-${wks})` +
+      (unallocated ? ` — ${unallocated} of these got 0 capacity every week (Line Cap exhausted by higher-priority SKUs)` : '');
+  }
 }
 
 function renderSchedule2Month(){
