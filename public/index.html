@@ -215,7 +215,7 @@
       <input type="file" id="fileInputsCombined" accept=".xlsx,.csv" style="display:none" />
     </div>
     <div id="inputsImportMsg" class="hint" style="margin:-6px 0 10px;display:none"></div>
-    <div class="hint" style="margin-bottom:10px">Values here are entered against the <b>manufacturer RM/PM code</b> (e.g. RM0160, RM0404), not the Mosaic code — Consolidated RM/PM automatically sums every manufacturer code mapped to a Mosaic material and shows that total (read-only there). Upload one Excel/CSV file per material type with a manufacturer code column plus any of: <b>Current Stock</b>, <b>Expected Inward</b>, <b>Exp. Supply M1</b>, <b>Exp. Supply M2</b> — matching columns are auto-detected, unrecognized codes are skipped, and everything below is also directly editable. A manufacturer code must first be mapped to a Mosaic RM/PM via the <b>Mosaic-Manufacturer Code Mapping</b> upload on the Consolidated RM/PM tab before it shows up here.</div>
+    <div class="hint" style="margin-bottom:10px">Values here are entered against the <b>manufacturer RM/PM code</b> (e.g. RM0160, RM0404), not the Mosaic code — Consolidated RM/PM adds up every manufacturer code mapped to a Mosaic material <b>plus</b> whatever was entered there directly (Import Current Stock/Expected Supply, or inline for materials without a manufacturer-code mapping). Upload one Excel/CSV file per material type with a manufacturer code column plus any of: <b>Current Stock</b>, <b>Expected Inward</b>, <b>Exp. Supply M1</b>, <b>Exp. Supply M2</b> — matching columns are auto-detected, unrecognized codes are skipped, and everything below is also directly editable. Avoid entering the same material\u2019s stock in both places at once, since the two are added together, not one overriding the other. A manufacturer code must first be mapped to a Mosaic RM/PM via the <b>Mosaic-Manufacturer Code Mapping</b> upload on the Consolidated RM/PM tab before it shows up here.</div>
     <input class="search" id="inputsSearch" placeholder="Search by manufacturer code or Mosaic name…" style="width:280px;margin-bottom:10px" />
     <table class="sticky-table">
       <thead>
@@ -1323,53 +1323,50 @@ function subCodesFor(kind, key) {
   const groups = kind === "rm" ? rmSubGroups : pmSubGroups;
   return (groups[key] || []).map(s => s.code).filter(Boolean).map(c => String(c).toLowerCase().trim());
 }
-/* Stock in hand (what the consolidated tabs use). When a Mosaic RM/PM has one or more
- * manufacturer/sub-codes mapped to it, this is the SUM of whatever was entered against
- * each of those manufacturer codes in the Inputs tab (rmSubStock/pmSubStock) — data is
- * entered at manufacturer-code granularity there, and rolled up to the Mosaic level here,
- * so Consolidated RM/PM, SKU DOC, and the Scheduler (via stockAvailable/broadcastStockUpdate)
- * all see one already-aggregated number without needing to know about sub-codes at all.
- * Materials with no manufacturer-code mapping yet fall back to the legacy flat
- * rmStockF/pmStockF store (still editable directly in that case — see renderInputsTab). */
+/* Sum of a manufacturer-code-keyed store across every manufacturer/sub-code mapped to a
+ * given Mosaic RM/PM key (0 if none are mapped, or none have a value yet). */
+function subCodeSum(store, kind, key) {
+  const codes = subCodesFor(kind, key);
+  if (!codes.length) return 0;
+  const sub = store[currentFactory] || {};
+  return codes.reduce((sum, c) => sum + num(sub[c], true), 0);
+}
+/* Stock in hand (what the consolidated tabs use) = whatever was entered directly against
+ * this Mosaic RM/PM via the classic Consolidated RM/PM "Import Current Stock" button /
+ * inline edit (the legacy flat rmStockF/pmStockF store) PLUS the sum of whatever was
+ * entered against each of its mapped manufacturer/sub-codes in the Inputs tab
+ * (rmSubStock/pmSubStock). Both entry points stay live at the same time on purpose — a
+ * material with no manufacturer-code mapping yet works exactly as before (Inputs
+ * contributes 0), and a material fully migrated to Inputs works from that alone (the flat
+ * store just stays 0 for it). Don't double-enter the same physical stock through BOTH
+ * paths for one material, since this adds them together rather than picking one. */
 function stockTotal(kind, key) {
-  const codes = subCodesFor(kind, key);
-  if (codes.length) {
-    const sub = (kind === "rm" ? rmSubStock : pmSubStock)[currentFactory] || {};
-    return codes.reduce((sum, c) => sum + num(sub[c], true), 0);
-  }
   const F = kind === "rm" ? rmStockF : pmStockF;
-  return num((F[currentFactory] || {})[key], true);
+  const flat = num((F[currentFactory] || {})[key], true);
+  const sub = subCodeSum(kind === "rm" ? rmSubStock : pmSubStock, kind, key);
+  return flat + sub;
 }
-/* Expected Inward — same manufacturer-code roll-up rule as stockTotal(), fallback to the
- * legacy flat rmInward/pmInward store for materials with no manufacturer-code mapping. */
+/* Expected Inward — same additive rule as stockTotal(): legacy flat rmInward/pmInward
+ * PLUS the Inputs-tab manufacturer-code sum. */
 function inwardTotal(kind, key) {
-  const codes = subCodesFor(kind, key);
-  if (codes.length) {
-    const sub = (kind === "rm" ? rmSubInward : pmSubInward)[currentFactory] || {};
-    return codes.reduce((sum, c) => sum + num(sub[c], true), 0);
-  }
   const store = kind === "rm" ? rmInward : pmInward;
-  return num(store[key], true);
+  const flat = num(store[key], true);
+  const sub = subCodeSum(kind === "rm" ? rmSubInward : pmSubInward, kind, key);
+  return flat + sub;
 }
-/* Expected Supply M1 — same manufacturer-code roll-up rule as stockTotal(). */
+/* Expected Supply M1 — same additive rule as stockTotal(). */
 function supplyTotal(kind, key) {
-  const codes = subCodesFor(kind, key);
-  if (codes.length) {
-    const sub = (kind === "rm" ? rmSubSupplyM1 : pmSubSupplyM1)[currentFactory] || {};
-    return codes.reduce((sum, c) => sum + num(sub[c], true), 0);
-  }
   const store = kind === "rm" ? rmSupply : pmSupply;
-  return num(store[key], true);
+  const flat = num(store[key], true);
+  const sub = subCodeSum(kind === "rm" ? rmSubSupplyM1 : pmSubSupplyM1, kind, key);
+  return flat + sub;
 }
-/* Expected Supply M2 — same manufacturer-code roll-up rule as stockTotal(). */
+/* Expected Supply M2 — same additive rule as stockTotal(). */
 function supply2Total(kind, key) {
-  const codes = subCodesFor(kind, key);
-  if (codes.length) {
-    const sub = (kind === "rm" ? rmSubSupplyM2 : pmSubSupplyM2)[currentFactory] || {};
-    return codes.reduce((sum, c) => sum + num(sub[c], true), 0);
-  }
   const store = kind === "rm" ? rmSupplyM2 : pmSupplyM2;
-  return num(store[key], true);
+  const flat = num(store[key], true);
+  const sub = subCodeSum(kind === "rm" ? rmSubSupplyM2 : pmSubSupplyM2, kind, key);
+  return flat + sub;
 }
 /* Current stock + Expected Inward (stock-in-transit, about to land) — this is the number
  * every downstream calculation (DOC, Available for order-qty, Opening Stock M2 carry-forward,
