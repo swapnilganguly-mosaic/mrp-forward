@@ -162,11 +162,12 @@
 
   <div class="tabs" id="tabs">
     <div class="tab active" data-tab="demand">1 · Supply Entry</div>
-    <div class="tab" data-tab="rm">2 · Consolidated RM</div>
-    <div class="tab" data-tab="pm">3 · Consolidated PM</div>
-    <div class="tab" data-tab="inv">4 · Live Inventory</div>
-    <div class="tab" data-tab="skudoc">5 · SKU DOC</div>
-    <div class="tab" data-tab="scheduler">6 · Scheduler</div>
+    <div class="tab" data-tab="inputs">2 · Inputs</div>
+    <div class="tab" data-tab="rm">3 · Consolidated RM</div>
+    <div class="tab" data-tab="pm">4 · Consolidated PM</div>
+    <div class="tab" data-tab="inv">5 · Live Inventory</div>
+    <div class="tab" data-tab="skudoc">6 · SKU DOC</div>
+    <div class="tab" data-tab="scheduler">7 · Scheduler</div>
   </div>
 
   <!-- ============ TAB 1: DEMAND ENTRY ============ -->
@@ -202,7 +203,37 @@
     <div class="hint"><b>Step 1:</b> Enter or import demand (units per SKU, M1 &amp; M2). <b>Step 2:</b> Click <b style="color:#7c3aed">Export for Nova Core</b> to download the demand plan as CSV — send this to Nova Core (BOM ERP) to get required quantities. <b>Step 3:</b> Once Nova Core responds, go to <b>Consolidated RM</b> or <b>PM</b> tab and click <b>Import Req Qty</b> to load the required quantities. Order calculations run automatically.</div>
   </section>
 
-  <!-- ============ TAB 2: CONSOLIDATED RM ============ -->
+  <!-- ============ TAB 2: INPUTS ============ -->
+  <section class="panel" id="panel-inputs">
+    <div class="toolbar" style="gap:16px">
+      <div class="field" style="gap:0">
+        <button class="btn sm" id="btnInputsRm" style="border-radius:6px 0 0 6px">Raw Material (RM)</button>
+        <button class="btn sm" id="btnInputsPm" style="border-radius:0 6px 6px 0;border-left:none">Packaging (PM)</button>
+      </div>
+      <div class="spacer"></div>
+      <button class="btn sm primary" id="btnInputsUpload">Upload <span id="inputsUploadLabel">RM</span> Data (Excel/CSV)</button>
+      <input type="file" id="fileInputsCombined" accept=".xlsx,.csv" style="display:none" />
+    </div>
+    <div id="inputsImportMsg" class="hint" style="margin:-6px 0 10px;display:none"></div>
+    <div class="hint" style="margin-bottom:10px">Upload one Excel/CSV file per material type with a Code/Name column plus any of: <b>Current Stock</b>, <b>Expected Inward</b>, <b>Exp. Supply M1</b>, <b>Exp. Supply M2</b> — matching columns are auto-detected, unrecognized codes are skipped, and everything below is also directly editable. Consolidated RM/PM are read-only views of these same values.</div>
+    <input class="search" id="inputsSearch" placeholder="Search by code or name…" style="width:260px;margin-bottom:10px" />
+    <table class="sticky-table">
+      <thead>
+        <tr>
+          <th style="width:44px">#</th>
+          <th id="inputsCodeHead">RM Code</th>
+          <th>Name</th>
+          <th class="num">Current Stock</th>
+          <th class="num">Expected Inward</th>
+          <th class="num">Exp. Supply M1</th>
+          <th class="num">Exp. Supply M2</th>
+        </tr>
+      </thead>
+      <tbody id="inputsRows"></tbody>
+    </table>
+  </section>
+
+  <!-- ============ TAB 3: CONSOLIDATED RM ============ -->
   <section class="panel" id="panel-rm">
     <div class="grand">
       <input class="search" id="rmSearch" placeholder="Search by RM code or name…" style="width:240px" />
@@ -266,7 +297,7 @@
     <div class="hint"><b>Forward planning</b>: <b>Required qty</b> (per month, kg) = Σ(rm_pct ÷ 100 × pack_size_g × month demand ÷ 1000). M1→M2 carry-forward: closing M1 stock = current stock + supply M1 − required M1 (may be negative). <b>Desired quantity</b> = max(0, REQ − available). <b>Actual Quantity</b> floors at MOQ. Click a row for per-SKU details. <b>Verify before raising any PO.</b></div>
   </section>
 
-  <!-- ============ TAB 3: CONSOLIDATED PM ============ -->
+  <!-- ============ TAB 4: CONSOLIDATED PM ============ -->
   <section class="panel" id="panel-pm">
     <div class="grand">
       <input class="search" id="pmSearch" placeholder="Search by PM code or name…" style="width:240px" />
@@ -1538,17 +1569,13 @@ function renderRM() {
       const tr=document.createElement('tr');
       const mv=rmMoq[r.k]!=null?rmMoq[r.k]:'';
       const mi='<input class="cell" type="number" min="0" step="25" value="'+escapeHtml(String(mv))+'" data-k="'+escapeHtml(r.k)+'">';
-      const sti='<input class="cell" type="number" min="0" step="1" value="'+escapeHtml(r.stock.toFixed(1))+'" data-stk="'+escapeHtml(r.k)+'" style="width:90px" title="Current stock (kg) \u2014 editable">';
-      const iwi='<input class="cell" type="number" min="0" step="1" value="'+escapeHtml(r.inward.toFixed(1))+'" data-iw="'+escapeHtml(r.k)+'" style="width:90px" title="Expected inward (kg) \u2014 stock-in-transit, added into current stock for all calculations \u2014 editable">';
+      const stiRO='<span title="Current stock (kg) \u2014 edit in the Inputs tab">'+fmt(r.stock,1)+'</span>';
+      const iwiRO='<span title="Expected inward (kg) \u2014 edit in the Inputs tab">'+fmt(r.inward,1)+'</span>';
       tr.innerHTML='<td class="num">'+(idx+1)+'</td><td class="sku-code">'+escapeHtml(r.code||'\u2014')+'</td><td>'+escapeHtml(r.name)+'</td><td class="sku-code" style="font-size:0.85em">'+escapeHtml(sapiensCodesLabel(r.k))+'</td><td class="num">'+mi+'</td>'+
-        (r.matched?'<td class="num req">'+sti+'</td><td class="num">'+iwi+'</td><td class="num">'+fmt(r.supM1,1)+'</td><td class="num">'+fmt(r.supM2,1)+'</td>'
+        (r.matched?'<td class="num">'+stiRO+'</td><td class="num">'+iwiRO+'</td><td class="num">'+fmt(r.supM1,1)+'</td><td class="num">'+fmt(r.supM2,1)+'</td>'
                   :'<td class="num"><span class="muted">NA</span></td><td class="num"><span class="muted">NA</span></td><td class="num">'+_d+'</td><td class="num">'+_d+'</td>')+_qc;
       const inp=tr.querySelector('input.cell[data-k]');
       if(inp){inp.addEventListener('click',ev=>ev.stopPropagation());inp.addEventListener('change',()=>{rmMoq[inp.getAttribute('data-k')]=inp.value;renderRM();});}
-      const stInp=tr.querySelector('input.cell[data-stk]');
-      if(stInp){stInp.addEventListener('click',ev=>ev.stopPropagation());stInp.addEventListener('change',()=>{rmStockF[currentFactory][stInp.getAttribute('data-stk')]=stInp.value;broadcastStockUpdate();renderRM();});}
-      const iwInp=tr.querySelector('input.cell[data-iw]');
-      if(iwInp){iwInp.addEventListener('click',ev=>ev.stopPropagation());iwInp.addEventListener('change',()=>{rmInward[iwInp.getAttribute('data-iw')]=iwInp.value;broadcastStockUpdate();renderRM();});}
       _tb.appendChild(tr);
     });
     return;
@@ -1608,10 +1635,8 @@ function renderRM() {
     const moqVal = (rmMoq[r.k] == null ? "" : rmMoq[r.k]);
     const moqIn = '<input class="cell" type="number" min="0" step="25" value="' + escapeHtml(moqVal) +
       '" data-k="' + escapeHtml(r.k) + '" style="width:80px" title="MOQ kg — editable">';
-    const stockIn = r.matched ? ('<input class="cell" type="number" min="0" step="1" value="' + escapeHtml(r.stock.toFixed(1)) +
-      '" data-stk="' + escapeHtml(r.k) + '" style="width:90px" title="Current stock (kg) — editable">') : '';
-    const inwardIn = r.matched ? ('<input class="cell" type="number" min="0" step="1" value="' + escapeHtml(r.inward.toFixed(1)) +
-      '" data-iw="' + escapeHtml(r.k) + '" style="width:90px" title="Expected inward (kg) — stock-in-transit, added into current stock for all calculations — editable">') : '';
+    const stockIn = r.matched ? ('<span title="Current stock (kg) — edit in the Inputs tab">' + fmt(r.stock,1) + '</span>') : '';
+    const inwardIn = r.matched ? ('<span title="Expected inward (kg) — edit in the Inputs tab">' + fmt(r.inward,1) + '</span>') : '';
     if (!r.matched) {
       tr.innerHTML =
         '<td class="num">' + (idx + 1) + '</td>' +
@@ -1643,16 +1668,6 @@ function renderRM() {
     const inp = tr.querySelector("input.cell[data-k]");
     inp.addEventListener("click", ev => ev.stopPropagation());
     inp.addEventListener("change", () => { rmMoq[inp.getAttribute("data-k")] = inp.value; renderRM(); });
-    const stInp = tr.querySelector("input.cell[data-stk]");
-    if (stInp) {
-      stInp.addEventListener("click", ev => ev.stopPropagation());
-      stInp.addEventListener("change", () => { rmStockF[currentFactory][stInp.getAttribute("data-stk")] = stInp.value; broadcastStockUpdate(); renderRM(); });
-    }
-    const iwInp = tr.querySelector("input.cell[data-iw]");
-    if (iwInp) {
-      iwInp.addEventListener("click", ev => ev.stopPropagation());
-      iwInp.addEventListener("change", () => { rmInward[iwInp.getAttribute("data-iw")] = iwInp.value; broadcastStockUpdate(); renderRM(); });
-    }
   });
 
   $("rmDistinct").textContent = items.length;
@@ -1736,19 +1751,12 @@ function renderPM() {
       const tr=document.createElement('tr');
       const mv=pmMoq[r.k]!=null?pmMoq[r.k]:'';
       const mi='<input class="cell" type="number" min="0" step="25" value="'+escapeHtml(String(mv))+'" data-k="'+escapeHtml(r.k)+'">';
-      const sv=pmSupply[r.k]!=null?pmSupply[r.k]:'';
-      const si='<input class="cell" type="number" min="0" step="50" value="'+escapeHtml(String(sv))+'" data-sk="'+escapeHtml(r.k)+'" title="Expected supply M1 (units) — editable; M2 always 0 unless imported">';
-      const sti='<input class="cell" type="number" min="0" step="1" value="'+escapeHtml(r.stock.toFixed(1))+'" data-stk="'+escapeHtml(r.k)+'" style="width:90px" title="Current stock (units) — editable">';
-      const iwi='<input class="cell" type="number" min="0" step="1" value="'+escapeHtml(r.inward.toFixed(1))+'" data-iw="'+escapeHtml(r.k)+'" style="width:90px" title="Expected inward (units) — stock-in-transit, added into current stock for all calculations — editable">';
-      tr.innerHTML='<td class="num">'+(idx+1)+'</td><td>'+escapeHtml(r.name)+'</td><td class="sku-code">'+escapeHtml(officialPmCode(normKey(r.name))||'')+'</td><td class="sku-code" style="font-size:0.85em">'+escapeHtml(sapiensPmCodesLabel(r.k))+'</td><td class="num">'+mi+'</td><td class="num req">'+sti+'</td><td class="num req">'+iwi+'</td><td class="num">'+si+'</td><td class="num">'+fmt(r.supM2,1)+'</td>'+_qc2;
+      const siRO='<span title="Expected supply M1 (units) — edit in the Inputs tab">'+fmt(num(pmSupply[r.k],true),1)+'</span>';
+      const stiRO='<span title="Current stock (units) — edit in the Inputs tab">'+fmt(r.stock,1)+'</span>';
+      const iwiRO='<span title="Expected inward (units) — edit in the Inputs tab">'+fmt(r.inward,1)+'</span>';
+      tr.innerHTML='<td class="num">'+(idx+1)+'</td><td>'+escapeHtml(r.name)+'</td><td class="sku-code">'+escapeHtml(officialPmCode(normKey(r.name))||'')+'</td><td class="sku-code" style="font-size:0.85em">'+escapeHtml(sapiensPmCodesLabel(r.k))+'</td><td class="num">'+mi+'</td><td class="num">'+stiRO+'</td><td class="num">'+iwiRO+'</td><td class="num">'+siRO+'</td><td class="num">'+fmt(r.supM2,1)+'</td>'+_qc2;
       const inp=tr.querySelector('input.cell[data-k]');
       if(inp){inp.addEventListener('click',ev=>ev.stopPropagation());inp.addEventListener('change',()=>{pmMoq[inp.getAttribute('data-k')]=inp.value;renderPM();});}
-      const sInp=tr.querySelector('input.cell[data-sk]');
-      if(sInp){sInp.addEventListener('click',ev=>ev.stopPropagation());sInp.addEventListener('change',()=>{pmSupply[sInp.getAttribute('data-sk')]=sInp.value;renderPM();});}
-      const stInp=tr.querySelector('input.cell[data-stk]');
-      if(stInp){stInp.addEventListener('click',ev=>ev.stopPropagation());stInp.addEventListener('change',()=>{pmStockF[currentFactory][stInp.getAttribute('data-stk')]=stInp.value;broadcastStockUpdate();renderPM();});}
-      const iwInp=tr.querySelector('input.cell[data-iw]');
-      if(iwInp){iwInp.addEventListener('click',ev=>ev.stopPropagation());iwInp.addEventListener('change',()=>{pmInward[iwInp.getAttribute('data-iw')]=iwInp.value;broadcastStockUpdate();renderPM();});}
       _ptb.appendChild(tr);
     });
     return;
@@ -1798,12 +1806,9 @@ function renderPM() {
     const tr = document.createElement("tr"); tr.className = "clickable";
     const moqIn = '<input class="cell" type="number" min="0" step="50" value="' + r.moq +
       '" data-k="' + escapeHtml(r.k) + '" style="width:80px" title="MOQ (editable)">';
-    const supIn = '<input class="cell" type="number" min="0" step="50" value="' + r.supply +
-      '" data-sk="' + escapeHtml(r.k) + '" style="width:80px" title="Expected supply M1 (units) — editable; M2 always 0 unless imported">';
-    const stockIn = '<input class="cell" type="number" min="0" step="1" value="' + escapeHtml(r.stock.toFixed(1)) +
-      '" data-stk="' + escapeHtml(r.k) + '" style="width:90px" title="Current stock (units) — editable">';
-    const inwardIn = '<input class="cell" type="number" min="0" step="1" value="' + escapeHtml(r.inward.toFixed(1)) +
-      '" data-iw="' + escapeHtml(r.k) + '" style="width:90px" title="Expected inward (units) — stock-in-transit, added into current stock for all calculations — editable">';
+    const supIn = '<span title="Expected supply M1 (units) — edit in the Inputs tab">' + fmt(r.supply,1) + '</span>';
+    const stockIn = '<span title="Current stock (units) — edit in the Inputs tab">' + fmt(r.stock,1) + '</span>';
+    const inwardIn = '<span title="Expected inward (units) — edit in the Inputs tab">' + fmt(r.inward,1) + '</span>';
     tr.innerHTML =
       '<td class="num">' + (idx + 1) + '</td>' +
       '<td>' + escapeHtml(r.name) + '</td>' +
@@ -1821,15 +1826,6 @@ function renderPM() {
     const inp = tr.querySelector("input.cell[data-k]");
     inp.addEventListener("click", ev => ev.stopPropagation());
     inp.addEventListener("change", () => { pmMoq[inp.getAttribute("data-k")] = inp.value; renderPM(); });
-    const sInp = tr.querySelector("input.cell[data-sk]");
-    sInp.addEventListener("click", ev => ev.stopPropagation());
-    sInp.addEventListener("change", () => { pmSupply[sInp.getAttribute("data-sk")] = sInp.value; renderPM(); });
-    const stInp = tr.querySelector("input.cell[data-stk]");
-    stInp.addEventListener("click", ev => ev.stopPropagation());
-    stInp.addEventListener("change", () => { pmStockF[currentFactory][stInp.getAttribute("data-stk")] = stInp.value; broadcastStockUpdate(); renderPM(); });
-    const iwInp = tr.querySelector("input.cell[data-iw]");
-    iwInp.addEventListener("click", ev => ev.stopPropagation());
-    iwInp.addEventListener("change", () => { pmInward[iwInp.getAttribute("data-iw")] = iwInp.value; broadcastStockUpdate(); renderPM(); });
   });
 
   $("pmDistinct").textContent = items.length;
@@ -2499,6 +2495,173 @@ function applySupplyRows(rows, kind) {
   });
   return { matched: Object.keys(sums1).length, unmatched };
 }
+
+/* Combined importer for the Inputs tab — a single file can carry any of Current Stock,
+ * Expected Inward, Exp. Supply M1, and Exp. Supply M2 together, keyed by RM/PM identifier
+ * (same flexible resolution as applyStockRows/applySupplyRows: Mosaic code, name, Sapiens
+ * sub-code, or sub-material name). Each of the 4 value columns is independently optional —
+ * a file missing a column simply leaves that field untouched for every material. Unlike
+ * applySupplyRows (which never trusts an "M2" header, since standalone supply files here
+ * historically only ever had one column), this importer DOES look for M1/M2-specific
+ * headers, because the Inputs tab's file format is expected to carry both months. If no
+ * M1/M2-specific header is found but a generic "supply"/"exp" column exists, that one
+ * column is treated as Supply M1 only, matching the legacy single-column behavior. */
+function applyCombinedRows(rows, kind) {
+  const resolve = makeResolver(kind);
+  const width = rows.reduce((w, r) => Math.max(w, r.length), 0);
+  const cell = (r, c) => String(r[c] == null ? "" : r[c]).trim();
+  let idCol = 0, idHits = -1;
+  for (let c = 0; c < width; c++) {
+    let hits = 0;
+    rows.forEach(r => { const v = cell(r, c); if (v && resolve(v)) hits++; });
+    if (hits > idHits) { idHits = hits; idCol = c; }
+  }
+  const hdr = (rows[0] || []).map(h => String(h || "").toLowerCase().replace(/[^a-z0-9]/g, ""));
+  const taken = new Set([idCol]);
+  const claim = c => { if (c >= 0) taken.add(c); return c; };
+  const findHdr = pred => { for (let c = 0; c < width; c++) { if (taken.has(c)) continue; if (hdr[c] && pred(hdr[c])) return c; } return -1; };
+  const inwardCol = claim(findHdr(h => h.includes("inward") || h.includes("intransit") || h.includes("transit")));
+  let supM1Col = claim(findHdr(h => h.includes("m1") && (h.includes("supply") || h.includes("exp"))));
+  let supM2Col = claim(findHdr(h => h.includes("m2") && (h.includes("supply") || h.includes("exp"))));
+  if (supM1Col < 0 && supM2Col < 0) {
+    // No month-specific header — a single generic supply/exp column (if present) is Supply M1 only.
+    supM1Col = claim(findHdr(h => h.includes("supply") || h.includes("exp")));
+  }
+  let stockCol = claim(findHdr(h => h.includes("stock")));
+  if (stockCol < 0) {
+    // No "stock" header found — fall back to the widest still-unclaimed numeric column.
+    let qHits = -1;
+    for (let c = 0; c < width; c++) {
+      if (taken.has(c)) continue;
+      let hits = 0;
+      rows.forEach(r => { const v = cell(r, c).replace(/,/g, ""); if (v !== "" && isFinite(parseFloat(v))) hits++; });
+      if (hits > qHits) { qHits = hits; stockCol = c; }
+    }
+    claim(stockCol);
+  }
+  const anyValCol = [inwardCol, supM1Col, supM2Col, stockCol].some(c => c >= 0);
+  const numAt = (r, c) => { if (c == null || c < 0) return null; const v = cell(r, c).replace(/,/g, ""); return v !== "" && isFinite(parseFloat(v)) ? parseFloat(v) : null; };
+  const skipHeaderRow = anyValCol && rows[0] && [inwardCol, supM1Col, supM2Col, stockCol].every(c => c < 0 || numAt(rows[0], c) == null);
+  const stockSums = {}, inwardSums = {}, sup1Sums = {}, sup2Sums = {}, unmatched = [];
+  rows.forEach((r, i) => {
+    if (i === 0 && skipHeaderRow) return;
+    const raw = cell(r, idCol);
+    if (!raw) return;
+    const keys = resolve.resolveAll(raw);
+    if (!keys.length) {
+      unmatched.push({ identifier: raw, reason: kind === "rm"
+        ? "Not recognized as a known RM code, RM name, Sapiens sub-code, or sub-RM name"
+        : "Not recognized as a known PM code, PM name, Sapiens sub-code, or sub-PM name" });
+      return;
+    }
+    const sv = numAt(r, stockCol), iv = numAt(r, inwardCol), s1 = numAt(r, supM1Col), s2 = numAt(r, supM2Col);
+    keys.forEach(key => {
+      if (sv != null) stockSums[key] = (stockSums[key] || 0) + sv;
+      if (iv != null) inwardSums[key] = (inwardSums[key] || 0) + iv;
+      if (s1 != null) sup1Sums[key] = (sup1Sums[key] || 0) + s1;
+      if (s2 != null) sup2Sums[key] = (sup2Sums[key] || 0) + s2;
+    });
+  });
+  const SAP = currentFactory;
+  const stockStore = kind === "rm" ? rmStockF : pmStockF;
+  const inwardStore = kind === "rm" ? rmInward : pmInward;
+  Object.keys(stockSums).forEach(key => {
+    stockStore[SAP][key] = String(stockSums[key]);
+    if (kind === "rm") {
+      if (rmFirm[key]) rmFirm[key].stock = stockSums[key];
+      else rmFirm[key] = { code: rmCodeReal[key] || (matMaster[key] ? matMaster[key].code : "") || "", stock: stockSums[key], supply: rmSupply[key] || 0 };
+    }
+  });
+  Object.keys(inwardSums).forEach(key => { inwardStore[key] = String(inwardSums[key]); });
+  Object.keys(sup1Sums).forEach(key => {
+    if (kind === "rm") { rmSupply[key] = sup1Sums[key]; if (rmFirm[key]) rmFirm[key].supply = sup1Sums[key]; else rmFirm[key] = { code: rmCodeReal[key] || (matMaster[key] ? matMaster[key].code : "") || "", stock: null, supply: sup1Sums[key] }; }
+    else { pmSupply[key] = String(sup1Sums[key]); }
+  });
+  Object.keys(sup2Sums).forEach(key => {
+    if (kind === "rm") rmSupplyM2[key] = sup2Sums[key];
+    else pmSupplyM2[key] = sup2Sums[key];
+  });
+  const matchedKeys = new Set([...Object.keys(stockSums), ...Object.keys(inwardSums), ...Object.keys(sup1Sums), ...Object.keys(sup2Sums)]);
+  return {
+    matched: matchedKeys.size, unmatched,
+    stockFound: stockCol >= 0, inwardFound: inwardCol >= 0, sup1Found: supM1Col >= 0, sup2Found: supM2Col >= 0
+  };
+}
+
+// --- Inputs tab (Current Stock / Expected Inward / Exp. Supply M1 & M2 — editable here, ---
+// --- read-only in Consolidated RM/PM) ------------------------------------------------
+let inputsKind = 'rm';
+function setInputsKind(kind) {
+  inputsKind = kind;
+  $("btnInputsRm").classList.toggle("primary", kind === "rm");
+  $("btnInputsPm").classList.toggle("primary", kind === "pm");
+  $("inputsUploadLabel").textContent = kind === "rm" ? "RM" : "PM";
+  $("inputsCodeHead").textContent = kind === "rm" ? "RM Code" : "PM Code";
+  renderInputsTab();
+}
+function renderInputsTab() {
+  const kind = inputsKind;
+  const bomList = kind === "rm" ? STATIC_BOM.bom_rm : STATIC_BOM.bom_pm;
+  const nameField = kind === "rm" ? "rm_name" : "pm_name";
+  const officialCode = kind === "rm" ? officialRmCode : officialPmCode;
+  const sapiensLabel = kind === "rm" ? sapiensCodesLabel : sapiensPmCodesLabel;
+  const stockStore = kind === "rm" ? rmStockF : pmStockF;
+  const inwardStore = kind === "rm" ? rmInward : pmInward;
+  const supStore = kind === "rm" ? rmSupply : pmSupply;
+  const sup2Store = kind === "rm" ? rmSupplyM2 : pmSupplyM2;
+  const unitLabel = kind === "rm" ? "kg" : "units";
+
+  const seen = new Map();
+  bomList.forEach(r => { const nm = r[nameField]; if (!nm) return; const k = normKey(nm); if (!seen.has(k)) seen.set(k, nm); });
+  const items = [...seen.entries()].map(([k, name]) => ({
+    k, name,
+    code: officialCode(k) || "",
+    stock: stockTotal(kind, k),
+    inward: num(inwardStore[k], true),
+    sup1: num(supStore[k], true),
+    sup2: num(sup2Store[k], true)
+  }));
+  const filt = ($("inputsSearch").value || "").trim().toLowerCase();
+  const shown = filt ? items.filter(r => (r.name || "").toLowerCase().includes(filt) || (r.code || "").toLowerCase().includes(filt)) : items;
+  shown.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+
+  const tb = $("inputsRows"); tb.innerHTML = "";
+  shown.forEach((r, idx) => {
+    const tr = document.createElement("tr");
+    const sti = '<input class="cell" type="number" min="0" step="1" value="' + escapeHtml(r.stock.toFixed(1)) + '" data-stk="' + escapeHtml(r.k) + '" style="width:90px" title="Current stock (' + unitLabel + ') — editable">';
+    const iwi = '<input class="cell" type="number" min="0" step="1" value="' + escapeHtml(r.inward.toFixed(1)) + '" data-iw="' + escapeHtml(r.k) + '" style="width:90px" title="Expected inward (' + unitLabel + ') — editable">';
+    const s1i = '<input class="cell" type="number" min="0" step="1" value="' + escapeHtml(r.sup1.toFixed(1)) + '" data-s1="' + escapeHtml(r.k) + '" style="width:90px" title="Expected supply M1 (' + unitLabel + ') — editable">';
+    const s2i = '<input class="cell" type="number" min="0" step="1" value="' + escapeHtml(r.sup2.toFixed(1)) + '" data-s2="' + escapeHtml(r.k) + '" style="width:90px" title="Expected supply M2 (' + unitLabel + ') — editable">';
+    tr.innerHTML = '<td class="num">' + (idx + 1) + '</td>' +
+      '<td class="sku-code">' + escapeHtml(r.code || (sapiensLabel(r.k) || '—')) + '</td>' +
+      '<td>' + escapeHtml(r.name) + '</td>' +
+      '<td class="num req">' + sti + '</td>' +
+      '<td class="num req">' + iwi + '</td>' +
+      '<td class="num req">' + s1i + '</td>' +
+      '<td class="num req">' + s2i + '</td>';
+    tb.appendChild(tr);
+    tr.querySelector('[data-stk]').addEventListener('change', ev => {
+      stockStore[currentFactory][ev.target.getAttribute('data-stk')] = ev.target.value;
+      broadcastStockUpdate(); renderInputsTab();
+    });
+    tr.querySelector('[data-iw]').addEventListener('change', ev => {
+      inwardStore[ev.target.getAttribute('data-iw')] = ev.target.value;
+      broadcastStockUpdate(); renderInputsTab();
+    });
+    tr.querySelector('[data-s1]').addEventListener('change', ev => {
+      const key = ev.target.getAttribute('data-s1');
+      if (kind === 'rm') { rmSupply[key] = num(ev.target.value, true); if (rmFirm[key]) rmFirm[key].supply = rmSupply[key]; }
+      else pmSupply[key] = ev.target.value;
+      renderInputsTab();
+    });
+    tr.querySelector('[data-s2]').addEventListener('change', ev => {
+      const key = ev.target.getAttribute('data-s2');
+      sup2Store[key] = num(ev.target.value, true);
+      renderInputsTab();
+    });
+  });
+}
+
 /* Import MOQ (Minimum Order Quantity) for a single kind ("rm" or "pm") — used by the
  * Consolidated RM/PM tabs' "Import MOQ" button. Same flexible identifier resolution as
  * Current Stock/Expected Supply (Mosaic code, name, Sapiens sub-code, or sub-material
@@ -2902,6 +3065,7 @@ function showTab(name) {
   $("panel-" + name).classList.add("active");
   // Output tabs recompute from current state every time they are shown (live).
   if (name === "demand") renderDemand();
+  if (name === "inputs") renderInputsTab();
   if (name === "rm") renderRM();
   if (name === "pm") renderPM();
   if (name === "sku") renderSkuDetail($("skuPicker").value || (SKU[0] && SKU[0].sku_code));
@@ -3103,6 +3267,43 @@ function wire() {
   });
 
   // Import Current Stock (RM tab) — matched by RM name/code, applied to Current stock (kg).
+  $("btnInputsRm").addEventListener("click", () => setInputsKind("rm"));
+  $("btnInputsPm").addEventListener("click", () => setInputsKind("pm"));
+  $("inputsSearch").addEventListener("input", () => renderInputsTab());
+  $("btnInputsUpload").addEventListener("click", () => $("fileInputsCombined").click());
+  $("fileInputsCombined").addEventListener("change", async e => {
+    const file = e.target.files[0]; if (!file) return;
+    e.target.value = "";
+    const kind = inputsKind;
+    const msg = $("inputsImportMsg");
+    msg.style.display = "block"; msg.style.color = "";
+    try {
+      let rows;
+      if (/\.csv$/i.test(file.name)) rows = parseCSV(await file.text());
+      else if (/\.xlsx$/i.test(file.name)) rows = await readXlsx(await file.arrayBuffer());
+      else throw new Error("Unsupported file type. Use .xlsx or .csv (not the older .xls).");
+      rows = trimLeadingBlank(rows || []);
+      if (!rows.length) throw new Error("The file has no rows.");
+      const res = applyCombinedRows(rows, kind);
+      const label = kind === "rm" ? "RM" : "PM";
+      const parts = [];
+      if (res.stockFound) parts.push("Current Stock");
+      if (res.inwardFound) parts.push("Expected Inward");
+      if (res.sup1Found) parts.push("Exp. Supply M1");
+      if (res.sup2Found) parts.push("Exp. Supply M2");
+      msg.innerHTML = "Imported " + (parts.length ? parts.join(", ") : "no recognized value columns") +
+        " for <b>" + res.matched + "</b> " + label + "(s)" +
+        (res.unmatched.length ? "; <span class='miss-badge'>" + res.unmatched.length + " row(s) could not be mapped</span> — see popup" : "") + ".";
+      showUnmatchedModal("Import " + label + " Data (Inputs tab) — unmatched rows", res.unmatched);
+      renderInputsTab();
+      if (kind === "rm") renderRM(); else renderPM();
+      broadcastStockUpdate();
+    } catch (err) {
+      msg.style.color = "var(--warn)";
+      msg.textContent = "\u26a0 " + (err && err.message ? err.message : "Could not read this file.");
+    }
+  });
+
   $("btnImportStockRm").addEventListener("click", () => $("fileStockRm").click());
   $("fileStockRm").addEventListener("change", async e => {
     const file = e.target.files[0]; if (!file) return;
@@ -3575,6 +3776,7 @@ async function fetchDataClientSide() {
 
 async function init() {
   try { wire(); } catch(e) { console.warn('wire init error:', e.message); }
+  setInputsKind('rm');
   showTab('demand');
   const st = $('dataStatus');
   try {
