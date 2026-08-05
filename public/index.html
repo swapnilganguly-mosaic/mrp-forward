@@ -150,7 +150,8 @@
     </div>
     <div class="data-ctl">
 <label class="row-flex" style="gap:6px;font-size:12px;color:var(--muted)">Factory
-        <select class="cell" id="factoryPicker" style="min-width:140px;font-weight:600"></select></label>
+        <select class="cell" id="factoryPicker" style="min-width:140px;font-weight:600"></select>
+        <button class="btn sm" id="btnRenameFactory" title="Rename the currently selected factory" style="padding:4px 8px;font-size:11px">Rename</button></label>
 <label class="row-flex" style="gap:6px;font-size:12px;color:var(--muted)">Plan horizon (days)
         <input class="cell" id="planDays" type="number" min="1" step="1" value="30" style="width:64px" /></label>
       <button class="btn sm" id="btnUpload">Upload CSVs</button>
@@ -1047,6 +1048,26 @@ function renderFactoryPicker() {
   picker.innerHTML = FACTORIES.map(f => '<option value="' + escapeHtml(f.code) + '">' + escapeHtml(f.name) + '</option>').join('')
     + '<option value="__add__">+ Add factory…</option>';
   picker.value = currentFactory;
+}
+/* Rename the currently selected factory (display name only — its internal code, and
+ * therefore every per-factory store keyed by that code, is unchanged) — offered next to
+ * the Factory picker in the header. */
+function renameFactory() {
+  const fct = FACTORIES.find(f => f.code === currentFactory);
+  if (!fct) return;
+  const name = prompt('Rename factory "' + fct.name + '" to:', fct.name);
+  if (name == null) return;                 // cancelled
+  const trimmed = name.trim();
+  if (!trimmed) { alert('Factory name cannot be blank.'); return; }
+  if (FACTORIES.some(f => f.code !== fct.code && f.name.toLowerCase() === trimmed.toLowerCase())) {
+    alert('Another factory already has that name.'); return;
+  }
+  fct.name = trimmed;
+  renderFactoryPicker();
+  const st = $('dataStatus');
+  if (st) st.textContent = SKU.length
+    ? (SKU.length + ' SKUs loaded — ' + fct.name)
+    : 'No data yet for this factory — use "Upload BOM data" (top of Supply Entry tab) to add one.';
 }
 
 /* ---------- material-code master + per-factory inventory (DUMMY) ---------- */
@@ -3021,6 +3042,7 @@ function wire() {
     if (e.target.value === "__add__") { addFactory(); return; }
     switchFactory(e.target.value);
   });
+  if ($("btnRenameFactory")) $("btnRenameFactory").addEventListener("click", renameFactory);
 
   $("demandSearch").addEventListener("input", e => { demandFilter = e.target.value; renderDemand(); });
   if ($("rmSearch")) $("rmSearch").addEventListener("input", e => { rmFilter = e.target.value; renderRM(); });
