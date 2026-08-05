@@ -1533,11 +1533,11 @@ function renderDemand() {
     tdPack.appendChild(packIn);
 
     const tdDem = document.createElement("td"); tdDem.className = "num";
-    const demIn = mkNum(demand[s.sku_code], v => { demand[s.sku_code] = v; updateDemandRow(tr, s); updateDemandFooter(); });
+    const demIn = mkNum(demand[s.sku_code], v => { demand[s.sku_code] = v; updateDemandRow(tr, s); updateDemandFooter(); syncDemandToProdPlan(s.sku_code); });
     tdDem.appendChild(demIn);
 
     const tdDem2 = document.createElement("td"); tdDem2.className = "num";
-    const dem2In = mkNum(demandM2[s.sku_code], v => { demandM2[s.sku_code] = v; updateDemandRow(tr, s); updateDemandFooter(); });
+    const dem2In = mkNum(demandM2[s.sku_code], v => { demandM2[s.sku_code] = v; updateDemandRow(tr, s); updateDemandFooter(); syncDemandToProdPlan(s.sku_code); });
     tdDem2.appendChild(dem2In);
 
     const tdKg = document.createElement("td"); tdKg.className = "num req"; tdKg.dataset.kg = "1";
@@ -1554,6 +1554,24 @@ function updateDemandRow(tr, s) {
   const dem = num(demand[s.sku_code], true) + num(demandM2[s.sku_code], true);   // 2-month total
   const pack = num(s.pack_size_g, true);
   tr.querySelector('[data-kg]').textContent = fmt(pack * dem / 1000, 3);
+}
+// --- Supply Entry Demand -> Scheduler Monthly Plan live sync ---------------------------
+// Supply M1/M2 entered here (manually, bulk paste, or file import) IS the Scheduler's
+// Monthly Plan M1/M2 for that SKU -- the same number, not two independently-entered
+// numbers -- so every time demand/demandM2 changes for a SKU, push it straight into
+// monthlyPlan/monthlyPlanM2 (through the same Line Cap clamp every other Monthly Plan
+// entry point already goes through) and, if the Scheduler tab is open, re-render it so
+// the change is visible immediately.
+function syncDemandToProdPlan(code) {
+  if (typeof monthlyPlan === 'undefined' || typeof monthlyPlanM2 === 'undefined') return;
+  const d1 = num(demand[code], true);
+  const d2 = num(demandM2[code], true);
+  monthlyPlan[code] = (typeof clampToLineCap === 'function') ? clampToLineCap(code, d1) : d1;
+  monthlyPlanM2[code] = (typeof clampToLineCap === 'function') ? clampToLineCap(code, d2) : d2;
+}
+function syncAllDemandToProdPlan() {
+  SKU.forEach(s => syncDemandToProdPlan(s.sku_code));
+  if (curTab === 'scheduler' && typeof renderScoreTable === 'function') renderScoreTable();
 }
 function updateDemandFooter() {
   let units = 0, unitsM2 = 0, kg = 0, n = 0;
@@ -3047,7 +3065,7 @@ function wire() {
   $("demandSearch").addEventListener("input", e => { demandFilter = e.target.value; renderDemand(); });
   if ($("rmSearch")) $("rmSearch").addEventListener("input", e => { rmFilter = e.target.value; renderRM(); });
   if ($("pmSearch")) $("pmSearch").addEventListener("input", e => { pmFilter = e.target.value; renderPM(); });
-  $("btnReset").addEventListener("click", () => { SKU.forEach(s => { demand[s.sku_code] = "0"; demandM2[s.sku_code] = "0"; }); showTab(curTab); });
+  $("btnReset").addEventListener("click", () => { SKU.forEach(s => { demand[s.sku_code] = "0"; demandM2[s.sku_code] = "0"; }); syncAllDemandToProdPlan(); showTab(curTab); });
   $("planDays").addEventListener("input", e => { planDays = e.target.value; if (curTab === "rm" || curTab === "pm") showTab(curTab); });
 
   // Per-SKU controls
@@ -3543,7 +3561,7 @@ function applyPaste() {
       code = parts.slice(0, parts.length - 1).join(" ").trim();
     }
     const hit = lut[code.toLowerCase()];
-    if (hit) { demand[hit] = m1; if (m2 !== null) demandM2[hit] = m2; matched++; } else misses.push(code);
+    if (hit) { demand[hit] = m1; if (m2 !== null) demandM2[hit] = m2; syncDemandToProdPlan(hit); matched++; } else misses.push(code);
   });
   $("pasteResult").innerHTML = "Matched <b>" + matched + "</b> SKU(s)." +
     (misses.length ? " Unmatched: " + escapeHtml(misses.slice(0, 8).join(", ")) + (misses.length > 8 ? " …" : "") : "");
@@ -3725,6 +3743,7 @@ function applyDemandFile() {
   if (!matches.length) return;
   if ($("zeroOthers").checked) SKU.forEach(s => { demand[s.sku_code] = "0"; demandM2[s.sku_code] = "0"; });
   matches.forEach(([code, m1, m2]) => { demand[code] = (m1 === "" ? "0" : m1); demandM2[code] = (m2 === "" ? "0" : m2); });
+  syncAllDemandToProdPlan();
   showTab(curTab);
   $("demandModal").style.display = "none";
   $("demandFileSetup").style.display = "none";
@@ -3862,6 +3881,7 @@ async function init() {
     }
     loadDataset(d);
     applyOfficialCodes();
+    syncAllDemandToProdPlan();
     broadcastStockUpdate();
     st.textContent = 'Dataset loaded ✓ – ' + d.sku_master.length + ' SKUs';
     showTab('demand');
