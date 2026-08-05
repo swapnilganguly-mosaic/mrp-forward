@@ -5192,33 +5192,29 @@ function renderSummaryCards(){
 }
 
 // --- 2-month schedule: week-wise then day-wise (Priority Scoring tab) ----------
-// M1 SKUs (weeks 1-4) are ordered by descending Score M1; M2 SKUs (weeks 5-8) are ordered
-// by descending Score M2 — each phase uses that month's Run Qty (DRR x 13) as the total to
-// place, respecting both the shared weekly Line Cap (kg/week, config panel) and each SKU's
-// own per-row Line Cap (UNITS/DAY, converted to a weekly kg ceiling internally via pack
-// size, since the rest of this allocator works in kg). Each week's
-// resulting total is then spread evenly across
-// its 7 days for the day-wise view.
+// M1 SKUs (weeks 1-4), M2 SKUs (weeks 5-8) — each phase uses that month's Run Qty (DRR x 13)
+// as the total to place. Every SKU is allocated INDEPENDENTLY, purely against its own
+// per-row Line Cap (units/day, converted to a weekly kg ceiling via pack size) -- there is
+// no shared/global weekly capacity pool and no competition between SKUs for capacity. If a
+// SKU's Run Qty fits under its own Line Cap for a week, it runs, full stop; higher-scored
+// SKUs never crowd out lower-scored ones. (The old shared "Line Cap (kg/week)" config-panel
+// value is intentionally no longer used here.) Each week's resulting total is then spread
+// evenly across its 7 days for the day-wise view.
 function generateSchedule2Month(){
   const wks = 8, wpm = 4;
-  const globalCapKg = n(document.getElementById('cfgLineCap').value) || 5000;
 
   const weekAlloc = {};
   rows.forEach(r => { weekAlloc[r.code] = new Array(wks).fill(0); });
 
   function allocatePhase(orderedRows, runQtyField, weekStart, weekEnd){
-    const weekCap = new Array(wks).fill(0);
-    for (let w = weekStart; w < weekEnd; w++) weekCap[w] = globalCapKg;
     orderedRows.forEach(r => {
       const pkKg = r.packSizeKg || 0.001;
       let remKg = Math.max(0, r[runQtyField]) * pkKg;
       const perSkuCapKg = (lineCap[r.code] || 10000) * 7 * pkKg; // Line Cap is units/day -> weekly kg ceiling
       for (let w = weekStart; w < weekEnd && remKg > 0; w++){
-        const cap = Math.min(weekCap[w], perSkuCapKg);
-        const fit = Math.min(remKg, cap);
+        const fit = Math.min(remKg, perSkuCapKg);
         if (fit > 0){
           weekAlloc[r.code][w] += fit;
-          weekCap[w] -= fit;
           remKg -= fit;
         }
       }
@@ -5226,7 +5222,9 @@ function generateSchedule2Month(){
   }
 
   // Only feasible ("ok") SKUs are eligible to be scheduled that month — Blocked, Awaiting
-  // Data, and No-supply SKUs never receive a week allocation.
+  // Data, and No-supply SKUs never receive a week allocation. Score order no longer affects
+  // the outcome (no shared pool to compete for) but is kept for a stable, priority-first
+  // read order.
   const m1Order = rows.filter(r=>r.dataStateM1==='ok').sort((a,b)=>b.scoreM1-a.scoreM1);
   const m2Order = rows.filter(r=>r.dataStateM2==='ok').sort((a,b)=>b.scoreM2-a.scoreM2);
   allocatePhase(m1Order, 'runQtyM1', 0, wpm);
@@ -5254,7 +5252,7 @@ function generateSchedule2Month(){
     const unallocated = sched2mo.filter(r => !r.weekKg.some(v=>v>0)).length;
     statusEl.textContent =
       `Scheduled ${sched2mo.length}/${rows.length} SKUs across ${wks} weeks (M1: weeks 1-${wpm}, M2: weeks ${wpm+1}-${wks})` +
-      (unallocated ? ` — ${unallocated} of these got 0 capacity every week (Line Cap exhausted by higher-priority SKUs)` : '');
+      (unallocated ? ` — ${unallocated} of these got 0 capacity every week (Run Qty is 0, or their own per-SKU Line Cap is 0)` : '');
   }
 }
 
