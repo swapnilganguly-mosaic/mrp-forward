@@ -165,9 +165,8 @@
     <div class="tab" data-tab="inputs">2 · Inputs</div>
     <div class="tab" data-tab="rm">3 · Consolidated RM</div>
     <div class="tab" data-tab="pm">4 · Consolidated PM</div>
-    <div class="tab" data-tab="inv">5 · Live Inventory</div>
-    <div class="tab" data-tab="skudoc">6 · SKU DOC</div>
-    <div class="tab" data-tab="scheduler">7 · Scheduler</div>
+    <div class="tab" data-tab="skudoc">5 · SKU DOC</div>
+    <div class="tab" data-tab="scheduler">6 · Scheduler</div>
   </div>
 
   <!-- ============ TAB 1: DEMAND ENTRY ============ -->
@@ -215,14 +214,14 @@
       <input type="file" id="fileInputsCombined" accept=".xlsx,.csv" style="display:none" />
     </div>
     <div id="inputsImportMsg" class="hint" style="margin:-6px 0 10px;display:none"></div>
-    <div class="hint" style="margin-bottom:10px">Upload one Excel/CSV file per material type with a Code/Name column plus any of: <b>Current Stock</b>, <b>Expected Inward</b>, <b>Exp. Supply M1</b>, <b>Exp. Supply M2</b> — matching columns are auto-detected, unrecognized codes are skipped, and everything below is also directly editable. Consolidated RM/PM are read-only views of these same values.</div>
-    <input class="search" id="inputsSearch" placeholder="Search by code or name…" style="width:260px;margin-bottom:10px" />
+    <div class="hint" style="margin-bottom:10px">Values here are entered against the <b>manufacturer RM/PM code</b> (e.g. RM0160, RM0404), not the Mosaic code — Consolidated RM/PM automatically sums every manufacturer code mapped to a Mosaic material and shows that total (read-only there). Upload one Excel/CSV file per material type with a manufacturer code column plus any of: <b>Current Stock</b>, <b>Expected Inward</b>, <b>Exp. Supply M1</b>, <b>Exp. Supply M2</b> — matching columns are auto-detected, unrecognized codes are skipped, and everything below is also directly editable. A manufacturer code must first be mapped to a Mosaic RM/PM via the <b>Mosaic-Manufacturer Code Mapping</b> upload on the Consolidated RM/PM tab before it shows up here.</div>
+    <input class="search" id="inputsSearch" placeholder="Search by manufacturer code or Mosaic name…" style="width:280px;margin-bottom:10px" />
     <table class="sticky-table">
       <thead>
         <tr>
           <th style="width:44px">#</th>
-          <th id="inputsCodeHead">RM Code</th>
-          <th>Name</th>
+          <th id="inputsCodeHead">Manufacturer RM Code</th>
+          <th>Maps to (Mosaic RM)</th>
           <th class="num">Current Stock</th>
           <th class="num">Expected Inward</th>
           <th class="num">Exp. Supply M1</th>
@@ -246,11 +245,12 @@
       <div class="kpi"><b id="rmAtRisk">0</b><span>M1 orders needed</span></div>
       <div class="spacer"></div>
       <div class="field" style="justify-content:flex-end;gap:8px">
-        <button class="btn sm" id="btnImportStockRm" title="Import a CSV/Excel with columns: RM Name (or RM Code, or Sapiens RM Code / sub-RM name), Current Stock (kg), and optionally an Expected Inward (kg) column (stock-in-transit — added into current stock for all calculations). Sub-RMs mapped to the same Mosaic RM code (e.g. Jaggery Powder's 7Dinam/Dhampure/Shivalik) are summed into that one RM's stock.">Import Current Stock</button>
-        <button class="btn sm" id="btnImportSupplyRm" title="Import a CSV/Excel with columns: identifier (Sapiens RM Code, Mosaic RM Code, RM name, or sub-RM name — any of these), Expected supply (kg). Sub-RMs mapped to the same Mosaic RM code are summed into that one RM's expected supply.">Import Expected Supply</button>
+        <button class="btn sm" id="btnImportStockRm" title="Import a CSV/Excel with columns: RM Name (or RM Code, or Manufacturer RM Code / sub-RM name), Current Stock (kg), and optionally an Expected Inward (kg) column (stock-in-transit — added into current stock for all calculations). Sub-RMs mapped to the same Mosaic RM code (e.g. Jaggery Powder's 7Dinam/Dhampure/Shivalik) are summed into that one RM's stock.">Import Current Stock</button>
+        <button class="btn sm" id="btnImportSupplyRm" title="Import a CSV/Excel with columns: identifier (Manufacturer RM Code, Mosaic RM Code, RM name, or sub-RM name — any of these), Expected supply (kg). Sub-RMs mapped to the same Mosaic RM code are summed into that one RM's expected supply.">Import Expected Supply</button>
         <button class="btn sm" id="btnImportReqRm" title="Import a CSV/Excel with columns: RM Name (or RM Code), Required M1 (kg), Required M2 (kg)">Import Req Qty</button>
-        <button class="btn sm" id="btnImportReqRmSap" title="Import a CSV/Excel with columns: identifier (Sapiens RM Code, Mosaic RM Code, RM name, or sub-RM name — any of these), Required M1 (kg), Required M2 (kg). Sub-RMs mapped to the same Mosaic RM code are summed; a code shared across materials applies to all of them.">Import Req Qty (Sapiens Code)</button>
+        <button class="btn sm" id="btnImportReqRmSap" title="Import a CSV/Excel with columns: identifier (Manufacturer RM Code, Mosaic RM Code, RM name, or sub-RM name — any of these), Required M1 (kg), Required M2 (kg). Sub-RMs mapped to the same Mosaic RM code are summed; a code shared across materials applies to all of them.">Import Req Qty (Manufacturer Code)</button>
         <button class="btn sm" id="btnClearReqRm" style="display:none" title="Remove imported required qty overrides and revert to BOM-calculated values">Clear override</button>
+        <button class="btn sm" id="btnImportCodeMapRm" style="background:#f1f5f9;color:#374151" title="Import a CSV/Excel with columns: Mosaic RM Code, Mosaic RM Name, Manufacturer RM Code. Maps a manufacturer/sub-RM code (e.g. RM0160) to an existing Mosaic RM (matched by Mosaic code or name) so it becomes editable in the Inputs tab and rolls up into this RM's Current Stock/Expected Inward/Exp. Supply here. Rows for an RM not already in this 82-RM list are reported as unmatched.">Upload Mosaic-Manufacturer Code Mapping</button>
         <button class="btn primary" id="exportRm">Export RM CSV</button>
       </div>
     </div>
@@ -260,6 +260,7 @@
     <input type="file" id="fileSupplyRm" accept=".xlsx,.csv" style="display:none" />
     <input type="file" id="fileReqRm" accept=".xlsx,.csv" style="display:none" />
     <input type="file" id="fileReqRmSap" accept=".xlsx,.csv" style="display:none" />
+    <input type="file" id="fileCodeMapRm" accept=".xlsx,.csv" style="display:none" />
     <div>
     <table class="sticky-table">
       <thead>
@@ -267,7 +268,7 @@
           <th rowspan="2" style="width:44px">#</th>
           <th rowspan="2">RM Code</th>
           <th rowspan="2">RM Name</th>
-          <th rowspan="2">Sapiens RM Code</th>
+          <th rowspan="2">Manufacturer RM Code</th>
           <th rowspan="2" class="num">MOQ (kg)</th>
           <th rowspan="2" class="num">Current stock (kg)</th>
           <th rowspan="2" class="num" title="Stock-in-transit — already dispatched, about to land. Added into current stock for every calculation below.">Expected Inward (kg)</th>
@@ -310,12 +311,13 @@
       <div class="kpi"><b id="pmAtRisk">0</b><span>M1 orders needed</span></div>
       <div class="spacer"></div>
       <div class="field" style="justify-content:flex-end;gap:8px">
-        <button class="btn sm" id="btnImportStockPm" title="Import a CSV/Excel with columns: PM Name (or PM Code, or Sapiens PM Code / sub-PM name), Current Stock (units), and optionally an Expected Inward (units) column (stock-in-transit — added into current stock for all calculations). Sub-PMs mapped to the same Mosaic PM code are summed into that one PM's stock.">Import Current Stock</button>
-        <button class="btn sm" id="btnImportSupplyPm" title="Import a CSV/Excel with columns: identifier (Sapiens PM Code, Mosaic PM Code, PM name, or sub-PM name — any of these), Expected supply (units). Sub-PMs mapped to the same Mosaic PM code are summed into that one PM's expected supply.">Import Expected Supply</button>
+        <button class="btn sm" id="btnImportStockPm" title="Import a CSV/Excel with columns: PM Name (or PM Code, or Manufacturer PM Code / sub-PM name), Current Stock (units), and optionally an Expected Inward (units) column (stock-in-transit — added into current stock for all calculations). Sub-PMs mapped to the same Mosaic PM code are summed into that one PM's stock.">Import Current Stock</button>
+        <button class="btn sm" id="btnImportSupplyPm" title="Import a CSV/Excel with columns: identifier (Manufacturer PM Code, Mosaic PM Code, PM name, or sub-PM name — any of these), Expected supply (units). Sub-PMs mapped to the same Mosaic PM code are summed into that one PM's expected supply.">Import Expected Supply</button>
         <button class="btn sm" id="btnImportReqPm" title="Import a CSV/Excel with columns: PM Name, Required M1 (units), Required M2 (units)">Import Req Qty</button>
-        <button class="btn sm" id="btnImportReqPmSap" title="Import a CSV/Excel with columns: identifier (Sapiens PM Code, Mosaic PM Code, PM name, or sub-PM name — any of these), Required M1 (units), Required M2 (units). Sub-PMs mapped to the same Mosaic PM code are summed; a code shared across materials applies to all of them.">Import Req Qty (Sapiens Code)</button>
+        <button class="btn sm" id="btnImportReqPmSap" title="Import a CSV/Excel with columns: identifier (Manufacturer PM Code, Mosaic PM Code, PM name, or sub-PM name — any of these), Required M1 (units), Required M2 (units). Sub-PMs mapped to the same Mosaic PM code are summed; a code shared across materials applies to all of them.">Import Req Qty (Manufacturer Code)</button>
         <button class="btn sm" id="btnClearReqPm" style="display:none" title="Remove imported required qty and revert to empty">Clear override</button>
-        <button class="btn sm" id="btnImportMoqPm" title="Import a CSV/Excel with columns: identifier (Sapiens PM Code, Mosaic PM Code, PM name, or sub-PM name — any of these), MOQ. If a material has more than one vendor row, the lowest MOQ is kept.">Import MOQ</button>
+        <button class="btn sm" id="btnImportMoqPm" title="Import a CSV/Excel with columns: identifier (Manufacturer PM Code, Mosaic PM Code, PM name, or sub-PM name — any of these), MOQ. If a material has more than one vendor row, the lowest MOQ is kept.">Import MOQ</button>
+        <button class="btn sm" id="btnImportCodeMapPm" style="background:#f1f5f9;color:#374151" title="Import a CSV/Excel with columns: Mosaic PM Code, Mosaic PM Name, Manufacturer PM Code. Maps a manufacturer/sub-PM code to an existing Mosaic PM (matched by Mosaic code or name) so it becomes editable in the Inputs tab and rolls up into this PM's Current Stock/Expected Inward/Exp. Supply here. Rows for a PM not already in this list are reported as unmatched.">Upload Mosaic-Manufacturer Code Mapping</button>
         <button class="btn primary" id="exportPm">Export PM CSV</button>
       </div>
     </div>
@@ -326,6 +328,7 @@
     <input type="file" id="fileReqPm" accept=".xlsx,.csv" style="display:none" />
     <input type="file" id="fileReqPmSap" accept=".xlsx,.csv" style="display:none" />
     <input type="file" id="fileMoqPm" accept=".xlsx,.csv" style="display:none" />
+    <input type="file" id="fileCodeMapPm" accept=".xlsx,.csv" style="display:none" />
     <div>
     <table class="sticky-table">
       <thead>
@@ -333,7 +336,7 @@
           <th rowspan="2" style="width:44px">#</th>
           <th rowspan="2">Packaging Material</th>
           <th rowspan="2">Mosaic Code</th>
-          <th rowspan="2">Sapiens PM Code</th>
+          <th rowspan="2">Manufacturer PM Code</th>
           <th rowspan="2" class="num">MOQ (units)</th>
           <th rowspan="2" class="num">Stock in hand (units)</th>
           <th rowspan="2" class="num" title="Stock-in-transit — already dispatched, about to land. Added into current stock for every calculation below.">Expected Inward (units)</th>
@@ -364,41 +367,6 @@
   </section>
 
   
-
-  <!-- ============ TAB 5: LIVE INVENTORY ============ -->
-  <section class="panel" id="panel-inv">
-    <div class="grand">
-      <div class="kpi"><b id="invTotalRm">0.000</b><span>Total RM stock (kg)</span></div>
-      <div class="kpi"><b id="invTotalPm">0</b><span>Total PM stock (units)</span></div>
-      <div class="kpi"><b id="invMaterials">0</b><span>Materials tracked</span></div>
-      <div class="spacer"></div>
-      <div class="field" style="justify-content:flex-end"><button class="btn primary" id="exportInv">Export inventory CSV</button></div>
-    </div>
-    <div id="invFactoryStatus" class="grand" style="gap:18px"></div>
-    <div class="toolbar">
-      <input class="search" id="invSearch" placeholder="Filter by material or code…" />
-      <select class="col" id="invFactoryFilter"></select>
-      <select class="col" id="invKindFilter">
-        <option value="all">All materials</option>
-        <option value="rm">Raw materials</option>
-        <option value="pm">Packaging materials</option>
-      </select>
-      <div class="spacer"></div>
-      <button class="btn sm primary" id="btnInvFile">Import Sapiens inventory</button>
-    </div>
-    <div class="row-flex" style="margin:-6px 0 12px"><span class="count-tag" id="invCount"></span><span class="count-tag" id="invImportMsg"></span></div>
-    <table>
-      <thead><tr id="invHead"></tr></thead>
-      <tbody id="invRows"></tbody>
-    </table>
-    <div class="hint">Live stock position per material for <b>Sapiens</b>. Values are <b>DUMMY</b>
-      (deterministically seeded) until you load real data. <b>To add the real feed:</b> click
-      <b>Import Sapiens inventory</b> and upload a <code>.csv</code>/<code>.xlsx</code> with two columns —
-      a material identifier (<b>Mosaic code</b> e.g. <code>RM-0001</code>, or the material name) and a <b>stock quantity</b>.
-      Matched materials have their Sapiens stock replaced; the columns are auto-detected. This stock is what the
-      Consolidated RM/PM tabs consume as “stock in hand”. Edit any cell inline to simulate.
-      <b>Plan / day</b> = total required ÷ plan horizon (the plan-implied daily draw per material); enter a demand plan (Tab 1) for it to be meaningful.</div>
-  </section>
 
   <section class="panel" id="panel-skudoc">
     <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;flex-wrap:wrap">
@@ -651,7 +619,7 @@
 <input type="file" id="fileRm"  accept=".csv" style="display:none" />
 <input type="file" id="filePm"  accept=".csv" style="display:none" />
 <input type="file" id="fileDemand" accept=".xlsx,.csv" style="display:none" />
-<input type="file" id="invFile" accept=".xlsx,.csv" style="display:none" />
+<input type="file" id="fileSkuNames" accept=".xlsx,.csv" style="display:none" />
 
 <!-- Unmatched stock-import rows modal -->
 <div class="modal-bg" id="unmatchedModal">
@@ -937,7 +905,7 @@ let skuIndex = {};// sku_code -> SKU object
 let rmLead = {};  // normKey(rm_name) -> string (lead time, days) — DUMMY values, editable
 let pmLead = {};  // normKey(pm_name) -> string (lead time, days) — DUMMY values, editable
 let drrBySku   = {}; // sku_code -> Product DRR (Stock Matrix Base 'Main' col AR) — read-only feed
-let rmFirm     = {}; // normKey(rm_name) -> {code, stock, supply} from Sapiens "PM-RM Planing"
+let rmFirm     = {}; // normKey(rm_name) -> {code, stock, supply} from Manufacturer "PM-RM Planing"
 let rmSupply   = {}; // normKey(rm_name) -> expected supply M1 (kg), Firm sheet col P / Import Expected Supply
 let rmSupplyM2 = {}; // normKey(rm_name) -> expected supply M2 (kg) — 0 unless the imported file has an M2 column
 let rmCodeReal = {}; // normKey(rm_name) -> real RM code, Firm sheet col F (matched only)
@@ -945,7 +913,7 @@ let pmCodeReal = {}; // normKey(pm_name) -> genuine Mosaic PM code sourced from 
 let rmSubGroups   = {}; // normKey(app rm_name) -> [{code, name}] sub-RMs mapped to this Mosaic RM (from "RMs mapping newer.xlsx")
 let rmSubCodeIndex = {}; // sapiens sub-RM code (lowercased) -> normKey(app rm_name)
 let rmSubNameIndex = {}; // normKey(sub-RM name) -> normKey(app rm_name)
-let pmSubGroups   = {}; // normKey(app pm_name) -> [{code, name}] sub-PMs mapped to this Mosaic PM (from "Mapping of Moasiac and Sapiens PM code.xlsx")
+let pmSubGroups   = {}; // normKey(app pm_name) -> [{code, name}] sub-PMs mapped to this Mosaic PM (from "Mapping of Moasiac and Manufacturer PM code.xlsx")
 let pmSubCodeIndex = {}; // sapiens sub-PM code (lowercased) -> normKey(app pm_name)
 let pmSubNameIndex = {}; // normKey(sub-PM name) -> normKey(app pm_name)
 let rmMoq      = {}; // normKey(rm_name) -> MOQ (kg) string, user-entered (no source feed yet)
@@ -978,13 +946,13 @@ let pmFilter = "";
 let planDays = "30";   // demand-plan horizon (days); converts total requirement -> daily rate for DOH
 
 /* ---------- factory / co-packer dimension ----------
- * Currently a SINGLE co-packer (Sapiens). The structure is kept as a list so
+ * Currently a SINGLE co-packer (Manufacturer). The structure is kept as a list so
  * more co-packers can be added later by appending entries here — the master,
  * inventory matrix, consolidated tabs and exports all iterate FACTORIES and
  * adapt automatically. "lastUpdated" is the daily-report freshness signal;
  * it is a placeholder until real stock is imported (Live Inventory tab). */
 const FACTORIES = [
-  { code: "SAP", name: "Sapiens", lastUpdated: "dummy stock (no real feed yet)" }
+  { code: "SAP", name: "Manufacturer", lastUpdated: "dummy stock (no real feed yet)" }
 ];
 
 // Which factory's data is currently loaded into the shared SKU/RM/PM/demand/etc. state
@@ -1019,7 +987,7 @@ function restoreOrInitFactoryState(code) {
     matMaster=s.matMaster; MATLIST=s.MATLIST; cpCode=s.cpCode;
   } else {
     // Brand-new factory: start from a genuinely blank slate. Populate via "Upload BOM data"
-    // (Tab 1) and the existing Import Current Stock / Req Qty / MOQ controls, same as Sapiens
+    // (Tab 1) and the existing Import Current Stock / Req Qty / MOQ controls, same as Manufacturer
     // was originally set up.
     SKU=[]; RM=[]; PM=[]; demand={}; demandM2={}; skuIndex={};
     rmLead={}; pmLead={}; drrBySku={};
@@ -1032,6 +1000,14 @@ function restoreOrInitFactoryState(code) {
   }
   if (!rmStockF[code]) rmStockF[code] = {};
   if (!pmStockF[code]) pmStockF[code] = {};
+  if (!rmSubStock[code]) rmSubStock[code] = {};
+  if (!rmSubInward[code]) rmSubInward[code] = {};
+  if (!rmSubSupplyM1[code]) rmSubSupplyM1[code] = {};
+  if (!rmSubSupplyM2[code]) rmSubSupplyM2[code] = {};
+  if (!pmSubStock[code]) pmSubStock[code] = {};
+  if (!pmSubInward[code]) pmSubInward[code] = {};
+  if (!pmSubSupplyM1[code]) pmSubSupplyM1[code] = {};
+  if (!pmSubSupplyM2[code]) pmSubSupplyM2[code] = {};
   if (!cpCode[code]) cpCode[code] = {};
 }
 
@@ -1079,6 +1055,24 @@ let cpCode    = {};   // factoryCode -> { normKey -> co-packer internal code } (
 let rmStockF  = {};   // factoryCode -> { normKey(rm_name) -> stock string (kg) } — DUMMY, editable
 let pmStockF  = {};   // factoryCode -> { normKey(pm_name) -> stock string (units) } — DUMMY, editable
 
+// --- Manufacturer-code-level Inputs tab data (Current Stock / Expected Inward / Exp.
+// Supply M1 & M2), entered against the manufacturer/sub-RM or sub-PM code itself (e.g.
+// RM0160, RM0404), NOT the Mosaic RM/PM code. stockTotal()/inwardTotal()/supplyTotal()/
+// supply2Total() sum these across every manufacturer code mapped to a Mosaic RM/PM (via
+// rmSubGroups/pmSubGroups) whenever that Mosaic material has a manufacturer-code mapping
+// at all; materials with no mapping yet keep using the legacy flat per-Mosaic-key stores
+// (rmStockF/pmStockF/rmInward/pmInward/rmSupply/rmSupplyM2/pmSupply/pmSupplyM2) as a
+// fallback so nothing regresses for anything not yet mapped. Same double-keyed-by-factory
+// shape as rmStockF/pmStockF (see note there) — no snapshot/restore needed.
+let rmSubStock     = {}; // factoryCode -> { manufacturerRmCode (lowercased) -> stock string (kg) }
+let rmSubInward    = {}; // factoryCode -> { manufacturerRmCode (lowercased) -> expected inward string (kg) }
+let rmSubSupplyM1  = {}; // factoryCode -> { manufacturerRmCode (lowercased) -> expected supply M1 string (kg) }
+let rmSubSupplyM2  = {}; // factoryCode -> { manufacturerRmCode (lowercased) -> expected supply M2 string (kg) }
+let pmSubStock     = {}; // factoryCode -> { manufacturerPmCode (lowercased) -> stock string (units) }
+let pmSubInward    = {}; // factoryCode -> { manufacturerPmCode (lowercased) -> expected inward string (units) }
+let pmSubSupplyM1  = {}; // factoryCode -> { manufacturerPmCode (lowercased) -> expected supply M1 string (units) }
+let pmSubSupplyM2  = {}; // factoryCode -> { manufacturerPmCode (lowercased) -> expected supply M2 string (units) }
+
 /* The single fallback SKU (used only if no dataset can be loaded at all). */
 const FALLBACK = {
   sku_master: [{ sku_code: "MWLJNTP.0003.B0_N", fg_name: "LJ NutriMix 2+ 350 gm Chocolate Jar", pack_size_g: 350 }],
@@ -1124,12 +1118,12 @@ function loadDataset(d) {
   demand = {}; demandM2 = {}; SKU.forEach(s => { demand[s.sku_code] = "0"; demandM2[s.sku_code] = "0"; });
 
   // Sub-RM mapping ("RMs mapping newer.xlsx", Base Code Mapping sheet): some Mosaic RM
-  // codes cover several underlying Sapiens-side raw materials (e.g. Jaggery Powder =
+  // codes cover several underlying Manufacturer-side raw materials (e.g. Jaggery Powder =
   // 7Dinam + Dhampure + Shivalik Consumers). Build lookup indices so a current-stock
-  // file identifying rows by Sapiens RM Code or the sub-RM's own name resolves to the
+  // file identifying rows by Manufacturer RM Code or the sub-RM's own name resolves to the
   // one app-level RM, and multiple matching rows get SUMMED into that RM's stock.
   // NOTE: rmSubCodeIndex/rmSubNameIndex map to an ARRAY of app-level RM keys, not a single
-  // key — a Sapiens code can legitimately belong to more than one Mosaic material at once
+  // key — a Manufacturer code can legitimately belong to more than one Mosaic material at once
   // (e.g. a shared/bundled component), in which case a stock/supply upload using that code
   // updates every material it's linked to, not just one.
   rmSubGroups = {}; rmSubCodeIndex = {}; rmSubNameIndex = {};
@@ -1141,8 +1135,8 @@ function loadDataset(d) {
       if (s.name) { const nk = normKey(s.name); const arr = rmSubNameIndex[nk] = rmSubNameIndex[nk] || []; if (!arr.includes(k)) arr.push(k); }
     });
   });
-  // Same idea for PM ("Mapping of Moasiac and Sapiens PM code.xlsx"): a Mosaic PM code
-  // can cover more than one Sapiens-side PM code (e.g. CO_Plastic Scoop_30 g = Long
+  // Same idea for PM ("Mapping of Moasiac and Manufacturer PM code.xlsx"): a Mosaic PM code
+  // can cover more than one Manufacturer-side PM code (e.g. CO_Plastic Scoop_30 g = Long
   // Handle Scoop 25ml + Nutrimix for Mothers 350g Chocolate-New scoop).
   // Same array-of-keys note as rmSubCodeIndex above — applies to pmSubCodeIndex/pmSubNameIndex too.
   pmSubGroups = {}; pmSubCodeIndex = {}; pmSubNameIndex = {};
@@ -1173,10 +1167,10 @@ function loadDataset(d) {
   drrBySku = {};
   if (d.drr && typeof d.drr === "object") Object.keys(d.drr).forEach(k => drrBySku[String(k).trim()] = d.drr[k]);
 
-  // Sapiens "PM-RM Planing" lookup, keyed by material name so it re-matches if
+  // Manufacturer "PM-RM Planing" lookup, keyed by material name so it re-matches if
   // RM names are reconciled later: RM code (col F), CURRENT STOCK (col N),
   // EXPECTED SUPPLY (col P). For each RM material the app knows, a matched feed
-  // row replaces the DUMMY Sapiens stock and supplies the real code + expected supply.
+  // row replaces the DUMMY Manufacturer stock and supplies the real code + expected supply.
   rmFirm = {}; rmSupply = {}; rmSupplyM2 = {}; rmCodeReal = {}; rmMoq = {};
   (d.rm_firm || []).forEach(x => {
     rmFirm[normKey(x.name)] = { code: String(x.code || "").trim(), stock: num(x.stock, true), supply: num(x.supply, true) };
@@ -1195,13 +1189,13 @@ function loadDataset(d) {
       rmSupply[k]   = f.supply;
       rmStockF[SAP][k] = String(f.stock);             // real current stock (col N) overrides the dummy seed
     } else {
-      // No match in the Sapiens feed: don't trust the dummy stock for a procurement number.
+      // No match in the Manufacturer feed: don't trust the dummy stock for a procurement number.
       // Treat as unknown (0) so the Order qty reflects the full requirement (conservative) until reconciled.
       rmStockF[SAP][k] = "0";
     }
   });
 
-  // Real PM MOQ (units) from "Sapiens MOQ and Lead time.xlsx", MOQ column — matched by PM
+  // Real PM MOQ (units) from "Manufacturer MOQ and Lead time.xlsx", MOQ column — matched by PM
   // name. Where a PM has multiple approved vendors with different MOQs, the lowest vendor
   // MOQ is used (most flexible ordering option). PMs with no row on the sheet keep whatever
   // value is already set (dummy seed / user edit) — not invented.
@@ -1217,7 +1211,7 @@ function loadDataset(d) {
   // tracker's item names use a different naming convention than the BOM for most
   // materials, so only exact/near-exact matches were wired in — see chat for the list
   // of unmatched materials that need manual reconciliation). Takes priority over the
-  // Sapiens PM-RM Planing stock where both exist.
+  // Manufacturer PM-RM Planing stock where both exist.
   const rmStock2 = {};
   (d.rm_stock2 || []).forEach(x => { rmStock2[normKey(x.name)] = num(x.stock, true); });
   Object.keys(matMaster).forEach(k => {
@@ -1269,7 +1263,17 @@ const RM_CATS = ["Protein", "Sweetener", "Flavour", "Fibre", "Active", "Excipien
 const PM_CATS = ["Primary pack", "Closure", "Label", "Carton", "Insert"];
 function buildMaster() {
   matMaster = {}; MATLIST = []; cpCode = {}; rmStockF = {}; pmStockF = {};
-  FACTORIES.forEach(f => { cpCode[f.code] = {}; rmStockF[f.code] = {}; pmStockF[f.code] = {}; });
+  FACTORIES.forEach(f => {
+    cpCode[f.code] = {}; rmStockF[f.code] = {}; pmStockF[f.code] = {};
+    if (!rmSubStock[f.code]) rmSubStock[f.code] = {};
+    if (!rmSubInward[f.code]) rmSubInward[f.code] = {};
+    if (!rmSubSupplyM1[f.code]) rmSubSupplyM1[f.code] = {};
+    if (!rmSubSupplyM2[f.code]) rmSubSupplyM2[f.code] = {};
+    if (!pmSubStock[f.code]) pmSubStock[f.code] = {};
+    if (!pmSubInward[f.code]) pmSubInward[f.code] = {};
+    if (!pmSubSupplyM1[f.code]) pmSubSupplyM1[f.code] = {};
+    if (!pmSubSupplyM2[f.code]) pmSubSupplyM2[f.code] = {};
+  });
   let rmN = 0, pmN = 0;
   function add(name, kind) {
     const k = normKey(name);
@@ -1310,10 +1314,61 @@ function buildMaster() {
   PM.forEach(r => { const k = normKey(r.pm_name); (cnt[k] = cnt[k] || new Set()).add(r.sku_code); });
   MATLIST.forEach(e => e.skuCount = (cnt[e.key] || new Set()).size);
 }
-/* Stock in hand summed across all co-packers (what the consolidated tabs use). */
+/* Every manufacturer/sub-code (e.g. RM0160, RM0404) mapped to a given Mosaic RM/PM key,
+ * lowercased/trimmed to match rmSubStock/rmSubInward/etc.'s keys. Empty array when this
+ * material has no manufacturer-code mapping yet (Mosaic-Manufacturer Code Mapping upload
+ * in Consolidated RM/PM, or the legacy rm_sub_map/pm_sub_map feed, hasn't covered it). */
+function subCodesFor(kind, key) {
+  const groups = kind === "rm" ? rmSubGroups : pmSubGroups;
+  return (groups[key] || []).map(s => s.code).filter(Boolean).map(c => String(c).toLowerCase().trim());
+}
+/* Stock in hand (what the consolidated tabs use). When a Mosaic RM/PM has one or more
+ * manufacturer/sub-codes mapped to it, this is the SUM of whatever was entered against
+ * each of those manufacturer codes in the Inputs tab (rmSubStock/pmSubStock) — data is
+ * entered at manufacturer-code granularity there, and rolled up to the Mosaic level here,
+ * so Consolidated RM/PM, SKU DOC, and the Scheduler (via stockAvailable/broadcastStockUpdate)
+ * all see one already-aggregated number without needing to know about sub-codes at all.
+ * Materials with no manufacturer-code mapping yet fall back to the legacy flat
+ * rmStockF/pmStockF store (still editable directly in that case — see renderInputsTab). */
 function stockTotal(kind, key) {
+  const codes = subCodesFor(kind, key);
+  if (codes.length) {
+    const sub = (kind === "rm" ? rmSubStock : pmSubStock)[currentFactory] || {};
+    return codes.reduce((sum, c) => sum + num(sub[c], true), 0);
+  }
   const F = kind === "rm" ? rmStockF : pmStockF;
   return num((F[currentFactory] || {})[key], true);
+}
+/* Expected Inward — same manufacturer-code roll-up rule as stockTotal(), fallback to the
+ * legacy flat rmInward/pmInward store for materials with no manufacturer-code mapping. */
+function inwardTotal(kind, key) {
+  const codes = subCodesFor(kind, key);
+  if (codes.length) {
+    const sub = (kind === "rm" ? rmSubInward : pmSubInward)[currentFactory] || {};
+    return codes.reduce((sum, c) => sum + num(sub[c], true), 0);
+  }
+  const store = kind === "rm" ? rmInward : pmInward;
+  return num(store[key], true);
+}
+/* Expected Supply M1 — same manufacturer-code roll-up rule as stockTotal(). */
+function supplyTotal(kind, key) {
+  const codes = subCodesFor(kind, key);
+  if (codes.length) {
+    const sub = (kind === "rm" ? rmSubSupplyM1 : pmSubSupplyM1)[currentFactory] || {};
+    return codes.reduce((sum, c) => sum + num(sub[c], true), 0);
+  }
+  const store = kind === "rm" ? rmSupply : pmSupply;
+  return num(store[key], true);
+}
+/* Expected Supply M2 — same manufacturer-code roll-up rule as stockTotal(). */
+function supply2Total(kind, key) {
+  const codes = subCodesFor(kind, key);
+  if (codes.length) {
+    const sub = (kind === "rm" ? rmSubSupplyM2 : pmSubSupplyM2)[currentFactory] || {};
+    return codes.reduce((sum, c) => sum + num(sub[c], true), 0);
+  }
+  const store = kind === "rm" ? rmSupplyM2 : pmSupplyM2;
+  return num(store[key], true);
 }
 /* Current stock + Expected Inward (stock-in-transit, about to land) — this is the number
  * every downstream calculation (DOC, Available for order-qty, Opening Stock M2 carry-forward,
@@ -1322,8 +1377,7 @@ function stockTotal(kind, key) {
  * pure physical current-stock figure, since that's what the editable Current Stock field
  * and the Expected Inward column each display separately. */
 function stockAvailable(kind, key) {
-  const inward = kind === "rm" ? rmInward : pmInward;
-  return stockTotal(kind, key) + num(inward[key], true);
+  return stockTotal(kind, key) + inwardTotal(kind, key);
 }
 /* Per-material DOC M1/M2 — the SINGLE source of truth for these two numbers, used by both
  * the Consolidated RM/PM tabs' rendering AND the SKU DOC tab (via getMats() below), so the
@@ -1339,13 +1393,12 @@ function hasRealReq(v) { return v >= 0.05; }
 function matDocPair(kind, key) {
   const reqOverride  = kind === "rm" ? rmReqOverride : pmReqOverride;
   const moqStore     = kind === "rm" ? rmMoq : pmMoq;
-  const supplyStore  = kind === "rm" ? rmSupply : pmSupply;
   const ov = reqOverride[key] || null;
   const reqM1 = ov ? num(ov.m1, true) : 0;
   const reqM2 = ov ? num(ov.m2, true) : 0;
   const moq = num(moqStore[key], true);
   const avail = stockAvailable(kind, key);
-  const supM1 = num(supplyStore[key], true);
+  const supM1 = supplyTotal(kind, key);
   const oM1 = fwdOrder(reqM1, avail + supM1, moq);
   const openM2 = Math.max(0, avail + supM1 + moqAdjOrder(oM1.oq, moq) - reqM1);
   const docM1 = hasRealReq(reqM1) ? (avail * 30 / reqM1) : null;
@@ -1509,11 +1562,11 @@ function fwdCfgHtml() {
     '</code> · order quantity from <b>imported 2-month demand</b> (REQ − supply − stock)' +
     (FWD.SUPPLY_SPLIT === "by_po_age" ? '<br><span style="color:var(--warn)">⚠ SUPPLY_SPLIT="by_po_age" needs PO dates (not embedded) → using all_m1</span>' : '');
 }
-/* Comma-joined Sapiens RM code(s) mapped to this app-level RM, for display in the
+/* Comma-joined Manufacturer RM code(s) mapped to this app-level RM, for display in the
  * Consolidated RM tab (e.g. "RM0331, RM0332, RM0383" for Jaggery Powder's 3 sub-RMs). */
 function officialRmCode(k) {
   // Never returns the internal dummy "RM-0001"-style placeholder buildMaster() seeds —
-  // only a code sourced from an actual feed (Sapiens Firm sheet / STATIC_RM_CODES mapping).
+  // only a code sourced from an actual feed (Manufacturer Firm sheet / STATIC_RM_CODES mapping).
   return (typeof STATIC_RM_CODES !== 'undefined' ? STATIC_RM_CODES[k] : "") || rmCodeReal[k] || "";
 }
 function officialPmCode(k) {
@@ -1550,12 +1603,12 @@ function renderRM() {
     const _ni = [..._nm.entries()].map(([k,name]) => {
       const moq = num(rmMoq[k],true); const code = officialRmCode(k);
       // Stock/supply come straight from the live import stores (stockTotal/rmSupply), not the
-      // legacy Sapiens Firm-sheet dataset — so a material shows real numbers whenever Current
+      // legacy Manufacturer Firm-sheet dataset — so a material shows real numbers whenever Current
       // Stock/Expected Supply have actually been imported for it, regardless of whether it was
       // ever part of the older Firm-sheet seed.
       const stock = stockTotal('rm', k);
-      const inward = num(rmInward[k], true);
-      const supM1 = num(rmSupply[k], true), supM2 = num(rmSupplyM2[k], true);
+      const inward = inwardTotal('rm', k);
+      const supM1 = supplyTotal('rm', k), supM2 = supply2Total('rm', k);
       return {k,name,matched:true,moq,code,stock,inward,supM1,supM2};
     });
     const _rf = rmFilter.trim().toLowerCase();
@@ -1589,7 +1642,7 @@ function renderRM() {
   STATIC_BOM.bom_rm.forEach(r => { if (!r.rm_name) return; const nk = normKey(r.rm_name); if (!_nmAllRM.has(nk)) _nmAllRM.set(nk, r.rm_name); });
   const items = [..._nmAllRM.entries()].map(([k, bomName]) => {
     const ov = rmReqOverride[k] || null;
-    const matched = !!matMaster[k]; // known to the system (in BOM / has a Mosaic code) — not gated on the legacy Sapiens Firm-sheet feed
+    const matched = !!matMaster[k]; // known to the system (in BOM / has a Mosaic code) — not gated on the legacy Manufacturer Firm-sheet feed
     const reqM1 = ov ? (ov.m1 || 0) : 0;
     const reqM2 = ov ? (ov.m2 || 0) : 0;
     const moq = num(rmMoq[k], true);
@@ -1597,10 +1650,10 @@ function renderRM() {
     let stock = null, inward = 0, avail = null, supply = 0, supM1 = 0, supM2 = 0, oM1 = null, oM2 = null, openM2 = null;
     if (matched) {
       stock = stockTotal("rm", k);
-      inward = num(rmInward[k], true);
+      inward = inwardTotal('rm', k);
       avail = stock + inward;   // current stock + expected inward — the number every calc below uses
-      supply = num(rmSupply[k], true);
-      supM1 = supply; supM2 = num(rmSupplyM2[k], true);
+      supply = supplyTotal('rm', k);
+      supM1 = supply; supM2 = supply2Total('rm', k);
       const availM1 = avail + supM1;
       oM1 = fwdOrder(reqM1, availM1, moq);
       openM2 = Math.max(0, avail + supM1 + moqAdjOrder(oM1.oq, moq) - reqM1)   // opening stock M2 = carry-forward from M1 (floored at 0)
@@ -1716,7 +1769,7 @@ function drillTableRM(e) {
 /* ==================================================================
  *  TAB 3 — CONSOLIDATED PM
  * ================================================================== */
-/* Comma-joined Sapiens PM code(s) mapped to this app-level PM, for display in the
+/* Comma-joined Manufacturer PM code(s) mapped to this app-level PM, for display in the
  * Consolidated PM tab (e.g. two codes for CO_Plastic Scoop_30 g's 2 sub-PMs). */
 function sapiensPmCodesLabel(k) {
   const subs = pmSubGroups[k];
@@ -1736,8 +1789,8 @@ function renderPM() {
     const _pm = new Map();
     STATIC_BOM.bom_pm.forEach(r => { const nk = normKey(r.pm_name); if (!_pm.has(nk)) _pm.set(nk, r.pm_name); });
     const _pi = [..._pm.entries()].map(([k,name]) => {
-      const stock = stockTotal('pm', k); const inward = num(pmInward[k], true); const moq = num(pmMoq[k],true);
-      const supply = num(pmSupply[k],true); const supM1 = supply, supM2 = num(pmSupplyM2[k], true);
+      const stock = stockTotal('pm', k); const inward = inwardTotal('pm', k); const moq = num(pmMoq[k],true);
+      const supply = supplyTotal('pm', k); const supM1 = supply, supM2 = supply2Total('pm', k);
       return {k, name, stock: stock||0, inward, moq, supply, supM1, supM2};
     });
     const _pf = pmFilter.trim().toLowerCase();
@@ -1751,7 +1804,7 @@ function renderPM() {
       const tr=document.createElement('tr');
       const mv=pmMoq[r.k]!=null?pmMoq[r.k]:'';
       const mi='<input class="cell" type="number" min="0" step="25" value="'+escapeHtml(String(mv))+'" data-k="'+escapeHtml(r.k)+'">';
-      const siRO='<span title="Expected supply M1 (units) — edit in the Inputs tab">'+fmt(num(pmSupply[r.k],true),1)+'</span>';
+      const siRO='<span title="Expected supply M1 (units) — edit in the Inputs tab">'+fmt(supplyTotal('pm', r.k),1)+'</span>';
       const stiRO='<span title="Current stock (units) — edit in the Inputs tab">'+fmt(r.stock,1)+'</span>';
       const iwiRO='<span title="Expected inward (units) — edit in the Inputs tab">'+fmt(r.inward,1)+'</span>';
       tr.innerHTML='<td class="num">'+(idx+1)+'</td><td>'+escapeHtml(r.name)+'</td><td class="sku-code">'+escapeHtml(officialPmCode(normKey(r.name))||'')+'</td><td class="sku-code" style="font-size:0.85em">'+escapeHtml(sapiensPmCodesLabel(r.k))+'</td><td class="num">'+mi+'</td><td class="num">'+stiRO+'</td><td class="num">'+iwiRO+'</td><td class="num">'+siRO+'</td><td class="num">'+fmt(r.supM2,1)+'</td>'+_qc2;
@@ -1774,10 +1827,10 @@ function renderPM() {
     const reqM1 = ov ? (ov.m1 || 0) : 0, reqM2 = ov ? (ov.m2 || 0) : 0;
     const moq = num(pmMoq[k], true);
     const stock = stockTotal("pm", k);
-    const inward = num(pmInward[k], true);
+    const inward = inwardTotal('pm', k);
     const avail = stock + inward;   // current stock + expected inward — the number every calc below uses
-    const supply = num(pmSupply[k], true);
-    const supM1 = supply, supM2 = num(pmSupplyM2[k], true);
+    const supply = supplyTotal('pm', k);
+    const supM1 = supply, supM2 = supply2Total('pm', k);
     const availM1 = avail + supM1;
     const oM1 = fwdOrder(reqM1, availM1, moq);
     const openM2 = Math.max(0, avail + supM1 + moqAdjOrder(oM1.oq, moq) - reqM1)   // opening stock M2 = carry-forward from M1 (floored at 0)
@@ -2035,123 +2088,9 @@ function drillTableMaster(e) {
 /* ==================================================================
  *  TAB 6 — LIVE INVENTORY  (per material per co-packer; DUMMY stock)
  * ================================================================== */
-function ensureInvControls() {
-  const ff = $("invFactoryFilter");
-  // With a single co-packer the factory filter is pointless — hide it.
-  if (FACTORIES.length <= 1) { ff.style.display = "none"; return; }
-  ff.style.display = "";
-  if (ff.options.length) return;                 // populate once
-  ff.innerHTML = '<option value="all">All co-packers</option>';
-  FACTORIES.forEach(fct => {
-    const o = document.createElement("option"); o.value = fct.code; o.textContent = fct.name; ff.appendChild(o);
-  });
-}
-function renderInventory() {
-  ensureInvControls();
-  const multi = FACTORIES.length > 1;
-  const f = ($("invSearch").value || "").toLowerCase();
-  const ff = $("invFactoryFilter").value || "all";
-  const kf = $("invKindFilter").value || "all";
-  const shownF = (!multi || ff === "all") ? FACTORIES : FACTORIES.filter(x => x.code === ff);
-
-  // factory freshness strip
-  $("invFactoryStatus").innerHTML = FACTORIES.map(fct =>
-    '<div class="kpi"><b style="font-size:14px">' + escapeHtml(fct.name) + '</b>' +
-    '<span>Last updated · ' + escapeHtml(fct.lastUpdated) + '</span></div>').join("");
-
-  // plan-implied daily draw per material (Plan / day)
-  const days = num(planDays, true);
-  const reqMap = buildReqMap();
-
-  // header — stock col(s) per co-packer, then the plan-implied daily draw.
-  // "Total (all)" only added when >1 co-packer.
-  let head = '<th style="width:28%">Material</th><th>Code</th>';
-  shownF.forEach(fct => head += '<th class="num">' + escapeHtml(multi ? fct.code + " stock" : "Stock in hand") + '</th>');
-  if (multi) head += '<th class="num">Total stock</th>';
-  head += '<th class="num">Plan / day</th><th>UOM</th>';
-  $("invHead").innerHTML = head;
-
-  const tb = $("invRows"); tb.innerHTML = "";
-  let shown = 0;
-  MATLIST.forEach(e => {
-    if (kf !== "all" && e.kind !== kf) return;
-    if (f && !(e.code.toLowerCase().includes(f) || e.name.toLowerCase().includes(f))) return;
-    shown++;
-    const dp = e.kind === "rm" ? 3 : 0;
-    const tr = document.createElement("tr");
-    const tdName = document.createElement("td"); tdName.textContent = e.name;
-    const tdCode = document.createElement("td"); tdCode.innerHTML = '<span class="sku-code">' + escapeHtml(e.code) + '</span>';
-    tr.append(tdName, tdCode);
-    // stock per co-packer (editable)
-    shownF.forEach(fct => {
-      const store = e.kind === "rm" ? rmStockF : pmStockF;
-      const td = document.createElement("td"); td.className = "num";
-      const inp = mkNum(store[fct.code][e.key], v => {
-        store[fct.code][e.key] = v;
-        const tot = tr.querySelector("[data-tot]");
-        if (tot) tot.textContent = fmt(stockTotal(e.kind, e.key), dp);
-        updateInvKpis();
-        broadcastStockUpdate();
-      });
-      inp.style.width = "84px";
-      td.appendChild(inp); tr.appendChild(td);
-    });
-    if (multi) {
-      const tdTot = document.createElement("td"); tdTot.className = "num req"; tdTot.dataset.tot = "1";
-      tdTot.textContent = fmt(stockTotal(e.kind, e.key), dp);
-      tr.appendChild(tdTot);
-    }
-    const tdPlan = document.createElement("td"); tdPlan.className = "num muted";
-    tdPlan.textContent = days > 0 ? fmt((reqMap[e.key] || 0) / days, dp) : "—";
-    const tdUom = document.createElement("td"); tdUom.className = "muted"; tdUom.textContent = e.uom;
-    tr.append(tdPlan, tdUom);
-    tb.appendChild(tr);
-  });
-  $("invMaterials").textContent = MATLIST.length;
-  $("invCount").textContent = shown + " of " + MATLIST.length + " materials shown";
-  updateInvKpis();
-}
-/* required total per material (RM kg / PM units), keyed by normKey — for Plan / day. */
-function buildReqMap() {
-  const m = {};
-  aggregateRM().forEach(e => m[normKey(e.name)] = e.kg);
-  aggregatePM().forEach(e => m[normKey(e.name)] = e.units);
-  return m;
-}
-
-/* ------------------------------------------------------------------
- *  REAL INVENTORY IMPORT  (the provision for swapping in real data)
- *  Upload a .csv/.xlsx of [material identifier, stock qty]. Identifier
- *  matches a Mosaic code (e.g. RM-0001) or a material name. The two
- *  columns are auto-detected against the known material master, so no
- *  manual mapping is needed. Matched materials' stock for the given
- *  co-packer is replaced; everything else is left untouched.
- * ------------------------------------------------------------------ */
-async function loadInventoryFile(file, factoryCode) {
-  const msg = $("invImportMsg");
-  msg.style.color = "";
-  try {
-    let rows;
-    if (/\.csv$/i.test(file.name)) rows = parseCSV(await file.text());
-    else if (/\.xlsx$/i.test(file.name)) rows = await readXlsx(await file.arrayBuffer());
-    else throw new Error("Unsupported file type. Use .xlsx or .csv (not the older .xls).");
-    rows = trimLeadingBlank(rows || []);
-    if (!rows.length) throw new Error("The file has no rows.");
-    const res = applyInventoryRows(rows, factoryCode);
-    const fct = FACTORIES.find(x => x.code === factoryCode);
-    if (fct && res.matched) fct.lastUpdated = file.name + " · " + new Date().toLocaleString();
-    renderInventory();
-    msg.innerHTML = "Imported <b>" + res.matched + "</b> material(s)" +
-      (res.unmatched.length ? "; <span class='miss-badge'>" + res.unmatched.length + " row(s) could not be mapped</span> — see popup" : "") + ".";
-    showUnmatchedModal("Sapiens inventory import — unmatched rows", res.unmatched);
-  } catch (e) {
-    msg.style.color = "var(--warn)";
-    msg.textContent = "⚠ " + (e && e.message ? e.message : "Could not read this file.");
-  }
-}
 /* Resolve a raw identifier string (code or name) to {key, kind} using the master
  * list first (Mosaic code / material name — covers PM always, and RM materials with
- * no sub-RM mapping), then falling back to the RM sub-RM indices (Sapiens RM code or
+ * no sub-RM mapping), then falling back to the RM sub-RM indices (Manufacturer RM code or
  * sub-RM name -> the one app-level RM that code/name rolls up into). */
 /* Show the "couldn't be mapped" popup for a stock import — items: [{identifier, reason}]. */
 function showUnmatchedModal(title, items) {
@@ -2169,7 +2108,7 @@ function resolveMatIdentifier(raw, byCode, byName) {
   const all = resolveMatIdentifierAll(raw, byCode, byName);
   return all.length ? all[0] : null;
 }
-// Same as resolveMatIdentifier, but returns EVERY {key, kind} a shared Sapiens code
+// Same as resolveMatIdentifier, but returns EVERY {key, kind} a shared Manufacturer code
 // resolves to (rmSubCodeIndex/pmSubCodeIndex now hold arrays of keys, since a code can be
 // intentionally shared across two materials — e.g. a jar and its matching cap).
 function resolveMatIdentifierAll(raw, byCode, byName) {
@@ -2216,7 +2155,7 @@ function makeResolver(kind, opts) {
     }
   });
   const ALIAS = kind === "rm" ? (typeof STATIC_RM_CODES !== 'undefined' ? STATIC_RM_CODES : {}) : (typeof STATIC_PM_CODES !== 'undefined' ? STATIC_PM_CODES : {});
-  // Shared-code lookup: rmSubCodeIndex/pmSubCodeIndex map a Sapiens code to an ARRAY of
+  // Shared-code lookup: rmSubCodeIndex/pmSubCodeIndex map a Manufacturer code to an ARRAY of
   // app-level material keys (usually just one, but a code intentionally shared across two
   // materials — e.g. a jar and its matching cap — resolves to both). Filters to keys that
   // actually exist and are the right kind.
@@ -2230,8 +2169,8 @@ function makeResolver(kind, opts) {
     const e = byCode[rawL] || byName[rawN];
     if (e) return e.key;
     // mosaicOnly (used by Import Req Qty): match on Mosaic RM/PM code or material name only —
-    // deliberately skip the Sapiens sub-code/sub-name tier below, since Required Qty files are
-    // expected to identify materials by Mosaic code, not by a Sapiens code.
+    // deliberately skip the Manufacturer sub-code/sub-name tier below, since Required Qty files are
+    // expected to identify materials by Mosaic code, not by a Manufacturer code.
     if (!mosaicOnly) {
       const subKeys = subKeysFor(rawL, rawN);
       if (subKeys.length) return subKeys[0];
@@ -2245,7 +2184,7 @@ function makeResolver(kind, opts) {
     }
     return null;
   }
-  // Same as resolve(), but returns EVERY material key a shared Sapiens code belongs to
+  // Same as resolve(), but returns EVERY material key a shared Manufacturer code belongs to
   // (not just the first) — used by Current Stock / Expected Supply / Live Inventory
   // imports so a shared code (e.g. a jar+cap pair) updates all of them, not just one.
   resolve.resolveAll = function(raw) {
@@ -2265,68 +2204,9 @@ function makeResolver(kind, opts) {
   };
   return resolve;
 }
-function applyInventoryRows(rows, factoryCode) {
-  const byCode = {}, byName = {};
-  MATLIST.forEach(e => { byCode[e.code.toLowerCase()] = e; byName[e.key] = e; });
-  const width = rows.reduce((w, r) => Math.max(w, r.length), 0);
-  const cell = (r, c) => String(r[c] == null ? "" : r[c]).trim();
-  // identifier column = the one whose cells most often match a known code/name
-  // (master list code/name, or — for RM — a Sapiens sub-RM code/name)
-  let idCol = 0, idHits = -1;
-  for (let c = 0; c < width; c++) {
-    let hits = 0;
-    rows.forEach(r => { const v = cell(r, c); if (v && resolveMatIdentifier(v, byCode, byName)) hits++; });
-    if (hits > idHits) { idHits = hits; idCol = c; }
-  }
-  // qty column = the other column with the most numeric cells
-  let qtyCol = -1, qHits = -1;
-  for (let c = 0; c < width; c++) {
-    if (c === idCol) continue;
-    let hits = 0;
-    rows.forEach(r => { const s = cell(r, c); if (s !== "" && isFinite(parseFloat(s))) hits++; });
-    if (hits > qHits) { qHits = hits; qtyCol = c; }
-  }
-  // Sum matching rows per resolved material (several sub-RM rows can roll up into one
-  // app-level RM, e.g. Jaggery Powder = 7Dinam + Dhampure + Shivalik Consumers). A code
-  // shared across more than one material (e.g. a jar + its matching cap) applies the same
-  // row's quantity to every material it resolves to, not just one.
-  const sums = {}; // key -> {kind, total}
-  const unmatched = []; // [{identifier, reason}] — only rows that had an identifier but failed
-  rows.forEach(r => {
-    const raw = cell(r, idCol);
-    if (!raw) return;                                       // no identifier at all — likely a blank/filler row, ignore silently
-    const qs = qtyCol >= 0 ? cell(r, qtyCol) : "";
-    if (qs === "" || !isFinite(parseFloat(qs))) {
-      unmatched.push({ identifier: raw, reason: "No numeric quantity found in this row" });
-      return;
-    }
-    const hits = resolveMatIdentifierAll(raw, byCode, byName);
-    if (!hits.length) {
-      unmatched.push({ identifier: raw, reason: "Not recognized as a known RM/PM code, name, Sapiens sub-code, or sub-material name" });
-      return;
-    }
-    const v = num(qs, true);
-    hits.forEach(hit => {
-      const entry = sums[hit.key] || (sums[hit.key] = { kind: hit.kind, total: 0 });
-      entry.total += v;
-    });
-  });
-  Object.keys(sums).forEach(key => {
-    const { kind, total } = sums[key];
-    const store = kind === "rm" ? rmStockF : pmStockF;
-    store[factoryCode][key] = String(total);
-  });
-  return { matched: Object.keys(sums).length, unmatched };
-}
-/* Import current stock for a single kind ("rm" or "pm") — used by the Consolidated
- * RM/PM tabs' "Import Current Stock" button. Matched by Mosaic code or material name
- * (same auto-detected id/qty columns as the Inventory tab importer). Writes into
- * rmStockF/pmStockF for the single co-packer (SAP), and for RM also creates/updates
- * an rmFirm entry so the Consolidated RM tab and SKU Doc tab (which gate the stock
- * column display on rmFirm being matched) pick the value up. */
 /* The set of normKey(rm_name) for every RM that actually appears in the Consolidated RM
  * tab (i.e. the BOM's ~82 RMs) — used to keep "Import Req Qty" from adding rows for
- * materials outside that list (e.g. a Sapiens-code match that isn't part of the BOM). */
+ * materials outside that list (e.g. a Manufacturer-code match that isn't part of the BOM). */
 function bomRmKeySet() {
   const set = new Set();
   (STATIC_BOM.bom_rm || []).forEach(r => { if (r.rm_name) set.add(normKey(r.rm_name)); });
@@ -2366,7 +2246,7 @@ function applyStockRows(rows, kind) {
     if (hits > qHits) { qHits = hits; qtyCol = c; }
   }
   // Sum matching rows per resolved material — a Mosaic RM/PM code with several
-  // Sapiens-side sub-materials (e.g. Jaggery Powder) gets the sum of all its rows. A code
+  // Manufacturer-side sub-materials (e.g. Jaggery Powder) gets the sum of all its rows. A code
   // shared across more than one material (e.g. a jar + its matching cap) applies the same
   // row's quantity to every material it resolves to, not just one.
   const sums = {}; const inwardSums = {}; const unmatched = []; // [{identifier, reason}]
@@ -2383,8 +2263,8 @@ function applyStockRows(rows, kind) {
     const keys = resolve.resolveAll(raw);
     if (!keys.length) {
       unmatched.push({ identifier: raw, reason: kind === "rm"
-        ? "Not recognized as a known RM code, RM name, Sapiens sub-code, or sub-RM name"
-        : "Not recognized as a known PM code, PM name, Sapiens sub-code, or sub-PM name" });
+        ? "Not recognized as a known RM code, RM name, Manufacturer sub-code, or sub-RM name"
+        : "Not recognized as a known PM code, PM name, Manufacturer sub-code, or sub-PM name" });
       return;
     }
     const v = num(qs, true);
@@ -2415,7 +2295,7 @@ function applyStockRows(rows, kind) {
 }
 /* Import expected supply (kg for RM, units for PM) for a single kind — used by the
  * Consolidated RM/PM tabs' "Import Expected Supply" button. The identifier column can
- * be ANY of: Mosaic code, RM/PM name, Sapiens sub-code, or sub-RM/PM name — same
+ * be ANY of: Mosaic code, RM/PM name, Manufacturer sub-code, or sub-RM/PM name — same
  * flexible resolution as applyStockRows. Rows resolving to the same app-level material
  * (e.g. several sub-RMs under one Mosaic RM code) are summed. For RM this writes into
  * rmSupply (and rmFirm[key].supply, plus creates a minimal rmFirm entry if the material
@@ -2427,7 +2307,7 @@ function applySupplyRows(rows, kind) {
   const cell = (r, c) => String(r[c] == null ? "" : r[c]).trim();
   // Identifier column: same flexible auto-detect as Current Stock — try every column,
   // pick whichever resolves the most rows (works whether the file uses Mosaic code,
-  // RM/PM name, Sapiens sub-code, or sub-material name).
+  // RM/PM name, Manufacturer sub-code, or sub-material name).
   let idCol = 0, idHits = -1;
   for (let c = 0; c < width; c++) {
     let hits = 0;
@@ -2474,8 +2354,8 @@ function applySupplyRows(rows, kind) {
     const keys = resolve.resolveAll(raw);
     if (!keys.length) {
       unmatched.push({ identifier: raw, reason: kind === "rm"
-        ? "Not recognized as a known RM code, RM name, Sapiens sub-code, or sub-RM name"
-        : "Not recognized as a known PM code, PM name, Sapiens sub-code, or sub-PM name" });
+        ? "Not recognized as a known RM code, RM name, Manufacturer sub-code, or sub-RM name"
+        : "Not recognized as a known PM code, PM name, Manufacturer sub-code, or sub-PM name" });
       return;
     }
     const v1 = num(q1s, true);
@@ -2498,7 +2378,7 @@ function applySupplyRows(rows, kind) {
 
 /* Combined importer for the Inputs tab — a single file can carry any of Current Stock,
  * Expected Inward, Exp. Supply M1, and Exp. Supply M2 together, keyed by RM/PM identifier
- * (same flexible resolution as applyStockRows/applySupplyRows: Mosaic code, name, Sapiens
+ * (same flexible resolution as applyStockRows/applySupplyRows: Mosaic code, name, Manufacturer
  * sub-code, or sub-material name). Each of the 4 value columns is independently optional —
  * a file missing a column simply leaves that field untouched for every material. Unlike
  * applySupplyRows (which never trusts an "M2" header, since standalone supply files here
@@ -2506,14 +2386,115 @@ function applySupplyRows(rows, kind) {
  * headers, because the Inputs tab's file format is expected to carry both months. If no
  * M1/M2-specific header is found but a generic "supply"/"exp" column exists, that one
  * column is treated as Supply M1 only, matching the legacy single-column behavior. */
+/* Every known manufacturer/sub-code (e.g. RM0160, RM0404) for a given kind, one row per
+ * distinct code, with the Mosaic RM/PM name(s) + code(s) it rolls up into (a code can
+ * legitimately be shared across more than one Mosaic material, e.g. a jar + its matching
+ * cap — that's why mosaicName/mosaicCode can be comma-joined lists). This is the row list
+ * the Inputs tab renders and the combined importer below matches against. */
+/* Import a Mosaic RM/PM Code <-> Mosaic Name <-> Manufacturer Code mapping — used by the
+ * Consolidated RM/PM tabs' "Upload Mosaic-Manufacturer Code Mapping" button. Each row maps
+ * ONE manufacturer/sub-code (e.g. RM0160) onto an EXISTING Mosaic RM/PM (matched by Mosaic
+ * name first, then Mosaic code — a row naming an RM/PM this tool doesn't already know about
+ * is reported as unmatched, since this only maps codes onto materials already in the BOM,
+ * it doesn't add brand-new RMs/PMs). Once mapped, the manufacturer code immediately becomes
+ * editable in the Inputs tab and rolls into this Mosaic material's Current Stock/Expected
+ * Inward/Exp. Supply totals (see subCodesFor()/stockTotal() etc). Mutates rmSubGroups/
+ * rmSubCodeIndex (or the pm equivalents) directly — the same structures the legacy
+ * rm_sub_map/pm_sub_map Google Sheet feed populates on load, so uploads here simply add to
+ * (never replace) whatever mapping already exists. */
+function applyCodeMappingRows(rows, kind) {
+  const groups = kind === "rm" ? rmSubGroups : pmSubGroups;
+  const codeIndex = kind === "rm" ? rmSubCodeIndex : pmSubCodeIndex;
+  const byMosaicCode = {}, byMosaicName = {};
+  Object.keys(matMaster).forEach(k => {
+    const e = matMaster[k];
+    if (e.kind !== kind) return;
+    if (e.code) byMosaicCode[e.code.toLowerCase()] = k;
+    byMosaicName[k] = k; // matMaster keys are already normKey(name)
+  });
+  const width = rows.reduce((w, r) => Math.max(w, r.length), 0);
+  const cell = (r, c) => String(r[c] == null ? "" : r[c]).trim();
+  const hdr = (rows[0] || []).map(h => String(h || "").toLowerCase().replace(/[^a-z0-9]/g, ""));
+  const findHdr = pred => { for (let c = 0; c < width; c++) { if (hdr[c] && pred(hdr[c])) return c; } return -1; };
+  let mosaicCodeCol = findHdr(h => h.includes("mosaic") && h.includes("code"));
+  let mosaicNameCol = findHdr(h => h.includes("mosaic") && h.includes("name"));
+  let manufCodeCol = findHdr(h => h.includes("manufacturer") && h.includes("code"));
+  const foundByHeader = mosaicCodeCol >= 0 || mosaicNameCol >= 0 || manufCodeCol >= 0;
+  if (!foundByHeader && width >= 3) {
+    // No recognizable headers — fall back to the documented column order.
+    mosaicCodeCol = 0; mosaicNameCol = 1; manufCodeCol = 2;
+  }
+  if (manufCodeCol < 0) {
+    return { matched: 0, unmatched: [{ identifier: "(file)", reason: "Could not find a Manufacturer " + (kind === "rm" ? "RM" : "PM") + " Code column" }] };
+  }
+  const unmatched = [];
+  let matched = 0;
+  rows.forEach((r, i) => {
+    if (i === 0 && foundByHeader) return;
+    const manufCode = cell(r, manufCodeCol);
+    if (!manufCode) return;
+    const mosaicCode = mosaicCodeCol >= 0 ? cell(r, mosaicCodeCol) : "";
+    const mosaicName = mosaicNameCol >= 0 ? cell(r, mosaicNameCol) : "";
+    let k = null;
+    if (mosaicName) k = byMosaicName[normKey(mosaicName)] || null;
+    if (!k && mosaicCode) k = byMosaicCode[mosaicCode.toLowerCase()] || null;
+    if (!k) {
+      unmatched.push({ identifier: mosaicName || mosaicCode || manufCode, reason: kind === "rm"
+        ? "Not recognized as an existing Mosaic RM — check the Mosaic RM Code/Name against Consolidated RM"
+        : "Not recognized as an existing Mosaic PM — check the Mosaic PM Code/Name against Consolidated PM" });
+      return;
+    }
+    const codeL = manufCode.toLowerCase().trim();
+    groups[k] = groups[k] || [];
+    if (!groups[k].some(sub => String(sub.code || "").toLowerCase().trim() === codeL)) {
+      groups[k].push({ code: manufCode });
+    }
+    codeIndex[codeL] = codeIndex[codeL] || [];
+    if (!codeIndex[codeL].includes(k)) codeIndex[codeL].push(k);
+    matched++;
+  });
+  return { matched, unmatched };
+}
+function manufacturerCodeList(kind) {
+  const groups = kind === "rm" ? rmSubGroups : pmSubGroups;
+  const officialCode = kind === "rm" ? officialRmCode : officialPmCode;
+  const map = new Map(); // codeLower -> {code, mosaicNames:Set, mosaicCodes:Set}
+  Object.keys(groups).forEach(k => {
+    (groups[k] || []).forEach(sub => {
+      if (!sub.code) return;
+      const cl = String(sub.code).toLowerCase().trim();
+      if (!map.has(cl)) map.set(cl, { code: sub.code, mosaicNames: new Set(), mosaicCodes: new Set() });
+      const entry = map.get(cl);
+      entry.mosaicNames.add((matMaster[k] && matMaster[k].name) || k);
+      const oc = officialCode(k); if (oc) entry.mosaicCodes.add(oc);
+    });
+  });
+  return [...map.values()].map(e => ({
+    code: e.code,
+    mosaicName: [...e.mosaicNames].join(", "),
+    mosaicCode: [...e.mosaicCodes].join(", ")
+  }));
+}
+/* Combined importer for the Inputs tab — identifiers here are manufacturer/sub-codes
+ * (e.g. RM0160, RM0404) directly, NOT Mosaic RM/PM codes or names. A single file can carry
+ * any of Current Stock, Expected Inward, Exp. Supply M1, and Exp. Supply M2 together; each
+ * of the 4 value columns is independently optional. Values are written straight into the
+ * manufacturer-code-keyed stores (rmSubStock/rmSubInward/rmSubSupplyM1/rmSubSupplyM2, or the
+ * pm equivalents) — Consolidated RM/PM then sums across every manufacturer code mapped to a
+ * Mosaic material to show that material's total (see stockTotal()/inwardTotal()/
+ * supplyTotal()/supply2Total()). A manufacturer code not present in the known mapping
+ * (rmSubCodeIndex/pmSubCodeIndex — see the Mosaic-Manufacturer Code Mapping upload in
+ * Consolidated RM/PM) is skipped and reported as unmatched, same as every other importer
+ * in this tool. */
 function applyCombinedRows(rows, kind) {
-  const resolve = makeResolver(kind);
+  const codeIndex = kind === "rm" ? rmSubCodeIndex : pmSubCodeIndex;
+  const isKnownCode = raw => !!codeIndex[String(raw).toLowerCase().trim()];
   const width = rows.reduce((w, r) => Math.max(w, r.length), 0);
   const cell = (r, c) => String(r[c] == null ? "" : r[c]).trim();
   let idCol = 0, idHits = -1;
   for (let c = 0; c < width; c++) {
     let hits = 0;
-    rows.forEach(r => { const v = cell(r, c); if (v && resolve(v)) hits++; });
+    rows.forEach(r => { const v = cell(r, c); if (v && isKnownCode(v)) hits++; });
     if (hits > idHits) { idHits = hits; idCol = c; }
   }
   const hdr = (rows[0] || []).map(h => String(h || "").toLowerCase().replace(/[^a-z0-9]/g, ""));
@@ -2547,124 +2528,109 @@ function applyCombinedRows(rows, kind) {
     if (i === 0 && skipHeaderRow) return;
     const raw = cell(r, idCol);
     if (!raw) return;
-    const keys = resolve.resolveAll(raw);
-    if (!keys.length) {
+    const codeL = raw.toLowerCase().trim();
+    if (!isKnownCode(raw)) {
       unmatched.push({ identifier: raw, reason: kind === "rm"
-        ? "Not recognized as a known RM code, RM name, Sapiens sub-code, or sub-RM name"
-        : "Not recognized as a known PM code, PM name, Sapiens sub-code, or sub-PM name" });
+        ? "Not recognized as a known manufacturer RM code — add it via the Mosaic-Manufacturer Code Mapping upload in Consolidated RM first"
+        : "Not recognized as a known manufacturer PM code — add it via the Mosaic-Manufacturer Code Mapping upload in Consolidated PM first" });
       return;
     }
     const sv = numAt(r, stockCol), iv = numAt(r, inwardCol), s1 = numAt(r, supM1Col), s2 = numAt(r, supM2Col);
-    keys.forEach(key => {
-      if (sv != null) stockSums[key] = (stockSums[key] || 0) + sv;
-      if (iv != null) inwardSums[key] = (inwardSums[key] || 0) + iv;
-      if (s1 != null) sup1Sums[key] = (sup1Sums[key] || 0) + s1;
-      if (s2 != null) sup2Sums[key] = (sup2Sums[key] || 0) + s2;
-    });
+    if (sv != null) stockSums[codeL] = (stockSums[codeL] || 0) + sv;
+    if (iv != null) inwardSums[codeL] = (inwardSums[codeL] || 0) + iv;
+    if (s1 != null) sup1Sums[codeL] = (sup1Sums[codeL] || 0) + s1;
+    if (s2 != null) sup2Sums[codeL] = (sup2Sums[codeL] || 0) + s2;
   });
   const SAP = currentFactory;
-  const stockStore = kind === "rm" ? rmStockF : pmStockF;
-  const inwardStore = kind === "rm" ? rmInward : pmInward;
-  Object.keys(stockSums).forEach(key => {
-    stockStore[SAP][key] = String(stockSums[key]);
-    if (kind === "rm") {
-      if (rmFirm[key]) rmFirm[key].stock = stockSums[key];
-      else rmFirm[key] = { code: rmCodeReal[key] || (matMaster[key] ? matMaster[key].code : "") || "", stock: stockSums[key], supply: rmSupply[key] || 0 };
-    }
-  });
-  Object.keys(inwardSums).forEach(key => { inwardStore[key] = String(inwardSums[key]); });
-  Object.keys(sup1Sums).forEach(key => {
-    if (kind === "rm") { rmSupply[key] = sup1Sums[key]; if (rmFirm[key]) rmFirm[key].supply = sup1Sums[key]; else rmFirm[key] = { code: rmCodeReal[key] || (matMaster[key] ? matMaster[key].code : "") || "", stock: null, supply: sup1Sums[key] }; }
-    else { pmSupply[key] = String(sup1Sums[key]); }
-  });
-  Object.keys(sup2Sums).forEach(key => {
-    if (kind === "rm") rmSupplyM2[key] = sup2Sums[key];
-    else pmSupplyM2[key] = sup2Sums[key];
-  });
-  const matchedKeys = new Set([...Object.keys(stockSums), ...Object.keys(inwardSums), ...Object.keys(sup1Sums), ...Object.keys(sup2Sums)]);
+  const stockStore = kind === "rm" ? rmSubStock : pmSubStock;
+  const inwardStore = kind === "rm" ? rmSubInward : pmSubInward;
+  const sup1Store = kind === "rm" ? rmSubSupplyM1 : pmSubSupplyM1;
+  const sup2Store = kind === "rm" ? rmSubSupplyM2 : pmSubSupplyM2;
+  Object.keys(stockSums).forEach(c => { stockStore[SAP][c] = String(stockSums[c]); });
+  Object.keys(inwardSums).forEach(c => { inwardStore[SAP][c] = String(inwardSums[c]); });
+  Object.keys(sup1Sums).forEach(c => { sup1Store[SAP][c] = String(sup1Sums[c]); });
+  Object.keys(sup2Sums).forEach(c => { sup2Store[SAP][c] = String(sup2Sums[c]); });
+  const matchedCodes = new Set([...Object.keys(stockSums), ...Object.keys(inwardSums), ...Object.keys(sup1Sums), ...Object.keys(sup2Sums)]);
   return {
-    matched: matchedKeys.size, unmatched,
+    matched: matchedCodes.size, unmatched,
     stockFound: stockCol >= 0, inwardFound: inwardCol >= 0, sup1Found: supM1Col >= 0, sup2Found: supM2Col >= 0
   };
 }
 
-// --- Inputs tab (Current Stock / Expected Inward / Exp. Supply M1 & M2 — editable here, ---
-// --- read-only in Consolidated RM/PM) ------------------------------------------------
+// --- Inputs tab (Current Stock / Expected Inward / Exp. Supply M1 & M2 — entered against ---
+// --- the manufacturer/sub-code itself, e.g. RM0160/RM0404, and rolled up to the Mosaic ---
+// --- RM/PM level in Consolidated RM/PM, which is read-only for these fields) ------------
 let inputsKind = 'rm';
 function setInputsKind(kind) {
   inputsKind = kind;
   $("btnInputsRm").classList.toggle("primary", kind === "rm");
   $("btnInputsPm").classList.toggle("primary", kind === "pm");
   $("inputsUploadLabel").textContent = kind === "rm" ? "RM" : "PM";
-  $("inputsCodeHead").textContent = kind === "rm" ? "RM Code" : "PM Code";
+  $("inputsCodeHead").textContent = kind === "rm" ? "Manufacturer RM Code" : "Manufacturer PM Code";
   renderInputsTab();
 }
 function renderInputsTab() {
   const kind = inputsKind;
-  const bomList = kind === "rm" ? STATIC_BOM.bom_rm : STATIC_BOM.bom_pm;
-  const nameField = kind === "rm" ? "rm_name" : "pm_name";
-  const officialCode = kind === "rm" ? officialRmCode : officialPmCode;
-  const sapiensLabel = kind === "rm" ? sapiensCodesLabel : sapiensPmCodesLabel;
-  const stockStore = kind === "rm" ? rmStockF : pmStockF;
-  const inwardStore = kind === "rm" ? rmInward : pmInward;
-  const supStore = kind === "rm" ? rmSupply : pmSupply;
-  const sup2Store = kind === "rm" ? rmSupplyM2 : pmSupplyM2;
   const unitLabel = kind === "rm" ? "kg" : "units";
+  const stockStore = (kind === "rm" ? rmSubStock : pmSubStock)[currentFactory] || {};
+  const inwardStore = (kind === "rm" ? rmSubInward : pmSubInward)[currentFactory] || {};
+  const sup1Store = (kind === "rm" ? rmSubSupplyM1 : pmSubSupplyM1)[currentFactory] || {};
+  const sup2Store = (kind === "rm" ? rmSubSupplyM2 : pmSubSupplyM2)[currentFactory] || {};
 
-  const seen = new Map();
-  bomList.forEach(r => { const nm = r[nameField]; if (!nm) return; const k = normKey(nm); if (!seen.has(k)) seen.set(k, nm); });
-  const items = [...seen.entries()].map(([k, name]) => ({
-    k, name,
-    code: officialCode(k) || "",
-    stock: stockTotal(kind, k),
-    inward: num(inwardStore[k], true),
-    sup1: num(supStore[k], true),
-    sup2: num(sup2Store[k], true)
+  const items = manufacturerCodeList(kind).map(e => ({
+    code: e.code, codeL: e.code.toLowerCase().trim(),
+    mosaicName: e.mosaicName, mosaicCode: e.mosaicCode,
+    stock: num(stockStore[e.code.toLowerCase().trim()], true),
+    inward: num(inwardStore[e.code.toLowerCase().trim()], true),
+    sup1: num(sup1Store[e.code.toLowerCase().trim()], true),
+    sup2: num(sup2Store[e.code.toLowerCase().trim()], true)
   }));
   const filt = ($("inputsSearch").value || "").trim().toLowerCase();
-  const shown = filt ? items.filter(r => (r.name || "").toLowerCase().includes(filt) || (r.code || "").toLowerCase().includes(filt)) : items;
-  shown.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  const shown = filt ? items.filter(r => r.code.toLowerCase().includes(filt) || r.mosaicName.toLowerCase().includes(filt) || r.mosaicCode.toLowerCase().includes(filt)) : items;
+  shown.sort((a, b) => a.code.localeCompare(b.code));
 
   const tb = $("inputsRows"); tb.innerHTML = "";
+  if (!shown.length) {
+    tb.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:32px;color:#888;font-style:italic">No manufacturer ' + (kind === 'rm' ? 'RM' : 'PM') +
+      ' codes mapped yet — use <b>Upload Mosaic-Manufacturer Code Mapping</b> on the Consolidated ' + (kind === 'rm' ? 'RM' : 'PM') + ' tab first.</td></tr>';
+    return;
+  }
   shown.forEach((r, idx) => {
     const tr = document.createElement("tr");
-    const sti = '<input class="cell" type="number" min="0" step="1" value="' + escapeHtml(r.stock.toFixed(1)) + '" data-stk="' + escapeHtml(r.k) + '" style="width:90px" title="Current stock (' + unitLabel + ') — editable">';
-    const iwi = '<input class="cell" type="number" min="0" step="1" value="' + escapeHtml(r.inward.toFixed(1)) + '" data-iw="' + escapeHtml(r.k) + '" style="width:90px" title="Expected inward (' + unitLabel + ') — editable">';
-    const s1i = '<input class="cell" type="number" min="0" step="1" value="' + escapeHtml(r.sup1.toFixed(1)) + '" data-s1="' + escapeHtml(r.k) + '" style="width:90px" title="Expected supply M1 (' + unitLabel + ') — editable">';
-    const s2i = '<input class="cell" type="number" min="0" step="1" value="' + escapeHtml(r.sup2.toFixed(1)) + '" data-s2="' + escapeHtml(r.k) + '" style="width:90px" title="Expected supply M2 (' + unitLabel + ') — editable">';
+    const sti = '<input class="cell" type="number" min="0" step="1" value="' + escapeHtml(r.stock.toFixed(1)) + '" data-stk="' + escapeHtml(r.codeL) + '" style="width:90px" title="Current stock (' + unitLabel + ') — editable">';
+    const iwi = '<input class="cell" type="number" min="0" step="1" value="' + escapeHtml(r.inward.toFixed(1)) + '" data-iw="' + escapeHtml(r.codeL) + '" style="width:90px" title="Expected inward (' + unitLabel + ') — editable">';
+    const s1i = '<input class="cell" type="number" min="0" step="1" value="' + escapeHtml(r.sup1.toFixed(1)) + '" data-s1="' + escapeHtml(r.codeL) + '" style="width:90px" title="Expected supply M1 (' + unitLabel + ') — editable">';
+    const s2i = '<input class="cell" type="number" min="0" step="1" value="' + escapeHtml(r.sup2.toFixed(1)) + '" data-s2="' + escapeHtml(r.codeL) + '" style="width:90px" title="Expected supply M2 (' + unitLabel + ') — editable">';
     tr.innerHTML = '<td class="num">' + (idx + 1) + '</td>' +
-      '<td class="sku-code">' + escapeHtml(r.code || (sapiensLabel(r.k) || '—')) + '</td>' +
-      '<td>' + escapeHtml(r.name) + '</td>' +
+      '<td class="sku-code">' + escapeHtml(r.code) + '</td>' +
+      '<td title="' + escapeHtml(r.mosaicCode) + '">' + escapeHtml(r.mosaicName) + '</td>' +
       '<td class="num req">' + sti + '</td>' +
       '<td class="num req">' + iwi + '</td>' +
       '<td class="num req">' + s1i + '</td>' +
       '<td class="num req">' + s2i + '</td>';
     tb.appendChild(tr);
     tr.querySelector('[data-stk]').addEventListener('change', ev => {
-      stockStore[currentFactory][ev.target.getAttribute('data-stk')] = ev.target.value;
-      broadcastStockUpdate(); renderInputsTab();
+      (kind === "rm" ? rmSubStock : pmSubStock)[currentFactory][ev.target.getAttribute('data-stk')] = ev.target.value;
+      broadcastStockUpdate(); renderInputsTab(); if (kind === "rm") renderRM(); else renderPM();
     });
     tr.querySelector('[data-iw]').addEventListener('change', ev => {
-      inwardStore[ev.target.getAttribute('data-iw')] = ev.target.value;
-      broadcastStockUpdate(); renderInputsTab();
+      (kind === "rm" ? rmSubInward : pmSubInward)[currentFactory][ev.target.getAttribute('data-iw')] = ev.target.value;
+      broadcastStockUpdate(); renderInputsTab(); if (kind === "rm") renderRM(); else renderPM();
     });
     tr.querySelector('[data-s1]').addEventListener('change', ev => {
-      const key = ev.target.getAttribute('data-s1');
-      if (kind === 'rm') { rmSupply[key] = num(ev.target.value, true); if (rmFirm[key]) rmFirm[key].supply = rmSupply[key]; }
-      else pmSupply[key] = ev.target.value;
-      renderInputsTab();
+      (kind === "rm" ? rmSubSupplyM1 : pmSubSupplyM1)[currentFactory][ev.target.getAttribute('data-s1')] = ev.target.value;
+      renderInputsTab(); if (kind === "rm") renderRM(); else renderPM();
     });
     tr.querySelector('[data-s2]').addEventListener('change', ev => {
-      const key = ev.target.getAttribute('data-s2');
-      sup2Store[key] = num(ev.target.value, true);
-      renderInputsTab();
+      (kind === "rm" ? rmSubSupplyM2 : pmSubSupplyM2)[currentFactory][ev.target.getAttribute('data-s2')] = ev.target.value;
+      renderInputsTab(); if (kind === "rm") renderRM(); else renderPM();
     });
   });
 }
 
 /* Import MOQ (Minimum Order Quantity) for a single kind ("rm" or "pm") — used by the
  * Consolidated RM/PM tabs' "Import MOQ" button. Same flexible identifier resolution as
- * Current Stock/Expected Supply (Mosaic code, name, Sapiens sub-code, or sub-material
+ * Current Stock/Expected Supply (Mosaic code, name, Manufacturer sub-code, or sub-material
  * name); a code shared across more than one material updates all of them. Unlike stock/
  * supply, multiple rows for the same material are NOT summed — MOQ is a per-order
  * threshold, not an accumulating quantity, so when a file lists more than one vendor
@@ -2709,8 +2675,8 @@ function applyMoqRows(rows, kind) {
     const keys = resolve.resolveAll(raw);
     if (!keys.length) {
       unmatched.push({ identifier: raw, reason: kind === "rm"
-        ? "Not recognized as a known RM code, RM name, Sapiens sub-code, or sub-RM name"
-        : "Not recognized as a known PM code, PM name, Sapiens sub-code, or sub-PM name" });
+        ? "Not recognized as a known RM code, RM name, Manufacturer sub-code, or sub-RM name"
+        : "Not recognized as a known PM code, PM name, Manufacturer sub-code, or sub-PM name" });
       return;
     }
     const v = num(qs, true);
@@ -2720,15 +2686,15 @@ function applyMoqRows(rows, kind) {
   Object.keys(mins).forEach(key => { moqStore[key] = String(mins[key]); });
   return { matched: Object.keys(mins).length, unmatched };
 }
-// Import Required Qty by Sapiens code (RM/PM tabs) — an alternate identifier scheme to the
+// Import Required Qty by Manufacturer code (RM/PM tabs) — an alternate identifier scheme to the
 // default "Import Req Qty" (which matches by Mosaic code/name only). This one resolves the
-// SAME way Current Stock/Expected Supply/MOQ do: Mosaic code, name, Sapiens sub-code, or
-// sub-material name, fanning out to every material a shared Sapiens code belongs to and
+// SAME way Current Stock/Expected Supply/MOQ do: Mosaic code, name, Manufacturer sub-code, or
+// sub-material name, fanning out to every material a shared Manufacturer code belongs to and
 // summing quantities across duplicate rows for the same material. Only writes into materials
 // that are actually part of the Consolidated RM/PM tab (the BOM list) — same rule as the
 // existing Mosaic-code Req Qty importer.
 function applyReqRowsBySapiens(rows, kind) {
-  const resolve = makeResolver(kind); // NOT mosaicOnly — Sapiens sub-codes/sub-names resolve too
+  const resolve = makeResolver(kind); // NOT mosaicOnly — Manufacturer sub-codes/sub-names resolve too
   const bomKeys = kind === "rm" ? bomRmKeySet() : bomPmKeySet();
   const width = rows.reduce((w, r) => Math.max(w, r.length), 0);
   const cell = (r, c) => String(r[c] == null ? "" : r[c]).trim();
@@ -2780,7 +2746,7 @@ function applyReqRowsBySapiens(rows, kind) {
     const keys = resolve.resolveAll(raw).filter(k => bomKeys.has(k));
     if (!keys.length) {
       unmatched.push({ identifier: raw, reason: "Not recognized as one of the " + bomKeys.size + " " + kind.toUpperCase() +
-        "s in Consolidated " + kind.toUpperCase() + " (checked Sapiens code, Mosaic code, name, and sub-material name)" });
+        "s in Consolidated " + kind.toUpperCase() + " (checked Manufacturer code, Mosaic code, name, and sub-material name)" });
       return;
     }
     keys.forEach(key => {
@@ -2792,15 +2758,6 @@ function applyReqRowsBySapiens(rows, kind) {
   if (kind === "rm") { rmReqOverride = {}; Object.keys(sums).forEach(key => { rmReqOverride[key] = sums[key]; }); }
   else { pmReqOverride = {}; Object.keys(sums).forEach(key => { pmReqOverride[key] = sums[key]; }); }
   return { matched: Object.keys(sums).length, unmatched };
-}
-function updateInvKpis() {
-  let rm = 0, pm = 0;
-  MATLIST.forEach(e => {
-    if (e.kind === "rm") rm += stockTotal("rm", e.key);
-    else pm += stockTotal("pm", e.key);
-  });
-  $("invTotalRm").textContent = fmt(rm, 3);
-  $("invTotalPm").textContent = fmt(pm, 0);
 }
 
 /* ==================================================================
@@ -2836,7 +2793,7 @@ function exportRM() {
     "M2 Required qty,M2 Desired quantity,M2 Actual Quantity,M2 Diff,M2 Status"];
   agg.forEach(e => {
     const k = normKey(e.name);
-    const matched = !!matMaster[k]; // known to the system (in BOM / has a Mosaic code) — not gated on the legacy Sapiens Firm-sheet feed
+    const matched = !!matMaster[k]; // known to the system (in BOM / has a Mosaic code) — not gated on the legacy Manufacturer Firm-sheet feed
     const reqM1 = e.reqM1Kg, reqM2 = e.reqM2Kg;
     const moq = num(rmMoq[k], true);
     const moqStr = (rmMoq[k] == null || rmMoq[k] === "") ? "" : String(rmMoq[k]);
@@ -2846,8 +2803,8 @@ function exportRM() {
         reqM1.toFixed(1), "NA", "NA", "NA", "no stock feed", reqM2.toFixed(1), "NA", "NA", "NA", "no stock feed"].join(","));
       return;
     }
-    const stock = stockTotal("rm", k), inward = num(rmInward[k], true), avail = stock + inward, supply = num(rmSupply[k], true);
-    const supM1 = supply, supM2 = num(rmSupplyM2[k], true);
+    const stock = stockTotal("rm", k), inward = inwardTotal("rm", k), avail = stock + inward, supply = supplyTotal("rm", k);
+    const supM1 = supply, supM2 = supply2Total("rm", k);
     const availM1 = avail + supM1;
     const o1 = fwdOrder(reqM1, availM1, moq);
     const openM2 = Math.max(0, avail + supM1 + moqAdjOrder(o1.oq, moq) - reqM1);   // opening stock M2 = carry-forward from M1 (floored at 0), matching the on-screen Opening Stock M2 column
@@ -2870,7 +2827,7 @@ function exportPM() {
     const reqM1 = e.reqM1U, reqM2 = e.reqM2U;
     const moq = num(pmMoq[k], true);
     const stock = stockTotal("pm", k);
-    const inward = num(pmInward[k], true);
+    const inward = inwardTotal("pm", k);
     const avail = stock + inward;
     const availM1 = avail;
     const o1 = fwdOrder(reqM1, availM1, moq);
@@ -2913,22 +2870,6 @@ function exportMaster() {
   });
   downloadCSV("material_master.csv", lines.join("\r\n"));
 }
-function exportInventory() {
-  const days = num(planDays, true);
-  const reqMap = buildReqMap();
-  const head = ["Mosaic Code", "Material", "Type", "UOM"]
-    .concat(FACTORIES.map(f => f.code + " stock")).concat(["Total stock (all)", "Plan/day"]);
-  const lines = [head.join(",")];
-  MATLIST.forEach(e => {
-    const store = e.kind === "rm" ? rmStockF : pmStockF;
-    const stockCells = FACTORIES.map(f => num(store[f.code][e.key], true));
-    const pd = days > 0 ? (reqMap[e.key] || 0) / days : null;
-    const row = [csvField(e.code), csvField(e.name), e.kind.toUpperCase(), csvField(e.uom)]
-      .concat(stockCells).concat([+stockTotal(e.kind, e.key).toFixed(3), pd === null ? "" : +pd.toFixed(3)]);
-    lines.push(row.join(","));
-  });
-  downloadCSV("live_inventory.csv", lines.join("\r\n"));
-}
 
 /* ==================================================================
  *  DATA-QUALITY BANNERS
@@ -2955,12 +2896,12 @@ function renderBanners(source) {
       'These rows contribute 0 kg until a % is entered (edit on the Per-SKU tab). ' +
       '<b>Verify all percentages with the formulation team before using output for procurement.</b></div>');
   }
-  // Sapiens "PM-RM Planing" feed coverage for the consolidated RM tab
+  // Manufacturer "PM-RM Planing" feed coverage for the consolidated RM tab
   const rmKeys = new Set(); RM.forEach(r => rmKeys.add(normKey(r.rm_name)));
   const matchedFirm = [...rmKeys].filter(k => rmFirm[k]).length;
   if (rmKeys.size && matchedFirm < rmKeys.size) {
     out.push('<div class="banner info">ℹ <b>' + matchedFirm + ' of ' + rmKeys.size + ' raw materials</b> matched the ' +
-      'Sapiens “PM-RM Planing” feed by name (RM code, current stock col N, expected supply col P). The unmatched ones show ' +
+      'Manufacturer “PM-RM Planing” feed by name (RM code, current stock col N, expected supply col P). The unmatched ones show ' +
       '<b>NA</b> for current stock, DOH and order qty (left out of the totals) until material names are reconciled. Verify before raising POs.</div>');
   }
 
@@ -3069,7 +3010,6 @@ function showTab(name) {
   if (name === "rm") renderRM();
   if (name === "pm") renderPM();
   if (name === "sku") renderSkuDetail($("skuPicker").value || (SKU[0] && SKU[0].sku_code));
-  if (name === "inv") renderInventory();
   if (name === "skudoc") renderSkuDoc();
   if (name === "scheduler") broadcastStockUpdate();
   requestAnimationFrame(syncStickyHeadOffsets);
@@ -3133,7 +3073,7 @@ function wire() {
       let loaded = 0;
       const skipped = []; // rows that resolved to a real material, but one outside the 82-RM BOM list
       rmReqOverride = {};
-      const resolveRm = makeResolver("rm", { mosaicOnly: true }); // Req Qty maps by Mosaic RM code, not Sapiens code
+      const resolveRm = makeResolver("rm", { mosaicOnly: true }); // Req Qty maps by Mosaic RM code, not Manufacturer code
       const bomKeys = bomRmKeySet();
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
@@ -3142,12 +3082,12 @@ function wire() {
         const m1 = parseFloat((row[colM1] || "").toString().replace(/,/g, ""));
         const m2 = colM2 >= 0 ? parseFloat((row[colM2] || "").toString().replace(/,/g, "")) : 0;
         if (isNaN(m1)) continue;
-        // Resolve via Mosaic code / RM name / Sapiens sub-code / sub-RM name so this lines up with
+        // Resolve via Mosaic code / RM name / Manufacturer sub-code / sub-RM name so this lines up with
         // whatever key Current Stock / Expected Supply already used for the same material — a
         // slightly different spelling in this file no longer disconnects it from imported stock.
         const key = resolveRm(nameRaw) || normKey(nameRaw);
         // Only the RMs actually in the Consolidated RM tab (the 82-RM BOM) are accepted —
-        // anything else (e.g. a Sapiens code that resolves but isn't part of the BOM) is skipped.
+        // anything else (e.g. a Manufacturer code that resolves but isn't part of the BOM) is skipped.
         if (!bomKeys.has(key)) { skipped.push(nameRaw); continue; }
         rmReqOverride[key] = { name: nameRaw, m1: m1, m2: isNaN(m2) ? 0 : m2 };
         loaded++;
@@ -3161,7 +3101,7 @@ function wire() {
     } catch (err) { alert("Error reading file: " + err.message); }
   });
 
-  // Import Required Qty by Sapiens code (RM tab) — alternate identifier scheme; see
+  // Import Required Qty by Manufacturer code (RM tab) — alternate identifier scheme; see
   // applyReqRowsBySapiens for matching/summing/fan-out behavior.
   $("btnImportReqRmSap").addEventListener("click", () => $("fileReqRmSap").click());
   $("fileReqRmSap").addEventListener("change", async e => {
@@ -3179,7 +3119,7 @@ function wire() {
       const res = applyReqRowsBySapiens(rows, "rm");
       msg.innerHTML = "Imported required qty for <b>" + res.matched + "</b> RM(s)" +
         (res.unmatched.length ? "; <span class='miss-badge'>" + res.unmatched.length + " row(s) could not be mapped</span> — see popup" : "") + ".";
-      showUnmatchedModal("Import Req Qty by Sapiens Code (RM) — unmatched rows", res.unmatched);
+      showUnmatchedModal("Import Req Qty by Manufacturer Code (RM) — unmatched rows", res.unmatched);
       if ($("btnClearReqRm")) $("btnClearReqRm").style.display = "";
       renderRM();
       broadcastStockUpdate();
@@ -3218,7 +3158,7 @@ function wire() {
 
       let loaded = 0;
       pmReqOverride = {};
-      const resolvePm = makeResolver("pm", { mosaicOnly: true }); // Req Qty maps by Mosaic PM code, not Sapiens code
+      const resolvePm = makeResolver("pm", { mosaicOnly: true }); // Req Qty maps by Mosaic PM code, not Manufacturer code
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
         const nameRaw = (row[colName] || "").trim();
@@ -3226,7 +3166,7 @@ function wire() {
         const m1 = parseFloat((row[colM1] || "").toString().replace(/,/g, ""));
         const m2 = colM2 >= 0 ? parseFloat((row[colM2] || "").toString().replace(/,/g, "")) : 0;
         if (isNaN(m1)) continue;
-        // Resolve via Mosaic code / PM name / Sapiens sub-code / sub-PM name — same reasoning as RM above.
+        // Resolve via Mosaic code / PM name / Manufacturer sub-code / sub-PM name — same reasoning as RM above.
         const key = resolvePm(nameRaw) || normKey(nameRaw);
         pmReqOverride[key] = { name: nameRaw, m1: m1, m2: isNaN(m2) ? 0 : m2 };
         loaded++;
@@ -3238,7 +3178,7 @@ function wire() {
     } catch (err) { alert("Error reading file: " + err.message); }
   });
 
-  // Import Required Qty by Sapiens code (PM tab) — alternate identifier scheme; see
+  // Import Required Qty by Manufacturer code (PM tab) — alternate identifier scheme; see
   // applyReqRowsBySapiens for matching/summing/fan-out behavior.
   $("btnImportReqPmSap").addEventListener("click", () => $("fileReqPmSap").click());
   $("fileReqPmSap").addEventListener("change", async e => {
@@ -3256,7 +3196,7 @@ function wire() {
       const res = applyReqRowsBySapiens(rows, "pm");
       msg.innerHTML = "Imported required qty for <b>" + res.matched + "</b> PM(s)" +
         (res.unmatched.length ? "; <span class='miss-badge'>" + res.unmatched.length + " row(s) could not be mapped</span> — see popup" : "") + ".";
-      showUnmatchedModal("Import Req Qty by Sapiens Code (PM) — unmatched rows", res.unmatched);
+      showUnmatchedModal("Import Req Qty by Manufacturer Code (PM) — unmatched rows", res.unmatched);
       if ($("btnClearReqPm")) $("btnClearReqPm").style.display = "";
       renderPM();
       broadcastStockUpdate();
@@ -3357,7 +3297,7 @@ function wire() {
     }
   });
 
-  // Import Expected Supply (RM tab) — identifier can be Mosaic code, RM name, Sapiens
+  // Import Expected Supply (RM tab) — identifier can be Mosaic code, RM name, Manufacturer
   // sub-code, or sub-RM name; matching rows are summed into that RM's expected supply.
   $("btnImportSupplyRm").addEventListener("click", () => $("fileSupplyRm").click());
   $("fileSupplyRm").addEventListener("change", async e => {
@@ -3384,7 +3324,7 @@ function wire() {
     }
   });
 
-  // Import Expected Supply (PM tab) — identifier can be Mosaic code, PM name, Sapiens
+  // Import Expected Supply (PM tab) — identifier can be Mosaic code, PM name, Manufacturer
   // sub-code, or sub-PM name; matching rows are summed into that PM's expected supply.
   $("btnImportSupplyPm").addEventListener("click", () => $("fileSupplyPm").click());
   $("fileSupplyPm").addEventListener("change", async e => {
@@ -3411,7 +3351,7 @@ function wire() {
     }
   });
 
-  // Import MOQ (PM tab) — identifier can be Mosaic code, PM name, Sapiens sub-code, or
+  // Import MOQ (PM tab) — identifier can be Mosaic code, PM name, Manufacturer sub-code, or
   // sub-PM name; if a material has multiple vendor rows, the lowest MOQ is kept.
   $("btnImportMoqPm").addEventListener("click", () => $("fileMoqPm").click());
   $("fileMoqPm").addEventListener("change", async e => {
@@ -3438,19 +3378,61 @@ function wire() {
     }
   });
 
-  if ($("exportSku")) $("exportSku").addEventListener("click", exportSku);
-  $("exportInv").addEventListener("click", exportInventory);
-
-  // Live Inventory controls
-  $("invSearch").addEventListener("input", renderInventory);
-  $("invFactoryFilter").addEventListener("change", renderInventory);
-  $("invKindFilter").addEventListener("change", renderInventory);
-  $("btnInvFile").addEventListener("click", () => $("invFile").click());
-  $("invFile").addEventListener("change", e => {
-    const f = e.target.files[0];
-    e.target.value = "";                                    // allow re-picking the same file
-    if (f) loadInventoryFile(f, currentFactory);         // single co-packer: Sapiens
+  // Upload Mosaic-Manufacturer Code Mapping (RM tab) — Mosaic RM Code, Mosaic RM Name,
+  // Manufacturer RM Code columns; maps a manufacturer/sub-RM code onto an EXISTING Mosaic
+  // RM so it becomes editable in the Inputs tab and rolls into that RM's totals here.
+  $("btnImportCodeMapRm").addEventListener("click", () => $("fileCodeMapRm").click());
+  $("fileCodeMapRm").addEventListener("change", async e => {
+    const file = e.target.files[0]; if (!file) return;
+    e.target.value = "";
+    const msg = $("rmStockImportMsg");
+    msg.style.display = "block"; msg.style.color = "";
+    try {
+      let rows;
+      if (/\.csv$/i.test(file.name)) rows = parseCSV(await file.text());
+      else if (/\.xlsx$/i.test(file.name)) rows = await readXlsx(await file.arrayBuffer());
+      else throw new Error("Unsupported file type. Use .xlsx or .csv (not the older .xls).");
+      rows = trimLeadingBlank(rows || []);
+      if (!rows.length) throw new Error("The file has no rows.");
+      const res = applyCodeMappingRows(rows, "rm");
+      msg.innerHTML = "Mapped <b>" + res.matched + "</b> manufacturer RM code(s)" +
+        (res.unmatched.length ? "; <span class='miss-badge'>" + res.unmatched.length + " row(s) could not be mapped</span> — see popup" : "") + ".";
+      showUnmatchedModal("Mosaic-Manufacturer Code Mapping (RM) — unmatched rows", res.unmatched);
+      renderRM();
+      if (inputsKind === "rm") renderInputsTab();
+    } catch (err) {
+      msg.style.color = "var(--warn)";
+      msg.textContent = "⚠ " + (err && err.message ? err.message : "Could not read this file.");
+    }
   });
+
+  // Upload Mosaic-Manufacturer Code Mapping (PM tab) — same idea for PM.
+  $("btnImportCodeMapPm").addEventListener("click", () => $("fileCodeMapPm").click());
+  $("fileCodeMapPm").addEventListener("change", async e => {
+    const file = e.target.files[0]; if (!file) return;
+    e.target.value = "";
+    const msg = $("pmStockImportMsg");
+    msg.style.display = "block"; msg.style.color = "";
+    try {
+      let rows;
+      if (/\.csv$/i.test(file.name)) rows = parseCSV(await file.text());
+      else if (/\.xlsx$/i.test(file.name)) rows = await readXlsx(await file.arrayBuffer());
+      else throw new Error("Unsupported file type. Use .xlsx or .csv (not the older .xls).");
+      rows = trimLeadingBlank(rows || []);
+      if (!rows.length) throw new Error("The file has no rows.");
+      const res = applyCodeMappingRows(rows, "pm");
+      msg.innerHTML = "Mapped <b>" + res.matched + "</b> manufacturer PM code(s)" +
+        (res.unmatched.length ? "; <span class='miss-badge'>" + res.unmatched.length + " row(s) could not be mapped</span> — see popup" : "") + ".";
+      showUnmatchedModal("Mosaic-Manufacturer Code Mapping (PM) — unmatched rows", res.unmatched);
+      renderPM();
+      if (inputsKind === "pm") renderInputsTab();
+    } catch (err) {
+      msg.style.color = "var(--warn)";
+      msg.textContent = "⚠ " + (err && err.message ? err.message : "Could not read this file.");
+    }
+  });
+
+  if ($("exportSku")) $("exportSku").addEventListener("click", exportSku);
 
   // Bulk paste modal
   $("btnPaste").addEventListener("click", () => { $("pasteArea").value = ""; $("pasteResult").textContent = ""; $("pasteModal").classList.add("show"); });
@@ -3465,6 +3447,26 @@ function wire() {
     $("demandFileErr").style.display = "none";
     $("applyDemandFile").disabled = true;
     $("demandFileModal").classList.add("show");
+  });
+  $("btnImportSku").addEventListener("click", () => $("fileSkuNames").click());
+  $("fileSkuNames").addEventListener("change", async e => {
+    const file = e.target.files[0]; if (!file) return;
+    e.target.value = "";
+    try {
+      let rows;
+      if (/\.csv$/i.test(file.name)) rows = parseCSV(await file.text());
+      else if (/\.xlsx$/i.test(file.name)) rows = await readXlsx(await file.arrayBuffer());
+      else throw new Error("Unsupported file type. Use .xlsx or .csv (not the older .xls).");
+      rows = trimLeadingBlank(rows || []);
+      if (!rows.length) throw new Error("The file has no rows.");
+      const res = applySkuNameRows(rows);
+      alert("SKU import: " + res.added + " new SKU(s) added, " + res.updated + " existing SKU(s) had their name refreshed." +
+        (res.unmatched.length ? "\n\n" + res.unmatched.length + " row(s) could not be read: " + res.unmatched.map(u => u.reason).join("; ") : ""));
+      renderDemand();
+      broadcastStockUpdate();
+    } catch (err) {
+      alert("Could not import SKU codes/names: " + (err && err.message ? err.message : "unknown error"));
+    }
   });
   $("closeDemandFile").addEventListener("click", () => $("demandFileModal").classList.remove("show"));
   $("pickDemandFile").addEventListener("click", () => $("fileDemand").click());
@@ -3663,6 +3665,41 @@ async function loadDemandFile(file) {
   }
 }
 
+/* Import SKU Code + SKU Name rows (Supply Entry tab "Import SKU Codes/Names" button).
+ * New SKU codes are appended to SKU[]/skuIndex (with demand seeded at 0) so they
+ * immediately show up in this tab; existing codes just have their name refreshed, pack
+ * size untouched. broadcastStockUpdate() rebuilds mrpData.skuNames from SKU[] on every
+ * call, and the Scheduler's knownSkuCodes() already includes mrpData.skuNames — so newly
+ * added SKUs become recognized there automatically without any Scheduler-side change. */
+function applySkuNameRows(rows) {
+  const width = rows.reduce((w, r) => Math.max(w, r.length), 0);
+  const cell = (r, c) => String(r[c] == null ? "" : r[c]).trim();
+  const hdr = (rows[0] || []).map(h => String(h || "").toLowerCase().replace(/[^a-z0-9]/g, ""));
+  const findHdr = pred => { for (let c = 0; c < width; c++) { if (hdr[c] && pred(hdr[c])) return c; } return -1; };
+  let codeCol = findHdr(h => h.includes("skucode") || (h.includes("sku") && h.includes("code")) || h === "code");
+  let nameCol = findHdr(h => h.includes("skuname") || (h.includes("sku") && h.includes("name")) || h.includes("productname") || h === "name");
+  const foundByHeader = codeCol >= 0 || nameCol >= 0;
+  if (!foundByHeader && width >= 2) { codeCol = 0; nameCol = 1; }
+  if (codeCol < 0) return { added: 0, updated: 0, unmatched: [{ identifier: "(file)", reason: "Could not find a SKU Code column" }] };
+  let added = 0, updated = 0;
+  const unmatched = [];
+  rows.forEach((r, i) => {
+    if (i === 0 && foundByHeader) return;
+    const code = cell(r, codeCol);
+    if (!code) return;
+    const name = nameCol >= 0 ? cell(r, nameCol) : "";
+    if (skuIndex[code]) {
+      if (name) skuIndex[code].fg_name = name;
+      updated++;
+    } else {
+      const s = { sku_code: code, fg_name: name, pack_size_g: "" };
+      SKU.push(s); skuIndex[code] = s;
+      demand[code] = "0"; demandM2[code] = "0";
+      added++;
+    }
+  });
+  return { added, updated, unmatched };
+}
 function applyDemandFile() {
   const { matches } = computeDemandMatch();
   if (!matches.length) return;
