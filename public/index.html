@@ -4997,8 +4997,15 @@ function computeRows() {
     // feasibility gate above already treats a null DOC as "not blocked" rather than "blocked."
     // A SKU with no data at all is excluded upstream via hasReqData/dataState, not here — so
     // this fallback only ever applies to SKUs that DO have real data, just an all-zero month.
-    const mfM1 = minDocM1 != null ? Math.min(1, minDocM1 / targetDoc) : 1;
-    const mfM2 = minDocM2 != null ? Math.min(1, minDocM2 / targetDoc) : 1;
+    let mfM1 = minDocM1 != null ? Math.min(1, minDocM1 / targetDoc) : 1;
+    let mfM2 = minDocM2 != null ? Math.min(1, minDocM2 / targetDoc) : 1;
+    // Class A override: for A-class SKUs specifically, a Material Feasibility that comes
+    // out to 0 or negative is treated as fully feasible (1) instead -- Class A SKUs are
+    // never allowed to be zeroed out of the ranking by a bad/negative feasibility number.
+    if (jas.c === 'A') {
+      if (mfM1 <= 0) mfM1 = 1;
+      if (mfM2 <= 0) mfM2 = 1;
+    }
     const scoreM1raw = urgencyM1 * stratWt * mfM1;
     const scoreM2raw = urgencyM2 * stratWt * mfM2;
 
