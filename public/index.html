@@ -5020,11 +5020,9 @@ function computeRows() {
       minDocM1, minDocM2,
       mfM1, mfM2, scoreM1, scoreM2,
       dataStateM1, dataStateM2, blockedByM1, blockedByM2,
-      // Run Qty (units) = min(DRR x 13, that SKU's own monthly Line Capacity), where monthly
-      // Line Capacity = Line Cap (units/day) x 30 days. Never exceeds what the line can
-      // actually produce in a month, regardless of how high DRR x 13 comes out.
-      runQtyM1: Math.min(drrM1 * 13, (lineCap[code] || 10000) * 30),
-      runQtyM2: Math.min(drrM2 * 13, (lineCap[code] || 10000) * 30)
+      // Run Qty (units) = min(DRR x 13, that SKU's own Line Cap (units/day)).
+      runQtyM1: Math.min(drrM1 * 13, lineCap[code] || 10000),
+      runQtyM2: Math.min(drrM2 * 13, lineCap[code] || 10000)
     });
   });
   result.sort((a, b) => b.scoreM1 - a.scoreM1);
