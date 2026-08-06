@@ -5205,36 +5205,43 @@ function renderSummaryCards(){
 }
 
 // --- Day-wise schedule: separate M1 and M2 (Priority Scoring tab) -------------------
-// Everything here is in UNITS -- no kg, no pack size, anywhere. Each SKU is scheduled
-// entirely independently against its own Line Cap (units/day): there is no shared/global
-// capacity pool, so one SKU's demand can never crowd out another's. A SKU whose Monthly
-// (Supply) Plan for that month is 0 is not scheduled at all for that month. Every scheduled
-// SKU's Run Qty for the month is spread across Day 1..Day 30 at up to Line Cap units/day,
-// so the sum of that SKU's 30 daily values always equals its Run Qty for the month exactly
-// (Run Qty itself is already capped at Line Cap x 30, so it always fits).
+// Everything here is in UNITS -- no kg, no pack size, anywhere. The line is modeled as ONE
+// SHARED, SEQUENTIAL calendar of 30 days per month -- not 32 independent per-SKU timelines.
+// SKUs are run one at a time in Score order (highest first): a SKU occupies consecutive
+// days until its full Run Qty is placed (at up to its own Line Cap units/day), then the very
+// next day the line changes over straight to the next-highest-Score SKU still needing to
+// run -- no idle days in between as long as there's still eligible demand and days left in
+// the month. A SKU whose Monthly (Supply) Plan for that month is 0 is not scheduled at all.
+// If total demand across all eligible SKUs exceeds what the line can produce in 30 days,
+// the lowest-priority SKUs that don't fit get 0 (or a partial amount) -- a genuine capacity
+// shortfall, shown as such, not hidden.
 let sched2moM1 = null, sched2moM2 = null;
 
 function allocateDayWise(orderedRows, runQtyField, planStore){
   const days = 30;
-  return orderedRows
-    .filter(r => (planStore[r.code] || 0) !== 0) // don't schedule an SKU with 0 Monthly (Supply) Plan
-    .map(r => {
-      const dayVals = new Array(days).fill(0);
-      let rem = Math.max(0, r[runQtyField]);
-      const perDayCap = lineCap[r.code] || 10000; // units/day
-      for (let d = 0; d < days && rem > 0; d++){
-        const fit = Math.min(rem, perDayCap);
-        dayVals[d] = fit;
-        rem -= fit;
-      }
-      return { code:r.code, name:r.name, cls:r.cls, priority:r.priority, days:dayVals, total: dayVals.reduce((s,v)=>s+v,0) };
-    });
+  const eligible = orderedRows.filter(r => (planStore[r.code] || 0) !== 0); // don't schedule an SKU with 0 Monthly (Supply) Plan
+
+  let day = 0; // shared cursor across ALL SKUs -- this is what makes it one line, not many
+  const out = eligible.map(r => {
+    const dayVals = new Array(days).fill(0);
+    let rem = Math.max(0, r[runQtyField]);
+    const perDayCap = lineCap[r.code] || 10000; // units/day
+    while (rem > 0 && day < days){
+      const fit = Math.min(rem, perDayCap);
+      dayVals[day] = fit;
+      rem -= fit;
+      day++; // line stays occupied by this SKU on the very next day too, until it's done
+    }
+    return { code:r.code, name:r.name, cls:r.cls, priority:r.priority, days:dayVals,
+      total: dayVals.reduce((s,v)=>s+v,0), runQty: Math.max(0, r[runQtyField]) };
+  });
+  return out;
 }
 
 function generateDaySchedule(){
   // Only feasible ("ok") SKUs are eligible at all — Blocked, Awaiting Data, and No-supply
-  // SKUs are never scheduled. Score order is kept only for a stable, priority-first read
-  // order in the table (allocation itself doesn't depend on it, since there's no shared pool).
+  // SKUs are never scheduled. Score order now directly drives the shared timeline (highest
+  // Score runs first), not just the read order in the table.
   const m1Order = rows.filter(r=>r.dataStateM1==='ok').sort((a,b)=>b.scoreM1-a.scoreM1);
   const m2Order = rows.filter(r=>r.dataStateM2==='ok').sort((a,b)=>b.scoreM2-a.scoreM2);
 
@@ -5246,8 +5253,11 @@ function generateDaySchedule(){
 
   const statusEl=document.getElementById('schedDayStatus');
   if(statusEl){
+    const shortM1 = sched2moM1.filter(r => r.total < r.runQty).length;
+    const shortM2 = sched2moM2.filter(r => r.total < r.runQty).length;
     statusEl.textContent =
-      `M1: ${sched2moM1.length} SKU(s) scheduled over 30 days &middot; M2: ${sched2moM2.length} SKU(s) scheduled over 30 days (units) &mdash; SKUs with 0 Monthly Plan are excluded`;
+      `M1: ${sched2moM1.length} SKU(s) on a shared line over 30 days &middot; M2: ${sched2moM2.length} SKU(s) over 30 days (units) &mdash; SKUs with 0 Monthly Plan are excluded` +
+      ((shortM1||shortM2) ? ` &mdash; capacity shortfall: ${shortM1} SKU(s) in M1 / ${shortM2} in M2 didn't fully fit in 30 days` : '');
   }
 }
 
