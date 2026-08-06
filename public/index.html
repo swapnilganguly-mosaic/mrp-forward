@@ -389,7 +389,6 @@
   <div class="tabs">
     <button class="tab-btn" onclick="schedShowTab('input',this)">1 · Input</button>
     <button class="tab-btn active" onclick="schedShowTab('priority',this)">Priority Scoring</button>
-    <button class="tab-btn" onclick="schedShowTab('planning',this)">Production Plan</button>
   </div>
 </div>
 
@@ -413,12 +412,10 @@
   <button class="btn secondary" onclick="downloadSihSitDrrTemplate()">Download Template</button>
 </div>
 <div class="config-panel">
-  <div class="cfg-group"><label>Line Cap (kg/week):</label><input type="number" id="cfgLineCap" value="5000" min="0"></div>
   <div class="cfg-group"><label>Target FG DOC (days):</label><input type="number" id="cfgTargetFgDoc" value="30" min="1"></div>
   <div class="cfg-group"><label>Target RM/PM DOC:</label><input type="number" id="cfgTargetDoc" value="60" min="1"></div>
   <div class="cfg-group"><label>RM Lead Time (days):</label><input type="number" id="cfgRmLeadTime" value="21" min="0" onchange="recompute()"></div>
   <div class="cfg-group"><label>PM Lead Time (days):</label><input type="number" id="cfgPmLeadTime" value="30" min="0" onchange="recompute()"></div>
-  <div class="cfg-group"><label>Horizon (weeks):</label><input type="number" id="cfgHorizon" value="8" min="1" max="52"></div>
   <div class="cfg-group"><label>Filter Class:</label>
     <select id="cfgClass" onchange="recompute()"><option value="">All</option><option>A</option><option>B</option><option>C</option></select>
   </div>
@@ -603,22 +600,6 @@
   </div>
   <div class="tbl-wrap dayresult-wrap" id="schedDayWrapM2" style="display:none">
     <table id="schedDayTableM2"><thead id="schedDayHeadM2"></thead><tbody id="schedDayBodyM2"></tbody></table>
-  </div>
-</div>
-
-<!-- Production Plan Tab -->
-<div id="tab-planning" class="tab-content">
-  <div class="sched-controls">
-    <input type="text" id="planFilter" placeholder="Filter SKUs..." oninput="renderPlanTable()" style="border:1px solid #d1d5db;border-radius:6px;padding:6px 10px;font-size:12px;width:220px">
-    <button class="btn" onclick="runSchedule()">Run Schedule</button>
-    <span style="font-size:12px;color:#64748b" id="schedStatus"></span>
-  </div>
-  <div class="summary-row" id="planSummary"></div>
-  <div class="tbl-wrap">
-    <table id="planTable">
-      <thead id="planHead"></thead>
-      <tbody id="planBody"><tr><td colspan="8" class="empty"><h3>Run schedule to see plan</h3><p>Configure settings above and click "Run Schedule".</p></td></tr></tbody>
-    </table>
   </div>
 </div>
 
@@ -5534,73 +5515,6 @@ function processValColCsv(text, kind) {
   recompute();
 }
 
-
-// --- Production plan ----------------------------------------------------------
-function runSchedule(){
-  const wks=parseInt(document.getElementById('cfgHorizon').value)||8;
-  const capKg=n(document.getElementById('cfgLineCap').value)||5000;
-  const tgDoc=n(document.getElementById('cfgTargetFgDoc').value)||30;
-
-  const plan=rows.filter(r=>r.drrM1>0||r.fgStock>0).map(r=>{
-    const tgStock=r.drrM1*tgDoc;
-    const toProdUnits=Math.max(0,tgStock-r.fgStock);
-    const pkKg=r.packSizeKg||(gsData?.skuMap[r.code]?.packSize||0)/1000;
-    const toProdKg=toProdUnits*(pkKg||0.001);
-    return{...r,toProdUnits,toProdKg,weekAlloc:new Array(wks).fill(0)};
-  });
-
-  const weekCap=new Array(wks).fill(capKg);
-  plan.sort((a,b)=>b.scoreM1-a.scoreM1);
-  plan.forEach(p=>{
-    let rem=p.toProdKg;
-    for(let w=0;w<wks&&rem>0;w++){
-      const fit=Math.min(rem,weekCap[w]);
-      if(fit>0){p.weekAlloc[w]=fit;weekCap[w]-=fit;rem-=fit;}
-    }
-  });
-  schedPlan=plan;
-  renderPlanTable();
-  const sched=plan.filter(p=>p.weekAlloc.some(v=>v>0)).length;
-  document.getElementById('schedStatus').textContent=`Scheduled ${sched}/${plan.length} SKUs across ${wks} weeks`;
-}
-
-function renderPlanTable(){
-  const filter=document.getElementById('planFilter').value.toLowerCase();
-  const wks=schedPlan.length?schedPlan[0].weekAlloc.length:8;
-  document.getElementById('planHead').innerHTML=`<tr>
-    <th>#</th><th>SKU Code</th><th>SKU Name</th><th>Class</th><th>Volatility</th>
-    <th class="num">Score M1</th><th class="num">Target (kg)</th>
-    ${Array.from({length:wks},(_,i)=>`<th class="num">W${i+1}</th>`).join('')}
-    <th class="num">Scheduled (kg)</th>
-  </tr>`;
-
-  const filtered=schedPlan.filter(r=>!filter||r.code.toLowerCase().includes(filter)||r.name.toLowerCase().includes(filter));
-  const tbody=document.getElementById('planBody');
-  if(!filtered.length){
-    tbody.innerHTML='<tr><td colspan="20" class="empty"><h3>Click "Run Schedule"</h3></td></tr>';return;
-  }
-  tbody.innerHTML=filtered.map((r,i)=>{
-    const tot=r.weekAlloc.reduce((s,v)=>s+v,0);
-    return`<tr>
-      <td style="color:#94a3b8">${i+1}</td>
-      <td style="font-family:monospace;font-size:11px">${r.code}</td>
-      <td style="max-width:280px;white-space:normal;word-break:break-word" title="${r.name}">${r.name||'\u2014'}</td>
-      <td><span class="pill pill-${r.cls}">${r.cls}</span></td>
-      <td><span class="pill pill-${r.priority}">${r.priority}</span></td>
-      <td class="num"><b>${r.scoreM1.toFixed(4)}</b></td>
-      <td class="num">${r.toProdKg.toFixed(0)}</td>
-      ${r.weekAlloc.map(v=>`<td class="num" style="color:${v>0?'#1a1a2e':'#94a3b8'}">${v>0?v.toFixed(0):'\u2014'}</td>`).join('')}
-      <td class="num"><b>${tot.toFixed(0)}</b></td>
-    </tr>`;
-  }).join('');
-
-  const weekTots=Array.from({length:wks},(_,w)=>filtered.reduce((s,r)=>s+r.weekAlloc[w],0));
-  document.getElementById('planSummary').innerHTML=`
-    <div class="card"><h4>SKUs to Produce</h4><div class="val">${filtered.filter(r=>r.weekAlloc.some(v=>v>0)).length}</div></div>
-    <div class="card"><h4>Total Target (kg)</h4><div class="val">${filtered.reduce((s,r)=>s+r.toProdKg,0).toFixed(0)}</div></div>
-    <div class="card"><h4>Scheduled (kg)</h4><div class="val">${filtered.reduce((s,r)=>s+r.weekAlloc.reduce((a,b)=>a+b,0),0).toFixed(0)}</div></div>
-    <div class="card"><h4>Peak Week (kg)</h4><div class="val">${weekTots.length?Math.max(...weekTots).toFixed(0):'0'}</div></div>`;
-}
 
 // --- Utilities ----------------------------------------------------------------
 function schedShowTab(id,btn){
