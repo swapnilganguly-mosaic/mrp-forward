@@ -4851,6 +4851,36 @@ function downloadSihSitDrrTemplate() {
 }
 
 // --- Core scoring -------------------------------------------------------------
+// --- Pack Type capacity (per Sapiens, shared across SKUs of the same pack format+size) ---
+// A "Pack Type" groups SKUs by physical packaging format + size (e.g. "Jar-350",
+// "Pouch-350", "PackOf3-1000", "Jar-125", "Pouch-20") -- multiple SKUs of the SAME pack
+// type can run on the SAME day, sharing that pack type's single-shift daily capacity
+// (e.g. 20,000 units of Chocolate 350g Jar + remaining capacity to Vanilla 350g Jar on the
+// same day, up to the shared 24,000/day cap). Different pack types have fully independent
+// capacity and never compete with each other. Defaults below are the capacities Sapiens
+// gave per pack-type (single shift, units/day) -- editable via PACK_TYPE_CAP directly for
+// now (no dedicated UI yet).
+let PACK_TYPE_CAP = {
+  'Jar-350': 24000,
+  'Pouch-350': 24000,
+  'PackOf3-1000': 3000,
+  'Jar-125': 22000,
+  'Pouch-20': 44000
+};
+// Pack Type is parsed from the SKU NAME (no separate master-data field exists yet) --
+// matches known format keywords ("Jar", "Pouch", "Pack of N") and combines whichever
+// matches with the SKU's own pack size. Returns null if no keyword matches, in which case
+// the caller falls back to that SKU's own per-SKU Line Cap rather than silently guessing.
+function derivePackType(name, packSizeG) {
+  const n = (name || '').toLowerCase();
+  const sizeKey = Math.round(packSizeG || 0);
+  const packOfMatch = n.match(/pack\s*of\s*(\d+)/);
+  if (packOfMatch) return `PackOf${packOfMatch[1]}-${sizeKey}`;
+  if (/\bjar\b/.test(n)) return `Jar-${sizeKey}`;
+  if (/\bpouch\b/.test(n)) return `Pouch-${sizeKey}`;
+  return null;
+}
+
 function computeRows() {
   const targetDoc = n(document.getElementById('cfgTargetDoc').value) || 60;
   const codes = new Set([
@@ -4880,6 +4910,7 @@ function computeRows() {
     // Pack size: live MRP first, then GSheet
     const packSizeG  = mrpData?.packSizes[code] || gsData?.skuMap[code]?.packSize || 0;
     const packSizeKg = packSizeG / 1000;
+    const packType = derivePackType(name, packSizeG); // null if name doesn't match a known format keyword
 
     // FG stock from manual upload — FG Stock = SIH + SIT (shared between M1 and M2)
     const stk = stockData[code] || {};
@@ -5010,7 +5041,7 @@ function computeRows() {
     const scoreM2 = dataStateM2 === 'ok' ? scoreM2raw : 0;
 
     result.push({
-      code, name, cls: jas.c, priority: jas.p, packSizeKg,
+      code, name, cls: jas.c, priority: jas.p, packSizeKg, packType,
       sih, sit, fgStock, stratWt, targetDoc,
       drrM1, drrM2, fgDocM1, fgDocM2, urgencyM1, urgencyM2,
       rmStockM1: m1Mat.rmStockDisplay, rmReq30M1: m1Mat.rmReq30Display, rmDocM1: m1Mat.rmDoc,
@@ -5205,15 +5236,21 @@ function renderSummaryCards(){
 }
 
 // --- Day-wise schedule: separate M1 and M2 (Priority Scoring tab) -------------------
-// Everything here is in UNITS -- no kg, no pack size, anywhere. The line is modeled as ONE
-// SHARED, SEQUENTIAL calendar of 30 days per month -- not 32 independent per-SKU timelines.
-// SKUs are run one at a time in Score order (highest first): a SKU occupies consecutive
-// days until its full Run Qty is placed (at up to its own Line Cap units/day), then the very
-// next day the line changes over straight to the next-highest-Score SKU still needing to
-// run -- no idle days in between as long as there's still eligible demand and days left in
-// the month. A SKU whose Monthly (Supply) Plan for that month is 0 is not scheduled at all.
-// If total demand across all eligible SKUs exceeds what the line can produce in 30 days,
-// the lowest-priority SKUs that don't fit get 0 (or a partial amount) -- a genuine capacity
+// Everything here is in UNITS -- no kg anywhere. The line is modeled as ONE SHARED,
+// SEQUENTIAL 30-day calendar PER PACK TYPE (e.g. "Jar-350", "Pouch-350"), not one single
+// global line and not 32 independent per-SKU timelines. Multiple SKUs that share the SAME
+// pack type CAN run on the SAME day, splitting that pack type's daily capacity between them
+// (e.g. Chocolate 350g Jar + Vanilla 350g Jar both running on Day 1, up to the shared
+// 24,000/day Jar-350 cap) -- but different pack types never compete with each other at all,
+// since they're independent physical capacity. Within a pack type, SKUs are filled in Score
+// order (highest first) each day: the top SKU gets as much of that day's remaining capacity
+// as it needs, then the next SKU gets what's left that same day, and so on; whatever a SKU
+// doesn't get today carries over and it's still first in line again tomorrow. A SKU whose
+// name doesn't match a known pack-type keyword (see derivePackType) falls back to running
+// alone against its own per-SKU Line Cap, rather than being silently grouped incorrectly. A
+// SKU whose Monthly (Supply) Plan for that month is 0 is not scheduled at all. If total
+// demand within a pack type exceeds what 30 days of that pack type's capacity can hold, the
+// lowest-priority SKUs in that group get a partial or zero allocation -- a genuine capacity
 // shortfall, shown as such, not hidden.
 let sched2moM1 = null, sched2moM2 = null;
 
@@ -5221,27 +5258,48 @@ function allocateDayWise(orderedRows, runQtyField, planStore){
   const days = 30;
   const eligible = orderedRows.filter(r => (planStore[r.code] || 0) !== 0); // don't schedule an SKU with 0 Monthly (Supply) Plan
 
-  let day = 0; // shared cursor across ALL SKUs -- this is what makes it one line, not many
-  const out = eligible.map(r => {
-    const dayVals = new Array(days).fill(0);
-    let rem = Math.max(0, r[runQtyField]);
-    const perDayCap = lineCap[r.code] || 10000; // units/day
-    while (rem > 0 && day < days){
-      const fit = Math.min(rem, perDayCap);
-      dayVals[day] = fit;
-      rem -= fit;
-      day++; // line stays occupied by this SKU on the very next day too, until it's done
+  // Group by Pack Type (score order within each group is preserved since orderedRows is
+  // already Score-sorted before this function is called). SKUs with no recognizable pack
+  // type each get their own singleton group, keyed uniquely per SKU, so they're scheduled
+  // alone against their own Line Cap instead of being lumped in with an unrelated group.
+  const groups = new Map();
+  eligible.forEach(r => {
+    const key = r.packType || ('__sku__' + r.code);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(r);
+  });
+
+  const out = [];
+  groups.forEach((group, key) => {
+    const capPerDay = PACK_TYPE_CAP[key] || (lineCap[group[0].code] || 10000);
+    const remaining = {}; group.forEach(r => { remaining[r.code] = Math.max(0, r[runQtyField]); });
+    const dayVals = {}; group.forEach(r => { dayVals[r.code] = new Array(days).fill(0); });
+
+    for (let d = 0; d < days; d++){
+      let capLeft = capPerDay;
+      for (const r of group){ // already Score-sorted -- highest priority claims the day's capacity first
+        if (capLeft <= 0) break;
+        const rem = remaining[r.code];
+        if (rem <= 0) continue;
+        const fit = Math.min(rem, capLeft);
+        dayVals[r.code][d] += fit;
+        remaining[r.code] -= fit;
+        capLeft -= fit;
+      }
     }
-    return { code:r.code, name:r.name, cls:r.cls, priority:r.priority, days:dayVals,
-      total: dayVals.reduce((s,v)=>s+v,0), runQty: Math.max(0, r[runQtyField]) };
+
+    group.forEach(r => {
+      out.push({ code:r.code, name:r.name, cls:r.cls, priority:r.priority, packType:r.packType, days:dayVals[r.code],
+        total: dayVals[r.code].reduce((s,v)=>s+v,0), runQty: Math.max(0, r[runQtyField]) });
+    });
   });
   return out;
 }
 
 function generateDaySchedule(){
   // Only feasible ("ok") SKUs are eligible at all — Blocked, Awaiting Data, and No-supply
-  // SKUs are never scheduled. Score order now directly drives the shared timeline (highest
-  // Score runs first), not just the read order in the table.
+  // SKUs are never scheduled. Score order drives who gets first claim on each day's shared
+  // Pack Type capacity.
   const m1Order = rows.filter(r=>r.dataStateM1==='ok').sort((a,b)=>b.scoreM1-a.scoreM1);
   const m2Order = rows.filter(r=>r.dataStateM2==='ok').sort((a,b)=>b.scoreM2-a.scoreM2);
 
@@ -5255,9 +5313,12 @@ function generateDaySchedule(){
   if(statusEl){
     const shortM1 = sched2moM1.filter(r => r.total < r.runQty).length;
     const shortM2 = sched2moM2.filter(r => r.total < r.runQty).length;
+    const unrecM1 = sched2moM1.filter(r => !r.packType).length;
+    const unrecM2 = sched2moM2.filter(r => !r.packType).length;
     statusEl.textContent =
-      `M1: ${sched2moM1.length} SKU(s) on a shared line over 30 days &middot; M2: ${sched2moM2.length} SKU(s) over 30 days (units) &mdash; SKUs with 0 Monthly Plan are excluded` +
-      ((shortM1||shortM2) ? ` &mdash; capacity shortfall: ${shortM1} SKU(s) in M1 / ${shortM2} in M2 didn't fully fit in 30 days` : '');
+      `M1: ${sched2moM1.length} SKU(s) across Pack-Type lines over 30 days &middot; M2: ${sched2moM2.length} SKU(s) over 30 days (units) &mdash; SKUs with 0 Monthly Plan are excluded` +
+      ((shortM1||shortM2) ? ` &mdash; capacity shortfall: ${shortM1} SKU(s) in M1 / ${shortM2} in M2 didn't fully fit in 30 days` : '') +
+      ((unrecM1||unrecM2) ? ` &mdash; unrecognized pack type (scheduled alone on own Line Cap): ${unrecM1} in M1 / ${unrecM2} in M2` : '');
   }
 }
 
