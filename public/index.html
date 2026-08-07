@@ -398,24 +398,9 @@
   <span style="margin-left:auto;color:#94a3b8;font-size:11px" id="lastUpdated"></span>
 </div>
 
-<div class="import-bar">
-  <label>Stock Upload (SIH / SIT / RM / PM / DRR):</label>
-  <input type="file" id="stockFile" accept=".xlsx,.csv" onchange="importStock(this)">
-  <span style="font-size:11px;color:#94a3b8">Any layout works &mdash; matched by SKU code. Optional columns: SIH, SIT, RM Stock, PM Stock, DRR. FG Stock = SIH + SIT</span>
-  <button class="btn secondary" onclick="downloadTemplate()">Download Template</button>
-  <button class="btn green" onclick="loadGSheet()">&#8635; Refresh MRP Data</button>
-</div>
-<div class="import-bar">
-  <label>Import SIH / SIT / DRR:</label>
-  <input type="file" id="sihSitDrrFile" accept=".xlsx,.csv" onchange="importSihSitDrr(this)">
-  <span style="font-size:11px;color:#94a3b8">Any layout works &mdash; matched by SKU code. Updates only SIH, SIT, DRR; RM/PM Stock already loaded is left untouched.</span>
-  <button class="btn secondary" onclick="downloadSihSitDrrTemplate()">Download Template</button>
-</div>
 <div class="config-panel">
   <div class="cfg-group"><label>Target FG DOC (days):</label><input type="number" id="cfgTargetFgDoc" value="30" min="1"></div>
   <div class="cfg-group"><label>Target RM/PM DOC:</label><input type="number" id="cfgTargetDoc" value="60" min="1"></div>
-  <div class="cfg-group"><label>RM Lead Time (days):</label><input type="number" id="cfgRmLeadTime" value="21" min="0" onchange="recompute()"></div>
-  <div class="cfg-group"><label>PM Lead Time (days):</label><input type="number" id="cfgPmLeadTime" value="30" min="0" onchange="recompute()"></div>
   <div class="cfg-group"><label>Filter Class:</label>
     <select id="cfgClass" onchange="recompute()"><option value="">All</option><option>A</option><option>B</option><option>C</option></select>
   </div>
@@ -513,17 +498,6 @@
     </table>
   </div>
 
-  <h3 style="margin:18px 0 8px;font-size:13px;color:#991b1b">Month 1 (M1) &mdash; Blocked (Material Shortage)</h3>
-  <div class="tbl-wrap">
-    <table id="blockedTableM1">
-      <thead><tr>
-        <th>SKU Code</th><th>SKU Name</th><th>Bottleneck</th>
-        <th class="num">DOC (days)</th><th class="num">Lead Time (days)</th><th class="num">Shortfall (days)</th>
-      </tr></thead>
-      <tbody id="blockedBodyM1"></tbody>
-    </table>
-  </div>
-
   <h3 style="margin:18px 0 8px;font-size:13px;color:#64748b">Month 1 (M1) &mdash; Awaiting Data</h3>
   <div class="tbl-wrap">
     <table id="awaitingTableM1">
@@ -557,17 +531,6 @@
         <th class="num" style="white-space:normal;min-width:90px" title="Max production rate for this SKU, in units per day (Monthly Plan cannot imply exceeding this rate).">Line Cap (units/day)<div style="display:flex;justify-content:center;margin-top:2px;font-weight:400"><label class="btn secondary" style="font-size:9px;padding:1px 4px;cursor:pointer;margin:0">Import<input type="file" accept=".xlsx,.csv" style="display:none" onchange="importValCol('lineCap',this)"></label></div></th>
       </tr></thead>
       <tbody id="scoreBodyM2"></tbody>
-    </table>
-  </div>
-
-  <h3 style="margin:18px 0 8px;font-size:13px;color:#991b1b">Month 2 (M2) &mdash; Blocked (Material Shortage)</h3>
-  <div class="tbl-wrap">
-    <table id="blockedTableM2">
-      <thead><tr>
-        <th>SKU Code</th><th>SKU Name</th><th>Bottleneck</th>
-        <th class="num">DOC (days)</th><th class="num">Lead Time (days)</th><th class="num">Shortfall (days)</th>
-      </tr></thead>
-      <tbody id="blockedBodyM2"></tbody>
     </table>
   </div>
 
@@ -4672,163 +4635,18 @@ async function loadGSheet() {
   }
 }
 
-// --- Stock upload -------------------------------------------------------------
-function importStock(input) {
-  const file=input.files[0]; if(!file) return;
-  const ext=file.name.split('.').pop().toLowerCase();
-  const reader=new FileReader();
-  if(ext==='csv') {
-    reader.onload=e=>{processStockCsv(e.target.result);input.value='';};
-    reader.readAsText(file);
-  } else {
-    reader.onload=e=>{
-      try{
-        const wb=XLSX.read(e.target.result,{type:'array'});
-        processStockCsv(XLSX.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[0]]));
-      }catch(err){alert('Cannot read XLSX: '+err.message);}
-      input.value='';
-    };
-    reader.readAsArrayBuffer(file);
-  }
-}
-// Column detection shared by the Stock Upload import: for each target field, prefer a
-// header-keyword match; if the header doesn't give a clean answer, fall back to picking
-// the numeric column with the most matches (excluding columns already claimed). The SKU
-// Code column itself is found by matching cell values against known SKU codes rather than
-// trusting a specific header label — so the file's own column names/order don't matter.
+// Column detection shared by the per-column "Import" mini-buttons (SIH/SIT/etc. on the
+// Ranked table headers): for each target field, prefer a header-keyword match; if the
+// header doesn't give a clean answer, fall back to picking the numeric column with the
+// most matches (excluding columns already claimed). The SKU Code column itself is found by
+// matching cell values against known SKU codes rather than trusting a specific header
+// label — so the file's own column names/order don't matter.
 function findColByKeywords(hdr, taken, keywords) {
   for (let c = 0; c < hdr.length; c++) {
     if (taken.has(c)) continue;
     if (keywords.some(kw => hdr[c].includes(kw))) return c;
   }
   return -1;
-}
-function processStockCsv(text) {
-  stockData = {};
-  const rawRows = text.trim().split(/\r?\n/).map(l => parseRow(l).map(c => c.trim()));
-  if (!rawRows.length) { setStatus('The file has no rows.', 'warn'); return; }
-  const known = knownSkuCodes();
-  const width = rawRows.reduce((w, r) => Math.max(w, r.length), 0);
-
-  // SKU Code column: whichever column matches the most known SKU codes.
-  let idCol = 0, idHits = -1;
-  for (let c = 0; c < width; c++) {
-    let hits = 0;
-    rawRows.forEach(r => { const v = (r[c] || '').trim(); if (v && known.has(v)) hits++; });
-    if (hits > idHits) { idHits = hits; idCol = c; }
-  }
-  if (idHits <= 0) { setStatus('Could not find a column matching any known SKU code in this file.', 'warn'); return; }
-
-  const hdr = (rawRows[0] || []).map(h => (h || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
-  const taken = new Set([idCol]);
-  const claim = c => { if (c >= 0) taken.add(c); return c; };
-  const colSih = claim(findColByKeywords(hdr, taken, ['sih']));
-  const colSit = claim(findColByKeywords(hdr, taken, ['sit']));
-  const colFg  = claim(findColByKeywords(hdr, taken, ['fgstock', 'fg']));
-  const colDrr = claim(findColByKeywords(hdr, taken, ['drr']));
-  const colRm  = claim(findColByKeywords(hdr, taken, ['rmstock', 'rm']));
-  const colPm  = claim(findColByKeywords(hdr, taken, ['pmstock', 'pm']));
-  const usedHeader = colSih >= 0 || colSit >= 0 || colFg >= 0 || colDrr >= 0 || colRm >= 0 || colPm >= 0;
-
-  const numAt = (r, c) => { if (c < 0) return null; const v = (r[c] || '').replace(/,/g, '').trim(); return v !== '' && isFinite(parseFloat(v)) ? parseFloat(v) : null; };
-  let loaded = 0;
-  rawRows.forEach((r, i) => {
-    if (i === 0 && usedHeader) return; // skip the header row once we've keyed off its text
-    const code = (r[idCol] || '').trim();
-    if (!code || !known.has(code)) return;
-    const sih = numAt(r, colSih), sit = numAt(r, colSit);
-    const fgRaw = numAt(r, colFg);
-    const drr = numAt(r, colDrr);
-    stockData[code] = {
-      sih: sih || 0, sit: sit || 0,
-      // FG Stock = SIH + SIT whenever the file provides either column; otherwise fall back
-      // to a plain legacy FG Stock column so older upload files still work.
-      fgStock: (sih != null || sit != null) ? ((sih || 0) + (sit || 0)) : (fgRaw || 0),
-      rmStock: numAt(r, colRm) || 0,
-      pmStock: numAt(r, colPm) || 0,
-      drr: drr != null ? drr : undefined
-    };
-    loaded++;
-  });
-  setStatus(`Stock loaded &mdash; ${loaded} SKU(s) matched by SKU code`, 'ok');
-  recompute();
-}
-
-// --- SIH / SIT / DRR-only import (dedicated button) ---------------------------
-// Same SKU-code matching as the full Stock Upload, but only touches SIH/SIT/DRR —
-// RM Stock / PM Stock already present for that SKU (from a prior Stock Upload or the
-// MRP live sync) are left exactly as they were.
-function importSihSitDrr(input) {
-  const file = input.files[0]; if (!file) return;
-  const ext = file.name.split('.').pop().toLowerCase();
-  const reader = new FileReader();
-  if (ext === 'csv') {
-    reader.onload = e => { processSihSitDrrCsv(e.target.result); input.value = ''; };
-    reader.readAsText(file);
-  } else {
-    reader.onload = e => {
-      try {
-        const wb = XLSX.read(e.target.result, { type: 'array' });
-        processSihSitDrrCsv(XLSX.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[0]]));
-      } catch (err) { alert('Cannot read XLSX: ' + err.message); }
-      input.value = '';
-    };
-    reader.readAsArrayBuffer(file);
-  }
-}
-function processSihSitDrrCsv(text) {
-  const rawRows = text.trim().split(/\r?\n/).map(l => parseRow(l).map(c => c.trim()));
-  if (!rawRows.length) { setStatus('The file has no rows.', 'warn'); return; }
-  const known = knownSkuCodes();
-  const width = rawRows.reduce((w, r) => Math.max(w, r.length), 0);
-
-  let idCol = 0, idHits = -1;
-  for (let c = 0; c < width; c++) {
-    let hits = 0;
-    rawRows.forEach(r => { const v = (r[c] || '').trim(); if (v && known.has(v)) hits++; });
-    if (hits > idHits) { idHits = hits; idCol = c; }
-  }
-  if (idHits <= 0) { setStatus('Could not find a column matching any known SKU code in this file.', 'warn'); return; }
-
-  const hdr = (rawRows[0] || []).map(h => (h || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
-  const taken = new Set([idCol]);
-  const claim = c => { if (c >= 0) taken.add(c); return c; };
-  const colSih = claim(findColByKeywords(hdr, taken, ['sih']));
-  const colSit = claim(findColByKeywords(hdr, taken, ['sit']));
-  const colDrr = claim(findColByKeywords(hdr, taken, ['drr']));
-  const usedHeader = colSih >= 0 || colSit >= 0 || colDrr >= 0;
-  if (colSih < 0 && colSit < 0 && colDrr < 0) {
-    setStatus('Could not find SIH, SIT, or DRR columns in this file.', 'warn'); return;
-  }
-
-  const numAt = (r, c) => { if (c < 0) return null; const v = (r[c] || '').replace(/,/g, '').trim(); return v !== '' && isFinite(parseFloat(v)) ? parseFloat(v) : null; };
-  let loaded = 0;
-  rawRows.forEach((r, i) => {
-    if (i === 0 && usedHeader) return;
-    const code = (r[idCol] || '').trim();
-    if (!code || !known.has(code)) return;
-    const sih = numAt(r, colSih), sit = numAt(r, colSit), drr = numAt(r, colDrr);
-    const existing = stockData[code] || { sih: 0, sit: 0, fgStock: 0, rmStock: 0, pmStock: 0 };
-    const newSih = sih != null ? sih : existing.sih;
-    const newSit = sit != null ? sit : existing.sit;
-    stockData[code] = {
-      ...existing,
-      sih: newSih || 0,
-      sit: newSit || 0,
-      fgStock: (newSih || 0) + (newSit || 0),
-      drr: drr != null ? drr : existing.drr
-    };
-    loaded++;
-  });
-  setStatus(`SIH/SIT/DRR loaded &mdash; ${loaded} SKU(s) matched by SKU code`, 'ok');
-  recompute();
-}
-function downloadSihSitDrrTemplate() {
-  const csv = 'SKU Code,SIH (units),SIT (units),DRR\n' +
-    Object.keys(JAS_CLASS).slice(0, 5).map(c => c + ',0,0,0').join('\n') + '\n';
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-  a.download = 'sih_sit_drr_template.csv'; a.click();
 }
 
 // --- Core scoring -------------------------------------------------------------
@@ -4990,43 +4808,28 @@ function computeRows() {
     const scoreM1raw = urgencyM1 * stratWt * mfM1;
     const scoreM2raw = urgencyM2 * stratWt * mfM2;
 
-    // --- Feasibility gate: RM DOC / PM DOC vs their lead times (binary — no buffer) ---
-    // Prefer the RM-only/PM-only DOC broadcast straight from the MRP tool (authoritative,
-    // same source as the SKU DOC tab); fall back to this Scheduler's own local recompute
-    // only if the MRP tool isn't connected.
-    const rmLeadTime = n(document.getElementById('cfgRmLeadTime').value) || 0;
-    const pmLeadTime = n(document.getElementById('cfgPmLeadTime').value) || 0;
-    const rmDocGateM1 = mrpData?.skuRmDocM1 && mrpData.skuRmDocM1[code] !== undefined ? mrpData.skuRmDocM1[code] : m1Mat.rmDoc;
-    const pmDocGateM1 = mrpData?.skuPmDocM1 && mrpData.skuPmDocM1[code] !== undefined ? mrpData.skuPmDocM1[code] : m1Mat.pmDoc;
-    const rmDocGateM2 = mrpData?.skuRmDocM2 && mrpData.skuRmDocM2[code] !== undefined ? mrpData.skuRmDocM2[code] : m2Mat.rmDoc;
-    const pmDocGateM2 = mrpData?.skuPmDocM2 && mrpData.skuPmDocM2[code] !== undefined ? mrpData.skuPmDocM2[code] : m2Mat.pmDoc;
-    const blockedM1 = (rmDocGateM1 != null && rmDocGateM1 < rmLeadTime) || (pmDocGateM1 != null && pmDocGateM1 < pmLeadTime);
-    const blockedM2 = (rmDocGateM2 != null && rmDocGateM2 < rmLeadTime) || (pmDocGateM2 != null && pmDocGateM2 < pmLeadTime);
-    const blockedByM1 = (rmDocGateM1 != null && rmDocGateM1 < rmLeadTime) ? { kind: 'RM', doc: rmDocGateM1, leadTime: rmLeadTime } :
-                        (pmDocGateM1 != null && pmDocGateM1 < pmLeadTime) ? { kind: 'PM', doc: pmDocGateM1, leadTime: pmLeadTime } : null;
-    const blockedByM2 = (rmDocGateM2 != null && rmDocGateM2 < rmLeadTime) ? { kind: 'RM', doc: rmDocGateM2, leadTime: rmLeadTime } :
-                        (pmDocGateM2 != null && pmDocGateM2 < pmLeadTime) ? { kind: 'PM', doc: pmDocGateM2, leadTime: pmLeadTime } : null;
-
     // Has Novacore's Required Qty actually been imported for this SKU? (one flag covers
     // both months, since one file upload sets both M1 and M2 together for a material.)
     const hasReqData = mrpData?.skuHasReqData ? !!mrpData.skuHasReqData[code] : false;
 
     // Zero/blank Production Plan supply for that month — the SKU is excluded entirely
-    // from that month's view (not shown in Ranked, Blocked, or Awaiting Data). This only
+    // from that month's view (not shown in Ranked or Awaiting Data). This only
     // applies once a Production Plan has actually been imported/entered for that month —
     // if inputPlan/inputPlanM2 is still completely empty (nothing uploaded yet in the Input
     // tab), don't treat every SKU as "zero supply"; just skip this gate until real data exists.
     const hasSupplyM1 = Object.keys(inputPlan).length === 0 ? true : n(inputPlan[code]) > 0;
     const hasSupplyM2 = Object.keys(inputPlanM2).length === 0 ? true : n(inputPlanM2[code]) > 0;
 
+    // NOTE: the RM/PM Lead Time "Blocked" feasibility gate (comparing RM DOC/PM DOC against
+    // configured lead times) has been removed. A SKU is no longer excluded from the Ranked
+    // list on that basis -- only "no-supply" (0 Monthly Plan) and "awaiting" (no Required
+    // Qty imported yet) still gate a SKU out of 'ok'.
     let dataStateM1, dataStateM2;
     if (!hasSupplyM1) dataStateM1 = 'no-supply';
     else if (!hasReqData) dataStateM1 = 'awaiting';
-    else if (blockedM1) dataStateM1 = 'blocked';
     else dataStateM1 = 'ok';
     if (!hasSupplyM2) dataStateM2 = 'no-supply';
     else if (!hasReqData) dataStateM2 = 'awaiting';
-    else if (blockedM2) dataStateM2 = 'blocked';
     else dataStateM2 = 'ok';
 
     // Only fully-feasible, fully-scored SKUs carry a real score; Blocked/Awaiting/No-supply
@@ -5044,7 +4847,7 @@ function computeRows() {
       pmStockM2: m2Mat.pmStockDisplay, pmReq30M2: m2Mat.pmReq30Display, pmDocM2: m2Mat.pmDoc,
       minDocM1, minDocM2,
       mfM1, mfM2, scoreM1, scoreM2,
-      dataStateM1, dataStateM2, blockedByM1, blockedByM2,
+      dataStateM1, dataStateM2,
       // Run Qty (units) = DRR x 13.
       runQtyM1: drrM1 * 13,
       runQtyM2: drrM2 * 13
@@ -5164,33 +4967,13 @@ function renderScoreTable() {
       </tr>`).join('');
   }
 
-  // Blocked (material shortage) and Awaiting Data buckets — "no-supply" SKUs (zero/blank
-  // Production Plan quantity that month) are dropped from every bucket entirely, per month.
-  renderSideBucket('blockedBodyM1', filtered.filter(r=>r.dataStateM1==='blocked'), 'blockedByM1');
-  renderSideBucket('blockedBodyM2', filtered.filter(r=>r.dataStateM2==='blocked'), 'blockedByM2');
+  // Awaiting Data bucket — "no-supply" SKUs (zero/blank Production Plan quantity that
+  // month) are dropped from every bucket entirely, per month.
   renderAwaitingBucket('awaitingBodyM1', filtered.filter(r=>r.dataStateM1==='awaiting'));
   renderAwaitingBucket('awaitingBodyM2', filtered.filter(r=>r.dataStateM2==='awaiting'));
   requestAnimationFrame(syncSchedStickyOffset);
 }
 
-function renderSideBucket(tbodyId, list, blockedByField){
-  const tbody=document.getElementById(tbodyId);
-  if(!tbody) return;
-  if(!list.length){ tbody.innerHTML='<tr><td colspan="6" class="empty" style="padding:14px"><span style="color:#94a3b8;font-size:12px">None</span></td></tr>'; return; }
-  const fmt=(v,d=1)=>v==null?'—':(+v).toFixed(d);
-  tbody.innerHTML=list.map(r=>{
-    const b=r[blockedByField];
-    const shortfall = b ? (b.doc - b.leadTime) : null;
-    return `<tr>
-      <td style="font-family:monospace;font-size:11px">${r.code}</td>
-      <td style="max-width:280px;white-space:normal;word-break:break-word" title="${r.name}">${r.name||'—'}</td>
-      <td>${b?b.kind:'—'}</td>
-      <td class="num">${b?fmt(b.doc,1):'—'}</td>
-      <td class="num">${b?fmt(b.leadTime,0):'—'}</td>
-      <td class="num" style="color:#e53935">${shortfall!=null?fmt(shortfall,1):'—'}</td>
-    </tr>`;
-  }).join('');
-}
 function renderAwaitingBucket(tbodyId, list){
   const tbody=document.getElementById(tbodyId);
   if(!tbody) return;
@@ -5552,14 +5335,6 @@ function schedDownloadCSV(){
   a.download='production_priority_'+new Date().toISOString().slice(0,10)+'.csv';
   a.click();
 }
-function downloadTemplate(){
-  const csv='SKU Code,SIH (units),SIT (units),RM Stock (kg),PM Stock (units),DRR\n'+
-    Object.keys(JAS_CLASS).slice(0,5).map(c=>c+',0,0,0,0,0').join('\n')+'\n';
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
-  a.download='stock_upload_template.csv';a.click();
-}
-
 // --- Formula panel toggle -----------------------------------------------------
 function toggleFormula() {
   const body = document.getElementById('formulaBody');
