@@ -544,6 +544,7 @@
 
   <div class="sched-controls" style="margin-top:16px">
     <button class="btn" onclick="generateDaySchedule()">Generate Day-wise Schedule</button>
+    <button class="btn secondary" onclick="exportDaySchedule()">Export to Excel</button>
     <span style="font-size:12px;color:#64748b" id="schedDayStatus"></span>
   </div>
 
@@ -5146,6 +5147,44 @@ function generateDaySchedule(){
       ((!shortM2 && balDayM2 < 30) ? ` &mdash; M2 Run Qty finished by Day ${balDayM2}, Balance production runs Day ${balDayM2+1}-30` : '') +
       ((unrecM1||unrecM2) ? ` &mdash; unrecognized pack type (scheduled alone on own Line Cap): ${unrecM1} in M1 / ${unrecM2} in M2` : '');
   }
+}
+
+// --- Export the day-wise schedule (both months, full unfiltered data) to a single .xlsx --
+// One sheet per month: SKU Code, SKU Name, Class, Priority, Pack Type, Day 1..30, Total
+// (units), Run Qty (units) -- same columns shown on screen, plus Run Qty for reference.
+function daySchedSheetData(data){
+  const header = ['SKU Code','SKU Name','Class','Priority','Pack Type',
+    ...Array.from({length:30},(_,i)=>`Day ${i+1}`), 'Total (units)', 'Run Qty (units)'];
+  const rowsOut = (data||[]).map(r => [
+    r.code, r.name||'', r.cls||'', r.priority||'', r.packType||'',
+    ...r.days.map(v => v>0 ? Math.round(v) : ''), Math.round(r.total), Math.round(r.runQty)
+  ]);
+  const totalsRow = ['TOTAL', `${(data||[]).length} SKUs`, '', '', '',
+    ...Array.from({length:30},(_,i)=>{
+      const s=(data||[]).reduce((sum,r)=>sum+(r.days[i]||0),0);
+      return s>0?Math.round(s):'';
+    }),
+    Math.round((data||[]).reduce((s,r)=>s+r.total,0)),
+    Math.round((data||[]).reduce((s,r)=>s+r.runQty,0))
+  ];
+  return [header, ...rowsOut, totalsRow];
+}
+function exportDaySchedule(){
+  if((!sched2moM1 || !sched2moM1.length) && (!sched2moM2 || !sched2moM2.length)){
+    alert('Generate the Day-wise Schedule first, then export.');
+    return;
+  }
+  const wb = XLSX.utils.book_new();
+  if(sched2moM1 && sched2moM1.length){
+    const wsM1 = XLSX.utils.aoa_to_sheet(daySchedSheetData(sched2moM1));
+    XLSX.utils.book_append_sheet(wb, wsM1, 'Month 1 Day-wise');
+  }
+  if(sched2moM2 && sched2moM2.length){
+    const wsM2 = XLSX.utils.aoa_to_sheet(daySchedSheetData(sched2moM2));
+    XLSX.utils.book_append_sheet(wb, wsM2, 'Month 2 Day-wise');
+  }
+  const stamp = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `Production_Schedule_${stamp}.xlsx`);
 }
 
 function renderDaySchedule(month){
