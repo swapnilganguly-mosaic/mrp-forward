@@ -5139,10 +5139,11 @@ function renderDaySchedule(month){
   shown.forEach(r => { r.days.forEach((v,i) => { dayTotals[i] += (v||0); }); });
   let lastActiveDay = -1;
   for (let i = 29; i >= 0; i--) { if (dayTotals[i] > 0) { lastActiveDay = i; break; } }
+  const monthTotal = dayTotals.reduce((s,v)=>s+v,0); // grand total across every shown SKU, whole month
 
   headEl.innerHTML = `<tr><th></th><th></th><th></th><th></th><th class="num" style="text-align:right;color:#94a3b8">Total units/day &rarr;</th>` +
     Array.from({length:30},(_,i)=>`<th class="num" style="background:#0f172a">${i<=lastActiveDay?fmt(dayTotals[i],0):''}</th>`).join('') +
-    `<th></th></tr>` +
+    `<th class="num" style="background:#0f172a;color:#4ade80">${fmt(monthTotal,0)}</th></tr>` +
     `<tr><th>#</th><th>SKU Code</th><th>SKU Name</th><th>Class</th><th>Volatility</th>` +
     Array.from({length:30},(_,i)=>`<th class="num">Day ${i+1}</th>`).join('') +
     `<th class="num">Total (units)</th></tr>`;
