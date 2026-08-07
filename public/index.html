@@ -5113,15 +5113,26 @@ function renderDaySchedule(month){
   if(!data || !data.length){ wrap.style.display='none'; return; }
   wrap.style.display='';
 
-  headEl.innerHTML = `<tr><th>#</th><th>SKU Code</th><th>SKU Name</th><th>Class</th><th>Volatility</th>` +
-    Array.from({length:30},(_,i)=>`<th class="num">Day ${i+1}</th>`).join('') +
-    `<th class="num">Total (units)</th></tr>`;
-
   const filterEl = document.getElementById(isM1 ? 'schedDayFilterM1' : 'schedDayFilterM2');
   const filter = filterEl ? filterEl.value.toLowerCase() : '';
   const shown = filter
     ? data.filter(r => r.code.toLowerCase().includes(filter) || (r.name||'').toLowerCase().includes(filter))
     : data;
+
+  // Per-day total units across every SKU currently shown (respects the search filter) --
+  // only rendered out to the last day that actually has any production, so the row doesn't
+  // trail off with a long run of zero columns once the month's demand is used up.
+  const dayTotals = new Array(30).fill(0);
+  shown.forEach(r => { r.days.forEach((v,i) => { dayTotals[i] += (v||0); }); });
+  let lastActiveDay = -1;
+  for (let i = 29; i >= 0; i--) { if (dayTotals[i] > 0) { lastActiveDay = i; break; } }
+
+  headEl.innerHTML = `<tr><th></th><th></th><th></th><th></th><th class="num" style="text-align:right;color:#94a3b8">Total units/day &rarr;</th>` +
+    Array.from({length:30},(_,i)=>`<th class="num" style="background:#0f172a">${i<=lastActiveDay?fmt(dayTotals[i],0):''}</th>`).join('') +
+    `<th></th></tr>` +
+    `<tr><th>#</th><th>SKU Code</th><th>SKU Name</th><th>Class</th><th>Volatility</th>` +
+    Array.from({length:30},(_,i)=>`<th class="num">Day ${i+1}</th>`).join('') +
+    `<th class="num">Total (units)</th></tr>`;
 
   bodyEl.innerHTML = shown.map((r,i)=>`<tr>
     <td style="color:#94a3b8">${i+1}</td>
