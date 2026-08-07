@@ -4666,12 +4666,20 @@ let PACK_TYPE_CAP = {
   'Jar-125': 22000,
   'Pouch-20': 44000
 };
-// Overall factory-wide ceiling: no matter how many different pack types are running, the
-// TOTAL across all of them on a single day can never exceed this (single shift, units/day).
-// This is a separate, stricter constraint layered on top of each Pack Type's own cap above
-// -- e.g. even though Jar-350 alone could in theory do 24,000 units, if Pouch-20 also needs
-// to run that same day, the two must share this same 24,000-unit factory-wide budget.
-let FACTORY_CAP_PER_DAY = 24000;
+// The line is ONE physical resource shared by every pack type -- it can run Jar OR Pouch OR
+// Pack of 3 (or split its shift between them), not all of them independently at full
+// capacity in parallel. So the real shared budget is TIME (hours in the shift), not a flat
+// unit count: each pack type's PACK_TYPE_CAP above is really "what this pack type alone
+// could produce across a full shift," and dividing by the shift length gives that pack
+// type's own units/hour rate. Producing some units of a slow pack type (e.g. Pack of 3,
+// 3,000/day = 250/hr) burns hours out of the shared shift much faster per unit than a fast
+// one (e.g. Jar, 24,000/day = 2,000/hr) -- so a small Pack of 3 run can eat most of the
+// day's remaining Jar/Pouch headroom, unlike a flat unit-pool would suggest.
+let SHIFT_HOURS_PER_DAY = 12;
+function packTypeRatePerHour(ptKey, fallbackDailyUnits){
+  const dailyCap = (ptKey && PACK_TYPE_CAP[ptKey] != null) ? PACK_TYPE_CAP[ptKey] : fallbackDailyUnits;
+  return dailyCap / SHIFT_HOURS_PER_DAY;
+}
 // Pack Type is parsed from the SKU NAME (no separate master-data field exists yet) --
 // matches known format keywords ("Jar", "Pouch", "Pack of N") and combines whichever
 // matches with the SKU's own pack size. Returns null if no keyword matches, in which case
@@ -5013,25 +5021,26 @@ function renderSummaryCards(){
 }
 
 // --- Day-wise schedule: separate M1 and M2 (Priority Scoring tab) -------------------
-// Everything here is in UNITS -- no kg anywhere. Two capacity constraints apply together,
-// every single day:
-//   1. FACTORY_CAP_PER_DAY -- an overall ceiling on TOTAL units across every pack type
-//      combined, on that one day (e.g. 24,000/day total, no matter how many different pack
-//      types want to run).
-//   2. PACK_TYPE_CAP[packType] -- each pack type's own daily ceiling (e.g. Jar-350:
-//      24,000/day, PackOf3-1000: 3,000/day) -- multiple SKUs of the SAME pack type can share
-//      that pack type's daily capacity between them, but a pack type can never exceed its
-//      own cap even if the factory-wide budget still has room.
+// Everything here is in UNITS -- no kg anywhere. The line is ONE shared shift-hours budget
+// per day (SHIFT_HOURS_PER_DAY, default 12), not a flat unit pool:
+//   - Each pack type has its own units/hour rate (its PACK_TYPE_CAP daily figure divided by
+//     the shift length) -- e.g. Jar-350 and Pouch-350 both run at 2,000 units/hr, while
+//     PackOf3-1000 only runs at 250 units/hr on the same line.
+//   - Running some units of one pack type "spends" hours at that pack type's own rate;
+//     whatever shift-hours remain convert back to units at whichever pack type runs next.
+//     A small amount of a slow pack type (Pack of 3) can burn most of the day's remaining
+//     time, leaving little room for a fast pack type (Jar/Pouch) even though the unit count
+//     looks small.
 // Every eligible SKU across every pack type is walked in ONE combined Score-ordered list,
-// day by day: the highest-Score SKU still needing units claims capacity first (bounded by
-// both its pack type's remaining capacity AND the factory's remaining capacity for that
-// day), then the next SKU gets whatever's left of both budgets, and so on -- so the whole
-// month's capacity gets spread across SKUs strictly by priority, with no idle days as long
-// as there's remaining eligible demand and remaining factory capacity. A SKU whose name
-// doesn't match a known pack-type keyword (see derivePackType) is scheduled individually
-// against its own per-SKU Line Cap instead of a shared pack-type pool. A SKU whose Monthly
+// day by day: the highest-Score SKU still needing units claims shift-hours first (bounded by
+// its own remaining Run Qty and the day's remaining hours converted at its own rate), then
+// the next SKU gets whatever's left of the shift, and so on -- so the whole month's capacity
+// gets spread across SKUs strictly by priority, with no idle days as long as there's
+// remaining eligible demand and remaining shift time. A SKU whose name doesn't match a known
+// pack-type keyword (see derivePackType) is scheduled individually against a rate derived
+// from its own per-SKU Line Cap instead of a shared pack-type rate. A SKU whose Monthly
 // (Supply) Plan for that month is 0 is not scheduled at all. If total demand exceeds what
-// the factory can produce in 30 days, the lowest-priority SKUs get a partial or zero
+// the shift can produce in 30 days, the lowest-priority SKUs get a partial or zero
 // allocation -- a genuine capacity shortfall, shown as such, not hidden.
 let sched2moM1 = null, sched2moM2 = null;
 
@@ -5041,25 +5050,25 @@ function allocateDayWise(orderedRows, runQtyField, planStore){
 
   const remaining = {}; eligible.forEach(r => { remaining[r.code] = Math.max(0, r[runQtyField]); });
   const dayVals = {}; eligible.forEach(r => { dayVals[r.code] = new Array(days).fill(0); });
+  const rateCache = {}; eligible.forEach(r => {
+    const ptKey = r.packType || ('__sku__' + r.code);
+    rateCache[r.code] = packTypeRatePerHour(r.packType, lineCap[r.code] || 10000);
+  });
 
   for (let d = 0; d < days; d++){
-    let factoryLeft = FACTORY_CAP_PER_DAY;
-    const packTypeLeft = {}; // reset fresh every day -- each pack type's own budget for today
-    for (const r of eligible){ // already Score-sorted -- highest priority claims capacity first
-      if (factoryLeft <= 0) break;
+    let hoursLeft = SHIFT_HOURS_PER_DAY;
+    for (const r of eligible){ // already Score-sorted -- highest priority claims shift time first
+      if (hoursLeft <= 0) break;
       const rem = remaining[r.code];
       if (rem <= 0) continue;
-      const ptKey = r.packType || ('__sku__' + r.code);
-      if (packTypeLeft[ptKey] === undefined){
-        packTypeLeft[ptKey] = (r.packType && PACK_TYPE_CAP[ptKey] != null) ? PACK_TYPE_CAP[ptKey] : (lineCap[r.code] || 10000);
-      }
-      if (packTypeLeft[ptKey] <= 0) continue;
-      const fit = Math.min(rem, factoryLeft, packTypeLeft[ptKey]);
+      const rate = rateCache[r.code];
+      if (!(rate > 0)) continue;
+      const unitsAtHoursLeft = hoursLeft * rate;
+      const fit = Math.min(rem, unitsAtHoursLeft);
       if (fit > 0){
         dayVals[r.code][d] += fit;
         remaining[r.code] -= fit;
-        factoryLeft -= fit;
-        packTypeLeft[ptKey] -= fit;
+        hoursLeft -= fit / rate;
       }
     }
   }
