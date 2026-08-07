@@ -5016,50 +5016,75 @@ function renderSummaryCards(){
 //     A small amount of a slow pack type (Pack of 3) can burn most of the day's remaining
 //     time, leaving little room for a fast pack type (Jar/Pouch) even though the unit count
 //     looks small.
-// Every eligible SKU across every pack type is walked in ONE combined Score-ordered list,
-// day by day: the highest-Score SKU still needing units claims shift-hours first (bounded by
-// its own remaining Run Qty and the day's remaining hours converted at its own rate), then
-// the next SKU gets whatever's left of the shift, and so on -- so the whole month's capacity
-// gets spread across SKUs strictly by priority, with no idle days as long as there's
-// remaining eligible demand and remaining shift time. A SKU whose name doesn't match a known
-// pack-type keyword (see derivePackType) is scheduled individually against a rate derived
-// from its own per-SKU Line Cap instead of a shared pack-type rate. A SKU whose Monthly
-// (Supply) Plan for that month is 0 is not scheduled at all. If total demand exceeds what
-// the shift can produce in 30 days, the lowest-priority SKUs get a partial or zero
-// allocation -- a genuine capacity shortfall, shown as such, not hidden.
+// TWO PHASES, in strict order, both walking the SAME Score-ordered list and the SAME
+// shift-hours/pack-type-rate logic every day:
+//   Phase A -- Run Qty. Every eligible SKU's Run Qty is scheduled first, highest-Score SKU
+//     claiming shift-hours first each day, so the whole month's Run Qty demand gets spread
+//     across SKUs strictly by priority. This continues until every SKU's Run Qty is fully
+//     placed (or the 30 days run out -- a genuine capacity shortfall, shown as such).
+//   Phase B -- Balance. Once every SKU's Run Qty is fully placed, whatever days remain in
+//     the month are used to run each SKU's positive Balance (Monthly Plan minus Run Qty) --
+//     SKUs whose Balance is 0 or negative are skipped entirely in this phase. Same
+//     Score-ordered, same-day shared-shift-hours logic as Phase A, just with Balance as the
+//     new demand and starting the day right after Phase A finishes for everyone, instead of
+//     leaving the rest of the month at zero production.
+// A SKU whose name doesn't match a known pack-type keyword (see derivePackType) is
+// scheduled individually against a rate derived from its own per-SKU Line Cap instead of a
+// shared pack-type rate. A SKU whose Monthly (Supply) Plan for that month is 0 is not
+// scheduled at all (in either phase).
 let sched2moM1 = null, sched2moM2 = null;
 
 function allocateDayWise(orderedRows, runQtyField, planStore){
   const days = 30;
   const eligible = orderedRows.filter(r => (planStore[r.code] || 0) !== 0); // don't schedule an SKU with 0 Monthly (Supply) Plan
 
-  const remaining = {}; eligible.forEach(r => { remaining[r.code] = Math.max(0, r[runQtyField]); });
   const dayVals = {}; eligible.forEach(r => { dayVals[r.code] = new Array(days).fill(0); });
   const rateCache = {}; eligible.forEach(r => {
-    const ptKey = r.packType || ('__sku__' + r.code);
     rateCache[r.code] = packTypeRatePerHour(r.packType, lineCap[r.code] || 10000);
   });
 
-  for (let d = 0; d < days; d++){
-    let hoursLeft = SHIFT_HOURS_PER_DAY;
-    for (const r of eligible){ // already Score-sorted -- highest priority claims shift time first
-      if (hoursLeft <= 0) break;
-      const rem = remaining[r.code];
-      if (rem <= 0) continue;
-      const rate = rateCache[r.code];
-      if (!(rate > 0)) continue;
-      const unitsAtHoursLeft = hoursLeft * rate;
-      const fit = Math.min(rem, unitsAtHoursLeft);
-      if (fit > 0){
-        dayVals[r.code][d] += fit;
-        remaining[r.code] -= fit;
-        hoursLeft -= fit / rate;
+  function runPhase(demand, dayStart){
+    let lastActiveDay = dayStart - 1;
+    for (let d = dayStart; d < days; d++){
+      let hoursLeft = SHIFT_HOURS_PER_DAY;
+      let producedToday = false;
+      for (const r of eligible){ // already Score-sorted -- highest priority claims shift time first
+        if (hoursLeft <= 0) break;
+        const rem = demand[r.code];
+        if (rem <= 0) continue;
+        const rate = rateCache[r.code];
+        if (!(rate > 0)) continue;
+        const fit = Math.min(rem, hoursLeft * rate);
+        if (fit > 0){
+          dayVals[r.code][d] += fit;
+          demand[r.code] -= fit;
+          hoursLeft -= fit / rate;
+          producedToday = true;
+        }
       }
+      if (producedToday) lastActiveDay = d;
+      if (eligible.every(r => demand[r.code] <= 0)) break; // this phase's demand is fully placed for everyone
     }
+    return lastActiveDay;
   }
 
-  return eligible.map(r => ({ code:r.code, name:r.name, cls:r.cls, priority:r.priority, packType:r.packType,
+  // Phase A: Run Qty, for every eligible SKU.
+  const remainingRunQty = {}; eligible.forEach(r => { remainingRunQty[r.code] = Math.max(0, r[runQtyField]); });
+  const lastRunQtyDay = runPhase(remainingRunQty, 0);
+
+  // Phase B: Balance (Monthly Plan - Run Qty), only where positive, starting the day right
+  // after Run Qty finished for every SKU.
+  const remainingBalance = {};
+  eligible.forEach(r => {
+    const bal = (planStore[r.code] || 0) - Math.max(0, r[runQtyField]);
+    remainingBalance[r.code] = bal > 0 ? bal : 0;
+  });
+  runPhase(remainingBalance, lastRunQtyDay + 1);
+
+  const result = eligible.map(r => ({ code:r.code, name:r.name, cls:r.cls, priority:r.priority, packType:r.packType,
     days: dayVals[r.code], total: dayVals[r.code].reduce((s,v)=>s+v,0), runQty: Math.max(0, r[runQtyField]) }));
+  result.phaseBStartDay = lastRunQtyDay + 1; // 0-indexed day the Balance phase began on (for status reporting)
+  return result;
 }
 
 function generateDaySchedule(){
@@ -5081,9 +5106,12 @@ function generateDaySchedule(){
     const shortM2 = sched2moM2.filter(r => r.total < r.runQty).length;
     const unrecM1 = sched2moM1.filter(r => !r.packType).length;
     const unrecM2 = sched2moM2.filter(r => !r.packType).length;
+    const balDayM1 = sched2moM1.phaseBStartDay, balDayM2 = sched2moM2.phaseBStartDay;
     statusEl.textContent =
       `M1: ${sched2moM1.length} SKU(s) across the factory's shared 30-day capacity &middot; M2: ${sched2moM2.length} SKU(s) (units) &mdash; SKUs with 0 Monthly Plan are excluded` +
       ((shortM1||shortM2) ? ` &mdash; capacity shortfall: ${shortM1} SKU(s) in M1 / ${shortM2} in M2 didn't fully fit in 30 days` : '') +
+      ((!shortM1 && balDayM1 < 30) ? ` &mdash; M1 Run Qty finished by Day ${balDayM1}, Balance production runs Day ${balDayM1+1}-30` : '') +
+      ((!shortM2 && balDayM2 < 30) ? ` &mdash; M2 Run Qty finished by Day ${balDayM2}, Balance production runs Day ${balDayM2+1}-30` : '') +
       ((unrecM1||unrecM2) ? ` &mdash; unrecognized pack type (scheduled alone on own Line Cap): ${unrecM1} in M1 / ${unrecM2} in M2` : '');
   }
 }
