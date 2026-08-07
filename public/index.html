@@ -4897,6 +4897,8 @@ function renderScoreTable() {
   if(!filteredM1.length){
     tbodyM1.innerHTML='<tr><td colspan="20" class="empty"><h3>No matching rows</h3></td></tr>';
   } else {
+    const totM1 = { sih:0, sit:0, fgStock:0, runQtyM1:0, monthlyPlan:0 };
+    filteredM1.forEach(r=>{ totM1.sih+=(+r.sih||0); totM1.sit+=(+r.sit||0); totM1.fgStock+=(+r.fgStock||0); totM1.runQtyM1+=(+r.runQtyM1||0); totM1.monthlyPlan+=(+monthlyPlan[r.code]||0); });
     tbodyM1.innerHTML=filteredM1.map((r,i)=>`
       <tr>
         <td style="color:#94a3b8">${i+1}</td>
@@ -4924,13 +4926,25 @@ function renderScoreTable() {
         <td class="num"><input type="number" min="0" step="100" value="${monthlyPlan[r.code]||''}" data-code="${r.code}" onchange="monthlyPlan[this.dataset.code]=clampToLineCap(this.dataset.code,+this.value);renderScoreTable()" style="width:75px"></td>
         <td class="num" style="color:${(+monthlyPlan[r.code]||0)-(r.runQtyM1)<0?'#e53935':'#388e3c'}">${(+monthlyPlan[r.code]||0)>0?fmt((+monthlyPlan[r.code]||0)-(r.runQtyM1),0):'—'}</td>
         <td class="num"><input type="number" min="0" step="1000" value="${lineCap[r.code]||10000}" data-code="${r.code}" onchange="lineCap[this.dataset.code]=+this.value" style="width:60px"></td>
-      </tr>`).join('');
+      </tr>`).join('') + `
+      <tr style="background:#f1f5f9;font-weight:700;border-top:2px solid #cbd5e1">
+        <td colspan="5" style="color:#475569">TOTAL (${filteredM1.length} SKUs)</td>
+        <td class="num">${fmtI(totM1.sih)}</td>
+        <td class="num">${fmtI(totM1.sit)}</td>
+        <td class="num">${fmtI(totM1.fgStock)}</td>
+        <td colspan="8"></td>
+        <td class="num">${fmt(totM1.runQtyM1,0)}</td>
+        <td class="num">${fmt(totM1.monthlyPlan,0)}</td>
+        <td colspan="2"></td>
+      </tr>`;
   }
 
   const tbodyM2=document.getElementById('scoreBodyM2');
   if(!filteredM2.length){
     tbodyM2.innerHTML='<tr><td colspan="20" class="empty"><h3>No matching rows</h3></td></tr>';
   } else {
+    const totM2 = { sih:0, sit:0, fgStock:0, runQtyM2:0, monthlyPlan:0 };
+    filteredM2.forEach(r=>{ totM2.sih+=(+r.sih||0); totM2.sit+=(+r.sit||0); totM2.fgStock+=(+r.fgStock||0); totM2.runQtyM2+=(+r.runQtyM2||0); totM2.monthlyPlan+=(+monthlyPlanM2[r.code]||0); });
     tbodyM2.innerHTML=filteredM2.map((r,i)=>`
       <tr>
         <td style="color:#94a3b8">${i+1}</td>
@@ -4958,7 +4972,17 @@ function renderScoreTable() {
         <td class="num"><input type="number" min="0" step="100" value="${monthlyPlanM2[r.code]||''}" data-code="${r.code}" onchange="monthlyPlanM2[this.dataset.code]=clampToLineCap(this.dataset.code,+this.value);renderScoreTable()" style="width:75px"></td>
         <td class="num" style="color:${(+monthlyPlanM2[r.code]||0)-(r.runQtyM2)<0?'#e53935':'#388e3c'}">${(+monthlyPlanM2[r.code]||0)>0?fmt((+monthlyPlanM2[r.code]||0)-(r.runQtyM2),0):'—'}</td>
         <td class="num"><input type="number" min="0" step="1000" value="${lineCap[r.code]||10000}" data-code="${r.code}" onchange="lineCap[this.dataset.code]=+this.value" style="width:60px"></td>
-      </tr>`).join('');
+      </tr>`).join('') + `
+      <tr style="background:#f1f5f9;font-weight:700;border-top:2px solid #cbd5e1">
+        <td colspan="5" style="color:#475569">TOTAL (${filteredM2.length} SKUs)</td>
+        <td class="num">${fmtI(totM2.sih)}</td>
+        <td class="num">${fmtI(totM2.sit)}</td>
+        <td class="num">${fmtI(totM2.fgStock)}</td>
+        <td colspan="8"></td>
+        <td class="num">${fmt(totM2.runQtyM2,0)}</td>
+        <td class="num">${fmt(totM2.monthlyPlan,0)}</td>
+        <td colspan="2"></td>
+      </tr>`;
   }
 
   // Awaiting Data bucket — "no-supply" SKUs (zero/blank Production Plan quantity that
