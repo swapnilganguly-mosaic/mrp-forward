@@ -4897,8 +4897,11 @@ function renderScoreTable() {
   if(!filteredM1.length){
     tbodyM1.innerHTML='<tr><td colspan="20" class="empty"><h3>No matching rows</h3></td></tr>';
   } else {
-    const totM1 = { sih:0, sit:0, fgStock:0, runQtyM1:0, monthlyPlan:0 };
-    filteredM1.forEach(r=>{ totM1.sih+=(+r.sih||0); totM1.sit+=(+r.sit||0); totM1.fgStock+=(+r.fgStock||0); totM1.runQtyM1+=(+r.runQtyM1||0); totM1.monthlyPlan+=(+monthlyPlan[r.code]||0); });
+    const totM1 = { sih:0, sit:0, fgStock:0, runQtyM1:0, monthlyPlan:0, balance:0 };
+    filteredM1.forEach(r=>{
+      totM1.sih+=(+r.sih||0); totM1.sit+=(+r.sit||0); totM1.fgStock+=(+r.fgStock||0); totM1.runQtyM1+=(+r.runQtyM1||0);
+      const mp=(+monthlyPlan[r.code]||0); totM1.monthlyPlan+=mp; if(mp>0) totM1.balance+=(mp-r.runQtyM1);
+    });
     tbodyM1.innerHTML=filteredM1.map((r,i)=>`
       <tr>
         <td style="color:#94a3b8">${i+1}</td>
@@ -4935,7 +4938,8 @@ function renderScoreTable() {
         <td colspan="8"></td>
         <td class="num">${fmt(totM1.runQtyM1,0)}</td>
         <td class="num">${fmt(totM1.monthlyPlan,0)}</td>
-        <td colspan="2"></td>
+        <td class="num" style="color:${totM1.balance<0?'#e53935':'#388e3c'}">${fmt(totM1.balance,0)}</td>
+        <td></td>
       </tr>`;
   }
 
@@ -4943,8 +4947,11 @@ function renderScoreTable() {
   if(!filteredM2.length){
     tbodyM2.innerHTML='<tr><td colspan="20" class="empty"><h3>No matching rows</h3></td></tr>';
   } else {
-    const totM2 = { sih:0, sit:0, fgStock:0, runQtyM2:0, monthlyPlan:0 };
-    filteredM2.forEach(r=>{ totM2.sih+=(+r.sih||0); totM2.sit+=(+r.sit||0); totM2.fgStock+=(+r.fgStock||0); totM2.runQtyM2+=(+r.runQtyM2||0); totM2.monthlyPlan+=(+monthlyPlanM2[r.code]||0); });
+    const totM2 = { sih:0, sit:0, fgStock:0, runQtyM2:0, monthlyPlan:0, balance:0 };
+    filteredM2.forEach(r=>{
+      totM2.sih+=(+r.sih||0); totM2.sit+=(+r.sit||0); totM2.fgStock+=(+r.fgStock||0); totM2.runQtyM2+=(+r.runQtyM2||0);
+      const mp=(+monthlyPlanM2[r.code]||0); totM2.monthlyPlan+=mp; if(mp>0) totM2.balance+=(mp-r.runQtyM2);
+    });
     tbodyM2.innerHTML=filteredM2.map((r,i)=>`
       <tr>
         <td style="color:#94a3b8">${i+1}</td>
@@ -4981,7 +4988,8 @@ function renderScoreTable() {
         <td colspan="8"></td>
         <td class="num">${fmt(totM2.runQtyM2,0)}</td>
         <td class="num">${fmt(totM2.monthlyPlan,0)}</td>
-        <td colspan="2"></td>
+        <td class="num" style="color:${totM2.balance<0?'#e53935':'#388e3c'}">${fmt(totM2.balance,0)}</td>
+        <td></td>
       </tr>`;
   }
 
