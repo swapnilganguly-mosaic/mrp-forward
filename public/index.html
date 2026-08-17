@@ -179,8 +179,7 @@
       <button class="btn sm primary" id="btnDemandFile">Import demand file</button>
       <button class="btn sm" id="btnImportSku" title="Import a CSV/Excel with SKU Code and SKU Name columns. New SKU codes are added to this list (and the Scheduler tab picks them up automatically); existing codes just get their name refreshed.">Import SKU Codes/Names</button>
       <button class="btn sm" id="btnPaste">Bulk paste demand</button>
-      <button class="btn sm" id="btnExportForNovaCore" title="Export demand plan as CSV to send to Nova Core for required quantity calculation" style="margin-left:12px;background:#7c3aed;color:#fff;border-color:#7c3aed">&#9660; Export for Nova Core</button>
-      <button class="btn sm" id="btnFetchReqQtyApi" title="Call the Nova Core Required Quantity API directly with the current demand plan, instead of the manual CSV export/import." style="background:#7c3aed;color:#fff;border-color:#7c3aed">&#9679; Fetch Req Qty via API</button>
+      <button class="btn sm" id="btnFetchReqQtyApi" title="Call the Nova Core Required Quantity API directly with the current demand plan." style="margin-left:12px;background:#7c3aed;color:#fff;border-color:#7c3aed">&#9679; Fetch Req Qty via API</button>
     </div>
     <table>
       <thead>
@@ -202,7 +201,7 @@
         </tr>
       </tfoot>
     </table>
-    <div class="hint"><b>Manual path:</b> Click <b style="color:#7c3aed">Export for Nova Core</b> to download the demand plan as CSV, send it to Nova Core, then use <b>Import Req Qty</b> on the Consolidated RM/PM tabs once it responds. <b>API path (new):</b> Click <b style="color:#7c3aed">Fetch Req Qty via API</b> to call Nova Core's Required Quantity API directly with the current demand plan — no manual export/import needed once it's configured. See the code comments near <code>fetchRequiredQtyFromNovaCoreAPI()</code> for setup (this needs a small serverless proxy so the API key is never exposed in this page).</div>
+    <div class="hint">Click <b style="color:#7c3aed">Fetch Req Qty via API</b> to call Nova Core's Required Quantity API directly with the current demand plan. See the code comments near <code>fetchRequiredQtyFromNovaCoreAPI()</code> for setup (this needs a small serverless proxy so the API key is never exposed in this page).</div>
   </section>
 
   <!-- ============ TAB 2: INPUTS ============ -->
@@ -2759,33 +2758,6 @@ function applyReqRowsBySapiens(rows, kind) {
   return { matched: Object.keys(sums).length, unmatched };
 }
 
-/* ==================================================================
- *  EXPORTS
- * ================================================================== */
-function exportForNovaCore() {
-  // Export demand plan: SKU Code, SKU Name, Pack Size (g), Demand M1 (units), Demand M2 (units)
-  // so Nova Core can calculate required RM/PM quantities
-  const rows = [["SKU Code", "SKU Name", "Pack Size (g)", "Supply M1 (units)", "Supply M2 (units)"]];
-  SKU.forEach(s => {
-    const dem1 = num(demandM1[s.sku_code], true);
-    const dem2 = num(demandM2[s.sku_code], true);
-    if (dem1 === 0 && dem2 === 0) return; // skip SKUs with no demand
-    rows.push([
-      csvField(s.sku_code),
-      csvField(s.fg_name),
-      num(packSize[s.sku_code], true),
-      dem1,
-      dem2
-    ]);
-  });
-  if (rows.length === 1) { alert("No demand entered. Please enter demand for at least one SKU first."); return; }
-  const csv = rows.map(r => r.join(",")).join("\n");
-  const a = document.createElement("a");
-  a.href = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
-  a.download = "demand_for_novacore_" + new Date().toISOString().slice(0,10) + ".csv";
-  a.click();
-}
-
 /* ==========================================================================
  * REQUIRED QTY -- LIVE API (replaces manual Export/Import round-trip)
  * ==========================================================================
@@ -2820,9 +2792,10 @@ function exportForNovaCore() {
  * { [normKey(rmName)]: { name, m1, m2 } }, gated by bomRmKeySet()).
  */
 function buildReqQtyItems(period) {
-  // period is 'm1' or 'm2' -- pulls from the same demandM1/demandM2 maps the
-  // CSV export above uses, skipping SKUs with zero demand for that period.
-  const src = period === 'm2' ? demandM2 : demandM1;
+  // period is 'm1' or 'm2' -- pulls from the same demand/demandM2 maps the
+  // CSV export above uses (M1 is stored in the plain `demand` object, not
+  // `demandM1` -- that was the bug), skipping SKUs with zero demand for that period.
+  const src = period === 'm2' ? demandM2 : demand;
   const items = [];
   SKU.forEach(s => {
     const qty = num(src[s.sku_code], true);
@@ -3141,7 +3114,6 @@ function wire() {
 
 
   // Exports
-  $("btnExportForNovaCore").addEventListener("click", exportForNovaCore);
   $("btnFetchReqQtyApi").addEventListener("click", fetchRequiredQtyFromNovaCoreAPI);
   $("exportRm").addEventListener("click", exportRM);
   $("exportPm").addEventListener("click", exportPM);
