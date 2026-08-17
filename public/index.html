@@ -2836,12 +2836,10 @@ async function fetchRequiredQtyFromNovaCoreAPI() {
       return;
     }
     console.log("Required Qty API response — M1:", dataM1, "M2:", dataM2);
-    // Once the real response shape is confirmed, replace this line with:
-    //   applyReqQtyApiResponse(dataM1, dataM2);
-    // See the big comment block above this function for what that mapping
-    // needs to produce.
-    alert("Received a response from the Required Qty API — check the browser console (F12) to see its exact shape. " +
-      "Nothing has been applied to Consolidated RM/PM yet; that mapping still needs to be filled in once the response format is confirmed.");
+    applyReqQtyApiResponse(dataM1, dataM2);
+    alert("Required Qty updated from Nova Core for " +
+      (dataM1 ? "Month 1" : "") + (dataM1 && dataM2 ? " and " : "") + (dataM2 ? "Month 2" : "") +
+      ". Check Consolidated RM/PM.");
   } catch (err) {
     console.error(err);
     alert("Could not reach the Required Qty API: " + err.message + "\n\nIf you haven't deployed api/required-quantity.js to this Vercel project yet, this call has nothing to reach.");
@@ -2849,16 +2847,41 @@ async function fetchRequiredQtyFromNovaCoreAPI() {
     if (btn) { btn.disabled = false; btn.textContent = prevLabel; }
   }
 }
-/* Fill this in once the response shape is known -- mirrors what the manual
- * "Import Req Qty" file handlers do, so both paths feed the exact same state. */
+/* Confirmed Nova Core response shape (from a live test call):
+ *   { products: [{skuCode, productName, parentSku, packSize, unit, ...}],
+ *     rm: [{ingredientName, mosaicRmCode, kgRequired}],
+ *     pm: [{pmName, pmCode, unitsRequired}],
+ *     warnings: [] }
+ * Merges into the SAME rmReqOverride/pmReqOverride state the manual
+ * "Import Req Qty" flow uses (keyed by normKey(material name)), so
+ * Consolidated RM/PM, DOC, and everything downstream just works.
+ * Existing m1/m2 values are preserved unless this call actually returned
+ * data for that period (so fetching M1 alone doesn't wipe a previously
+ * fetched M2, and vice versa). */
 function applyReqQtyApiResponse(dataM1, dataM2) {
-  // Example shape (ADJUST to match reality):
-  // rmReqOverride = {};
-  // pmReqOverride = {};
-  // dataM1.rm.forEach(r => { rmReqOverride[normKey(r.name)] = { name: r.name, m1: r.requiredQty, m2: 0 }; });
-  // dataM2.rm.forEach(r => { const k = normKey(r.name); if (!rmReqOverride[k]) rmReqOverride[k] = { name: r.name, m1: 0, m2: 0 }; rmReqOverride[k].m2 = r.requiredQty; });
-  // ...same for PM into pmReqOverride...
-  // renderRM(); renderPM(); broadcastStockUpdate();
+  function mergeRm(list, period) {
+    if (!list) return;
+    list.forEach(r => {
+      const key = normKey(r.ingredientName);
+      if (!rmReqOverride[key]) rmReqOverride[key] = { name: r.ingredientName, m1: 0, m2: 0 };
+      rmReqOverride[key].name = r.ingredientName;
+      rmReqOverride[key][period] = num(r.kgRequired, true);
+    });
+  }
+  function mergePm(list, period) {
+    if (!list) return;
+    list.forEach(p => {
+      const key = normKey(p.pmName);
+      if (!pmReqOverride[key]) pmReqOverride[key] = { name: p.pmName, m1: 0, m2: 0 };
+      pmReqOverride[key].name = p.pmName;
+      pmReqOverride[key][period] = num(p.unitsRequired, true);
+    });
+  }
+  if (dataM1) { mergeRm(dataM1.rm, "m1"); mergePm(dataM1.pm, "m1"); }
+  if (dataM2) { mergeRm(dataM2.rm, "m2"); mergePm(dataM2.pm, "m2"); }
+  renderRM();
+  renderPM();
+  broadcastStockUpdate();
 }
 function exportRM() {
   const agg = aggregateRM();
